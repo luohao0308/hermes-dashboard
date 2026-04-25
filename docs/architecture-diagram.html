@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hermès Dashboard Architecture</title>
+  <title>Hermès Dashboard 架构图</title>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * {
@@ -13,7 +13,7 @@
     }
 
     body {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: 'JetBrains Mono', 'PingFang SC', 'Microsoft YaHei', sans-serif;
       background: #020617;
       min-height: 100vh;
       padding: 2rem;
@@ -137,9 +137,9 @@
     <div class="header">
       <div class="header-row">
         <div class="pulse-dot"></div>
-        <h1>Hermès Dashboard Architecture</h1>
+        <h1>Hermès Dashboard 系统架构图</h1>
       </div>
-      <p class="subtitle">Real-time Hermès Agent Monitoring System</p>
+      <p class="subtitle">实时监控 Hermès Agent 工作状态</p>
     </div>
 
     <!-- Main Diagram -->
@@ -169,170 +169,170 @@
 
         <!-- ==================== BOUNDARIES ==================== -->
 
-        <!-- Local Development Boundary -->
+        <!-- 本地开发环境 -->
         <rect x="20" y="20" width="960" height="280" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
-        <text x=\"35\" y=\"38\" fill="#fbbf24" font-size="10" font-weight="600">Local Environment</text>
+        <text x="35" y="38" fill="#fbbf24" font-size="10" font-weight="600">本地开发环境</text>
 
-        <!-- GitHub Boundary -->
+        <!-- GitHub 工作流 -->
         <rect x="20" y="320" width="450" height="180" rx="12" fill="rgba(136, 19, 55, 0.05)" stroke="#fb7185" stroke-width="1" stroke-dasharray="8,4"/>
-        <text x="35" y="338" fill="#fb7185" font-size="10" font-weight="600">GitHub Workflow</text>
+        <text x="35" y="338" fill="#fb7185" font-size="10" font-weight="600">GitHub 协作流程</text>
 
-        <!-- Browser Boundary -->
+        <!-- 浏览器客户端 -->
         <rect x="500" y="320" width="480" height="180" rx="12" fill="rgba(8, 51, 68, 0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
-        <text x="515" y="338" fill="#22d3ee" font-size="10" font-weight="600">Browser Client</text>
+        <text x="515" y="338" fill="#22d3ee" font-size="10" font-weight="600">浏览器客户端</text>
 
         <!-- ==================== COMPONENTS ==================== -->
 
         <!-- Hermès Agent -->
         <rect x="60" y="80" width="140" height="80" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
         <text x="130" y="105" fill="white" font-size="11" font-weight="600" text-anchor="middle">Hermès Agent</text>
-        <text x="130" y="122" fill="#94a3b8" font-size="9" text-anchor="middle">Running Instance</text>
-        <text x="130" y="138" fill="#34d399" font-size="8" text-anchor="middle">CLI / ACP Protocol</text>
+        <text x="130" y="122" fill="#94a3b8" font-size="9" text-anchor="middle">运行中的实例</text>
+        <text x="130" y="138" fill="#34d399" font-size="8" text-anchor="middle">CLI / ACP 协议</text>
 
-        <!-- Bridge Server -->
+        <!-- Bridge Server 后端服务 -->
         <rect x="280" y="80" width="160" height="130" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
         <text x="360" y="105" fill="white" font-size="11" font-weight="600" text-anchor="middle">Bridge Server</text>
         <text x="360" y="122" fill="#94a3b8" font-size="9" text-anchor="middle">FastAPI + SSE</text>
-        <text x="360" y="142" fill="#94a3b8" font-size="8" text-anchor="middle">• /sse endpoint</text>
-        <text x="360" y="156" fill="#94a3b8" font-size="8" text-anchor="middle">• Event Broadcaster</text>
-        <text x="360" y="170" fill="#34d399" font-size="8" text-anchor="middle">port:8000</text>
+        <text x="360" y="142" fill="#94a3b8" font-size="8" text-anchor="middle">• /sse 端点</text>
+        <text x="360" y="156" fill="#94a3b8" font-size="8" text-anchor="middle">• 事件广播器</text>
+        <text x="360" y="170" fill="#34d399" font-size="8" text-anchor="middle">端口:8000</text>
 
         <!-- SSE Manager -->
         <rect x="280" y="230" width="160" height="50" rx="6" fill="rgba(6, 78, 59, 0.3)" stroke="#34d399" stroke-width="1" stroke-dasharray="4,4"/>
-        <text x="360" y="250" fill="#94a3b8" font-size="9" text-anchor="middle">SSE Connection Manager</text>
-        <text x="360" y="265" fill="#34d399" font-size="8" text-anchor="middle">Broadcast Pool</text>
+        <text x="360" y="250" fill="#94a3b8" font-size="9" text-anchor="middle">SSE 连接管理器</text>
+        <text x="360" y="265" fill="#34d399" font-size="8" text-anchor="middle">广播连接池</text>
 
-        <!-- Frontend Vue App -->
+        <!-- Vue 前端 -->
         <rect x="520" y="80" width="180" height="130" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <text x="610" y="105" fill="white" font-size="11" font-weight="600" text-anchor="middle">Vue 3 Frontend</text>
+        <text x="610" y="105" fill="white" font-size="11" font-weight="600" text-anchor="middle">Vue 3 前端</text>
         <text x="610" y="122" fill="#94a3b8" font-size="9" text-anchor="middle">Vite + TailwindCSS</text>
-        <text x="610" y="142" fill="#94a3b8" font-size="8" text-anchor="middle">• TaskPanel.vue</text>
-        <text x="610" y="156" fill="#94a3b8" font-size="8" text-anchor="middle">• LogStream.vue</text>
-        <text x="610" y="170" fill="#94a3b8" font-size="8" text-anchor="middle">• HistoryList.vue</text>
-        <text x="610" y="188" fill="#22d3ee" font-size="8" text-anchor="middle">Naive UI Components</text>
+        <text x="610" y="142" fill="#94a3b8" font-size="8" text-anchor="middle">• TaskPanel.vue 任务面板</text>
+        <text x="610" y="156" fill="#94a3b8" font-size="8" text-anchor="middle">• LogStream.vue 日志流</text>
+        <text x="610" y="170" fill="#94a3b8" font-size="8" text-anchor="middle">• HistoryList.vue 历史列表</text>
+        <text x="610" y="188" fill="#22d3ee" font-size="8" text-anchor="middle">Naive UI 组件库</text>
 
-        <!-- Browser -->
+        <!-- Web Browser 浏览器 -->
         <rect x="540" y="370" width="140" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <text x="610" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">Web Browser</text>
+        <text x="610" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">Web 浏览器</text>
         <text x="610" y="415" fill="#94a3b8" font-size="9" text-anchor="middle">Chrome / Safari</text>
 
-        <!-- GitHub Repository -->
+        <!-- GitHub Repository 仓库 -->
         <rect x="60" y="370" width="140" height="60" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-        <text x="130" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">GitHub Repo</text>
+        <text x="130" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">GitHub 仓库</text>
         <text x="130" y="415" fill="#94a3b8" font-size="9" text-anchor="middle">luohao0308</text>
 
-        <!-- PR Workflow -->
+        <!-- PR 工作流 -->
         <rect x="240" y="360" width="200" height="100" rx="6" fill="rgba(136, 19, 55, 0.3)" stroke="#fb7185" stroke-width="1.5"/>
-        <text x="340" y="385" fill="white" font-size="10" font-weight="600" text-anchor="middle">PR Review Workflow</text>
-        <text x="340" y="405" fill="#94a3b8" font-size="8" text-anchor="middle">1. Engineer → Create PR</text>
-        <text x="340" y="420" fill="#94a3b8" font-size="8" text-anchor="middle">2. QA → Run Tests</text>
-        <text x="340" y="435" fill="#94a3b8" font-size="8" text-anchor="middle">3. Lead → Approve & Merge</text>
+        <text x="340" y="385" fill="white" font-size="10" font-weight="600" text-anchor="middle">PR 审核流程</text>
+        <text x="340" y="405" fill="#94a3b8" font-size="8" text-anchor="middle">1. 工程师 → 提交代码</text>
+        <text x="340" y="420" fill="#94a3b8" font-size="8" text-anchor="middle">2. 测试 → 执行测试</text>
+        <text x="340" y="435" fill="#94a3b8" font-size="8" text-anchor="middle">3. 领导 → 审核并合并</text>
 
-        <!-- Test Runner -->
+        <!-- 测试套件 -->
         <rect x="700" y="370" width="140" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-        <text x="770" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">Test Suite</text>
+        <text x="770" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">测试套件</text>
         <text x="770" y="415" fill="#94a3b8" font-size="9" text-anchor="middle">pytest + Vitest</text>
 
         <!-- Obsidian -->
         <rect x="860" y="370" width="100" height="60" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
         <text x="910" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">Obsidian</text>
-        <text x="910" y="415" fill="#94a3b8" font-size="9" text-anchor="middle">Workspace</text>
+        <text x="910" y="415" fill="#94a3b8" font-size="9" text-anchor="middle">工作空间</text>
 
-        <!-- ==================== ARROWS ==================== -->
+        <!-- ==================== ARROWS 连接线 ==================== -->
 
-        <!-- Hermès to Bridge Server -->
+        <!-- Hermès 到 Bridge Server -->
         <line x1="200" y1="120" x2="278" y2="120" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)"/>
-        <text x="239" y="112" fill="#34d399" font-size="8" text-anchor="middle">Events</text>
+        <text x="239" y="112" fill="#34d399" font-size="8" text-anchor="middle">事件流</text>
 
-        <!-- Bridge Server to SSE Manager -->
+        <!-- Bridge Server 到 SSE Manager -->
         <line x1="360" y1="210" x2="360" y2="228" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,4"/>
-        <text x="375" y="222" fill="#94a3b8" font-size="8">broadcast</text>
+        <text x="375" y="222" fill="#94a3b8" font-size="8">广播</text>
 
-        <!-- SSE Manager to Frontend -->
+        <!-- SSE Manager 到 Vue 前端 -->
         <line x1="440" y1="255" x2="518" y2="130" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-cyan)"/>
         <text x="479" y="185" fill="#22d3ee" font-size="8" text-anchor="middle">SSE</text>
 
-        <!-- Frontend to Browser -->
+        <!-- Vue 前端到浏览器 -->
         <line x1="610" y1="210" x2="610" y2="368" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
         <text x="625" y="295" fill="#22d3ee" font-size="8">HTTP</text>
 
-        <!-- GitHub to PR Workflow -->
+        <!-- GitHub 到 PR 工作流 -->
         <line x1="200" y1="400" x2="238" y2="400" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead-amber)"/>
 
-        <!-- PR Workflow to Test -->
+        <!-- PR 工作流到测试 -->
         <line x1="440" y1="400" x2="540" y2="400" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <text x="490" y="395" fill="#94a3b8" font-size="8" text-anchor="middle">triggers</text>
+        <text x="490" y="395" fill="#94a3b8" font-size="8" text-anchor="middle">触发</text>
 
-        <!-- Test to Frontend -->
-        <line x1="770" y1="370" x2="770" y2="212" stroke="#a78bfa" stroke-width="1.5" marker-dasharray="4,4"/>
+        <!-- 测试到前端 -->
+        <line x1="770" y1="370" x2="770" y2="212" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="4,4"/>
         <line x1="770" y1="212" x2="702" y2="212" stroke="#a78bfa" stroke-width="1.5"/>
-        <text x="780" y="290" fill="#a78bfa" font-size="8">test results</text>
+        <text x="780" y="290" fill="#a78bfa" font-size="8">测试结果</text>
 
-        <!-- PR Workflow to Obsidian (dashed) -->
+        <!-- PR 工作流到 Obsidian -->
         <path d="M 440 400 L 500 400 Q 520 400 520 420 L 520 440 Q 520 460 540 460 L 860 460" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3"/>
-        <text x="650" y="455" fill="#94a3b8" font-size="8">update docs</text>
+        <text x="650" y="455" fill="#94a3b8" font-size="8">更新文档</text>
 
-        <!-- ==================== LEGEND ==================== -->
-        <text x="30" y="520" fill="white" font-size="10" font-weight="600">Legend</text>
+        <!-- ==================== LEGEND 图例 ==================== -->
+        <text x="30" y="520" fill="white" font-size="10" font-weight="600">图例</text>
 
         <rect x="30" y="532" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
-        <text x="52" y="540" fill="#94a3b8" font-size="8">Frontend (Vue 3)</text>
+        <text x="52" y="540" fill="#94a3b8" font-size="8">前端 (Vue 3)</text>
 
         <rect x="30" y="548" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
-        <text x="52" y="556" fill="#94a3b8" font-size="8">Backend (FastAPI)</text>
+        <text x="52" y="556" fill="#94a3b8" font-size="8">后端 (FastAPI)</text>
 
         <rect x="180" y="532" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
         <text x="202" y="540" fill="#94a3b8" font-size="8">GitHub</text>
 
         <rect x="180" y="548" width="16" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
-        <text x="202" y="556" fill="#94a3b8" font-size="8">PR Workflow</text>
+        <text x="202" y="556" fill="#94a3b8" font-size="8">PR 工作流</text>
 
         <rect x="330" y="532" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
-        <text x="352" y="540" fill="#94a3b8" font-size="8">Testing</text>
+        <text x="352" y="540" fill="#94a3b8" font-size="8">测试</text>
 
         <rect x="330" y="548" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
         <text x="352" y="556" fill="#94a3b8" font-size="8">Obsidian</text>
 
         <line x1="480" y1="540" x2="496" y2="540" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-cyan)"/>
-        <text x="502" y="543" fill="#94a3b8" font-size="8">SSE Stream</text>
+        <text x="502" y="543" fill="#94a3b8" font-size="8">SSE 流</text>
 
         <line x1="480" y1="556" x2="496" y2="556" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)"/>
-        <text x="502" y="559" fill="#94a3b8" font-size="8">Event Flow</text>
+        <text x="502" y="559" fill="#94a3b8" font-size="8">事件流</text>
 
-        <!-- ==================== FLOW NUMBERS ==================== -->
-        <text x="30" y="620" fill="white" font-size="10" font-weight="600">Team Workflow</text>
+        <!-- ==================== 流程说明 ==================== -->
+        <text x="30" y="620" fill="white" font-size="10" font-weight="600">团队协作流程</text>
 
         <rect x="30" y="632" width="20" height="20" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
         <text x="40" y="646" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">1</text>
-        <text x="58" y="646" fill="#94a3b8" font-size="9">Engineer implements feature</text>
+        <text x="58" y="646" fill="#94a3b8" font-size="9">工程师实现功能</text>
 
         <rect x="240" y="632" width="20" height="20" rx="4" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
         <text x="250" y="646" fill="#fb7185" font-size="10" font-weight="600" text-anchor="middle">2</text>
-        <text x="268" y="646" fill="#94a3b8" font-size="9">QA runs tests via PR</text>
+        <text x="268" y="646" fill="#94a3b8" font-size="9">测试通过 PR 执行测试</text>
 
         <rect x="450" y="632" width="20" height="20" rx="4" fill="rgba(251, 191, 36, 0.3)" stroke="#fbbf24" stroke-width="1"/>
         <text x="460" y="646" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">3</text>
-        <text x="478" y="646" fill="#94a3b8" font-size="9">Lead reviews & merges</text>
+        <text x="478" y="646" fill="#94a3b8" font-size="9">领导审核并合并代码</text>
 
         <rect x="660" y="632" width="20" height="20" rx="4" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
         <text x="670" y="646" fill="#22d3ee" font-size="10" font-weight="600" text-anchor="middle">4</text>
-        <text x="688" y="646" fill="#94a3b8" font-size="9">Auto-deploy to staging</text>
+        <text x="688" y="646" fill="#94a3b8" font-size="9">自动部署到测试环境</text>
 
-        <!-- Branch Strategy -->
-        <text x="30" y="700" fill="white" font-size="10" font-weight="600">Branch Strategy</text>
+        <!-- 分支策略 -->
+        <text x="30" y="700" fill="white" font-size="10" font-weight="600">分支策略</text>
 
-        <rect x="30" y="712" width="60" height="18" rx="3" fill="rgba(6, 78, 59, 0.3)" stroke="#34d399" stroke-width="1"/>
-        <text x="60" y="724" fill="#34d399" font-size="8" font-weight="600" text-anchor="middle">main</text>
+        <rect x="30" y="712" width="50" height="18" rx="3" fill="rgba(6, 78, 59, 0.3)" stroke="#34d399" stroke-width="1"/>
+        <text x="55" y="724" fill="#34d399" font-size="8" font-weight="600" text-anchor="middle">main</text>
 
-        <line x1="95" y1="721" x2="115" y2="721" stroke="#34d399" stroke-width="1"/>
+        <line x1="85" y1="721" x2="105" y2="721" stroke="#34d399" stroke-width="1"/>
 
-        <rect x="120" y="712" width="80" height="18" rx="3" fill="rgba(6, 78, 59, 0.2)" stroke="#34d399" stroke-width="1" stroke-dasharray="3,2"/>
-        <text x="160" y="724" fill="#94a3b8" font-size="8" font-weight="600" text-anchor="middle">feature/*</text>
+        <rect x="110" y="712" width="80" height="18" rx="3" fill="rgba(6, 78, 59, 0.2)" stroke="#34d399" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="150" y="724" fill="#94a3b8" font-size="8" font-weight="600" text-anchor="middle">feature/*</text>
 
-        <line x1="205" y1="721" x2="225" y2="721" stroke="#34d399" stroke-width="1"/>
+        <line x1="195" y1="721" x2="215" y2="721" stroke="#34d399" stroke-width="1"/>
 
-        <rect x="230" y="712" width="60" height="18" rx="3" fill="rgba(136, 19, 55, 0.2)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,2"/>
-        <text x="260" y="724" fill="#94a3b8" font-size="8" font-weight="600" text-anchor="middle">PR</text>
+        <rect x="220" y="712" width="50" height="18" rx="3" fill="rgba(136, 19, 55, 0.2)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="245" y="724" fill="#94a3b8" font-size="8" font-weight="600" text-anchor="middle">PR</text>
 
       </svg>
     </div>
@@ -342,39 +342,39 @@
       <div class="card">
         <div class="card-header">
           <div class="card-dot emerald"></div>
-          <h3>Backend Stack</h3>
+          <h3>后端技术栈</h3>
         </div>
         <ul>
-          <li>• FastAPI - Web framework</li>
-          <li>• SSE - Real-time streaming</li>
-          <li>• uvicorn - ASGI server</li>
-          <li>• pytest - Testing</li>
+          <li>• FastAPI - Python Web 框架</li>
+          <li>• SSE - 服务器推送事件</li>
+          <li>• uvicorn - ASGI 服务器</li>
+          <li>• pytest - 自动化测试</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot cyan"></div>
-          <h3>Frontend Stack</h3>
+          <h3>前端技术栈</h3>
         </div>
         <ul>
-          <li>• Vue 3 + Composition API</li>
-          <li>• Vite - Build tool</li>
-          <li>• TailwindCSS - Styling</li>
-          <li>• Naive UI - Components</li>
+          <li>• Vue 3 - 渐进式 JS 框架</li>
+          <li>• Vite - 快速构建工具</li>
+          <li>• TailwindCSS - 原子化 CSS</li>
+          <li>• Naive UI - Vue 3 组件库</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot rose"></div>
-          <h3>Team Workflow</h3>
+          <h3>团队角色</h3>
         </div>
         <ul>
-          <li>• Engineer → Implement</li>
-          <li>• QA → Test & Verify</li>
-          <li>• Lead → Review & Merge</li>
-          <li>• Obsidian → Documentation</li>
+          <li>• 工程师 - 实现功能代码</li>
+          <li>• 测试 (QA) - 执行测试验证</li>
+          <li>• 领导 (Lead) - 审核并合并</li>
+          <li>• Obsidian - 项目文档</li>
         </ul>
       </div>
     </div>

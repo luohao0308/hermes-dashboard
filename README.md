@@ -12,6 +12,10 @@
 
 ## 技术方案
 
+### 系统架构图
+
+![Architecture Diagram](docs/architecture-diagram.html)
+
 ### 技术选型
 
 | 层级 | 技术 | 说明 |

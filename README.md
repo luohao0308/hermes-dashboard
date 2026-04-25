@@ -80,7 +80,9 @@ main (保护分支)
 ├── feature/log-stream (Phase 2.2)
 ├── feature/history-list (Phase 2.3)
 ├── feature/hermes-proxy (Phase 3.1)
-└── feature/ui-optimization (Phase 3.2)
+├── feature/ui-optimization (Phase 3.2)
+├── feature/ui-minimalist (Phase 3.3)
+└── feature/sidebar-terminal (Phase 4)
 ```
 
 ### 工作流程 (每步骤)
@@ -174,10 +176,9 @@ main (保护分支)
   - 访问 http://localhost:5173 查看完整 UI
   - TypeScript 编译通过: `npx vue-tsc --noEmit`
 
-#### Task 3.3: UI 风格重构 - 极简中台风 🔄
-- **分支**: `feature/ui-minimalist` (开发中)
-- **计划时间**: 2026-04-26
-- **目标**: 将 Hermès Dashboard 从深色主题改造为极简中台风格
+#### Task 3.3: UI 风格重构 - 极简中台风 ✅
+- **分支**: `feature/ui-minimalist` (已合并)
+- **完成时间**: 2026-04-25
 - **实现内容**:
   - 极简中台风格：纯白背景、左侧固定侧边栏、精简顶部 Banner
   - 全局样式变量系统 (`frontend/src/styles/minimal.css`)
@@ -185,12 +186,28 @@ main (保护分支)
   - 顶部状态栏 (`TopBar.vue`)：页面标题 + Hermès 状态 + 刷新按钮
   - 各面板组件 (TaskPanel/LogStream/HistoryList) 适配极简白色卡片风格
   - 响应式布局支持
-- **设计参考**: 简洁、专业、像前端大厂工程师做的产品
 - **测试验证**:
   - 启动服务: `./start.sh`
   - 访问 http://localhost:5173 验证极简风格
   - `npm run test` 确保测试通过
   - `npx vue-tsc --noEmit` TypeScript 类型检查
+
+### Phase 4: 侧边栏导航 + 终端页面 ✅
+
+#### Task 4.1: 修复侧边栏导航状态同步 ✅
+- **分支**: `feature/sidebar-terminal` (已合并)
+- **完成时间**: 2026-04-26
+- **实现内容**:
+  - Sidebar.vue: `nav-change` 事件派发，修复 `activeNav` 状态同步
+  - App.vue: 接收 `nav-change` 事件，实现页面切换逻辑
+
+#### Task 4.2: 新增 Terminal 终端页面 ✅
+- **分支**: `feature/sidebar-terminal` (已合并)
+- **完成时间**: 2026-04-26
+- **实现内容**:
+  - Terminal.vue: xterm.js + WebSocket 实现浏览器内终端
+  - 后端 `/ws/terminal` WebSocket 端点，支持命令执行
+  - `@xterm/xterm` + `@xterm/addon-fit` 依赖
 
 ## GitHub 操作指南
 
@@ -342,7 +359,7 @@ npm run build
 
 ## 风险与权衡
 
-|| 风险 | 应对 |
+||| 风险 | 应对 |
 |------|------|------|
 | Hermès 事件接口不明确 | ✅ 已解决：通过 Dashboard API (localhost:9119) |
 | 实时数据量大导致前端卡顿 | ✅ 已解决：日志上限 500 条，骨架屏优化加载 |
@@ -350,18 +367,28 @@ npm run build
 | SOCKS 代理干扰本地连接 | ✅ 已解决：httpx 禁用 trust_env，清除 proxy 环境变量 |
 | 前端测试 (vitest) | ✅ 已解决：6 个组件测试全部通过 |
 | E2E 测试 (Playwright) | ✅ 已解决：6 个 E2E 测试全部通过 |
+| 侧边栏导航状态同步 | ✅ 已解决：nav-change 事件机制 |
+| 终端页面 WebSocket 支持 | ✅ 已解决：/ws/terminal 端点 |
 
 ## 开放问题
 
-1. ~~Hermès 的事件/日志以什么形式暴露？~~ → 已解决：通过 Dashboard API (localhost:9119) 的 REST API + SSE
+1. ~~Hermès 的事件/日志以什么形式暴露？~~ → ✅ 已解决：通过 Dashboard API (localhost:9119) 的 REST API + SSE
 2. 是否需要用户认证？ → 否（当前仅本地使用）
 3. 是否需要持久化存储历史任务？ → 否（从 Hermès API 实时读取）
 4. 是否需要支持多用户同时在线？ → 否（当前仅本地单用户）
 5. ~~前端测试 (vitest) 和 E2E 测试 (Playwright)~~ → ✅ 已实现
 6. ~~SSE 断连自动重连~~ → ✅ 已实现
 7. ~~生产环境部署~~ → ✅ Docker Compose 已配置
+8. ~~侧边栏导航 + 终端页面~~ → ✅ 已实现（Phase 4）
 
 ---
 
 *计划生成时间：2026-04-25 20:07*
-*最后更新：2026-04-25 22:40（Phase 3 + 未完成项全部解决）*
+*最后更新：2026-04-26 02:00（Phase 1-4 全部完成，PR #1-9 已合并）*
+
+## Notion 集成
+
+- **Notion 项目页面**: https://www.notion.so/Herm-s-Dashboard-34d1ed0778ad81da88a4c7c3e6c89598
+- **Notion API Token**: 已配置在 `~/.hermes/.env` 文件中（ntn_...）
+- **Obsidian Vault**: `~/Documents/Obsidian Vault/`
+- **同步机制**: 每次 Phase 完成时同步更新 Notion 和 Obsidian 文档

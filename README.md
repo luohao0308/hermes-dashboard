@@ -21,7 +21,7 @@
 | 层级 | 技术 | 说明 |
 |------|------|------|
 | 前端 | Vue 3 + Vite | 渐进式 SPA，简单易用 |
-| UI 组件 | TailwindCSS + Naive UI | 美观且轻量 |
+| UI 组件 | TailwindCSS + Naive UI | 极简中台风格，纯白背景 |
 | 实时通信 | Server-Sent Events (SSE) | 简单可靠，后端推流 |
 | 后端桥接 | Python FastAPI | 轻量 ASGI 服务，连接 Hermès |
 | 日志存储 | SQLite (可选) | 持久化任务历史 |
@@ -39,7 +39,11 @@ hermes_free/
 │   ├── src/
 │   │   ├── App.vue
 │   │   ├── main.ts
+│   │   ├── styles/
+│   │   │   └── minimal.css    # 极简风格全局样式变量
 │   │   └── components/
+│   │       ├── Sidebar.vue    # 左侧导航栏
+│   │       ├── TopBar.vue     # 顶部状态栏
 │   │       ├── TaskPanel.vue
 │   │       ├── LogStream.vue
 │   │       └── HistoryList.vue
@@ -169,6 +173,24 @@ main (保护分支)
 - **测试验证**:
   - 访问 http://localhost:5173 查看完整 UI
   - TypeScript 编译通过: `npx vue-tsc --noEmit`
+
+#### Task 3.3: UI 风格重构 - 极简中台风 🔄
+- **分支**: `feature/ui-minimalist` (开发中)
+- **计划时间**: 2026-04-26
+- **目标**: 将 Hermès Dashboard 从深色主题改造为极简中台风格
+- **实现内容**:
+  - 极简中台风格：纯白背景、左侧固定侧边栏、精简顶部 Banner
+  - 全局样式变量系统 (`frontend/src/styles/minimal.css`)
+  - 侧边栏组件 (`Sidebar.vue`)：Logo + 导航菜单 + 连接状态
+  - 顶部状态栏 (`TopBar.vue`)：页面标题 + Hermès 状态 + 刷新按钮
+  - 各面板组件 (TaskPanel/LogStream/HistoryList) 适配极简白色卡片风格
+  - 响应式布局支持
+- **设计参考**: 简洁、专业、像前端大厂工程师做的产品
+- **测试验证**:
+  - 启动服务: `./start.sh`
+  - 访问 http://localhost:5173 验证极简风格
+  - `npm run test` 确保测试通过
+  - `npx vue-tsc --noEmit` TypeScript 类型检查
 
 ## GitHub 操作指南
 

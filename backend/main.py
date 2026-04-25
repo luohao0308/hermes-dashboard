@@ -9,7 +9,7 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, Dict, Any
-from fastapi import FastAPI, Request, Query, HTTPException
+from fastapi import FastAPI, Request, Query, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 import httpx
@@ -549,6 +549,61 @@ async def broadcast_task_update(task_id: str):
         return {"status": "broadcast_sent", "task": session}
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Task not found: {e}")
+
+
+# ============================================================================
+# WebSocket Terminal Endpoint
+# ============================================================================
+
+@app.websocket("/ws/terminal")
+async def terminal_websocket(websocket: WebSocket):
+    """WebSocket endpoint for terminal emulation - executes commands locally"""
+    await websocket.accept()
+    
+    try:
+        # Send welcome message
+        await websocket.send_text("\r\n\x1b[36mHermès Terminal\x1b[0m - 终端已连接\r\n")
+        await websocket.send_text("输入命令与 Hermès Agent 交互...\r\n\r\n$ ")
+        
+        while True:
+            # Receive command from client
+            data = await websocket.receive_text()
+            
+            # Handle special commands
+            if data.strip() == "exit":
+                await websocket.send_text("\r\n\x1b[33m再见!\x1b[0m\r\n")
+                break
+            
+            # Execute command locally
+            try:
+                process = await asyncio.create_subprocess_shell(
+                    data,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                    cwd=os.path.expanduser("~")
+                )
+                stdout, _ = await process.communicate()
+                output = stdout.decode("utf-8", errors="replace") if stdout else ""
+                
+                if output:
+                    # Format output for terminal
+                    formatted = output.replace("\n", "\r\n")
+                    await websocket.send_text(formatted)
+                else:
+                    await websocket.send_text("\r\n")
+                    
+                await websocket.send_text("$ ")
+                
+            except Exception as e:
+                await websocket.send_text(f"\r\n\x1b[31mError: {str(e)}\x1b[0m\r\n$ ")
+                
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_text(f"\r\n\x1b[31mConnection error: {str(e)}\x1b[0m\r\n")
+        except:
+            pass
 
 
 # ============================================================================

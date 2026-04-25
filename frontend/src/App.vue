@@ -128,6 +128,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { onLCP, onINP, onCLS, onFCP, onTTFB } from 'web-vitals'
 import Sidebar from './components/Sidebar.vue'
 import TopBar from './components/TopBar.vue'
 import TaskPanel from './components/TaskPanel.vue'
@@ -493,6 +494,18 @@ onMounted(async () => {
   await refreshAll()
   statusPollInterval = window.setInterval(fetchHermesStatus, 30000)
   connectSSE()
+
+  // Core Web Vitals monitoring
+  const reportWebVital = ({ name, value, id }: { name: string; value: number; id: string }) => {
+    const threshold = name === 'CLS' ? 0.1 : name === 'INP' ? 200 : name === 'LCP' ? 2500 : 0
+    const rating = threshold > 0 && value > threshold ? 'poor' : 'good'
+    console.log(`[WebVitals] ${name}: ${value} (${rating}) [id=${id}]`)
+  }
+  onLCP(reportWebVital)
+  onINP(reportWebVital)
+  onCLS(reportWebVital)
+  onFCP(reportWebVital)
+  onTTFB(reportWebVital)
 })
 
 onUnmounted(() => {

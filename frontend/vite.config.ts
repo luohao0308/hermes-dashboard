@@ -17,5 +17,16 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'naive-ui': ['naive-ui'],
+          'xterm': ['@xterm/xterm', '@xterm/addon-fit'],
+        }
+      }
+    },
+    chunkSizeWarningLimit: 500 // KB, warn if chunk exceeds this
   }
 })

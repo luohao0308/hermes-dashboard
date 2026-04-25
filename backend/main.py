@@ -9,9 +9,13 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, Dict, Any
-from fastapi import FastAPI, Request, Query, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, Query, HTTPException, WebSocket, WebSocketDisconnect, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import httpx
 
 from sse_manager import sse_manager
@@ -181,13 +185,28 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+# Add CORS middleware (origins controlled by CORS_ORIGINS env var)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -196,6 +215,7 @@ app.add_middleware(
 # ============================================================================
 
 @app.get("/sse")
+@limiter.limit("30/minute")
 async def sse_endpoint(request: Request):
     """Server-Sent Events endpoint for Hermès updates"""
 

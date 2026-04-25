@@ -5,6 +5,7 @@ Proxies requests to real Hermès Agent Dashboard API (localhost:9119)
 import asyncio
 import json
 import uuid
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -19,6 +20,11 @@ from config import settings
 # Hermès Agent Dashboard API base URL
 HERMES_API_BASE = "http://127.0.0.1:9119"
 
+# Clear proxy env vars for httpx (avoid SOCKS proxy issues)
+for _k in list(os.environ.keys()):
+    if 'proxy' in _k.lower():
+        del os.environ[_k]
+
 
 # ============================================================================
 # Hermès API Client
@@ -27,7 +33,7 @@ HERMES_API_BASE = "http://127.0.0.1:9119"
 async def hermes_get(endpoint: str, params: dict = None) -> dict[str, Any]:
     """Proxy GET request to Hermès Agent API"""
     url = f"{HERMES_API_BASE}{endpoint}"
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, proxies=None, trust_env=False) as client:
         response = await client.get(url, params=params)
         response.raise_for_status()
         return response.json()
@@ -36,7 +42,7 @@ async def hermes_get(endpoint: str, params: dict = None) -> dict[str, Any]:
 async def hermes_get_raw(endpoint: str, params: dict = None) -> str:
     """Proxy GET request to Hermès Agent API, return raw text"""
     url = f"{HERMES_API_BASE}{endpoint}"
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, proxies=None, trust_env=False) as client:
         response = await client.get(url, params=params)
         response.raise_for_status()
         return response.text

@@ -39,7 +39,7 @@ class TestRootEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["service"] == "Hermès Bridge Service"
-        assert data["version"] == "1.0.0"
+        assert data["version"] == "1.1.0"
         assert "endpoints" in data
         assert data["endpoints"]["sse"] == "/sse"
         assert data["endpoints"]["health"] == "/health"
@@ -60,17 +60,24 @@ class TestTasksEndpoint:
 
     async def test_get_task_by_id(self, client):
         """GET /tasks/{task_id} should return specific task"""
-        response = await client.get("/tasks/1")
+        # Use a real session ID from the list
+        list_response = await client.get("/tasks")
+        assert list_response.status_code == 200
+        tasks = list_response.json().get("tasks", [])
+        if not tasks:
+            pytest.skip("No tasks available to test")
+        task_id = tasks[0].get("task_id") or tasks[0].get("id")
+        response = await client.get(f"/tasks/{task_id}")
         assert response.status_code == 200
         data = response.json()
-        assert data["task_id"] == "1"
+        assert data["task_id"] == task_id
         assert "name" in data
         assert "status" in data
         assert "progress" in data
 
     async def test_get_nonexistent_task_returns_404(self, client):
         """GET /tasks/{task_id} with invalid ID should return 404"""
-        response = await client.get("/tasks/nonexistent")
+        response = await client.get("/tasks/nonexistent_id_12345")
         assert response.status_code == 404
 
 

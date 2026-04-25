@@ -471,19 +471,22 @@ async def list_tasks():
 async def get_task(task_id: str):
     """Get specific task/session by ID"""
     try:
-        messages = await hermes_get(f"/api/sessions/{task_id}/messages")
-        sessions = await hermes_get("/api/sessions", {"limit": 1, "offset": 0})
+        # First check if session exists by fetching sessions list
+        sessions = await hermes_get("/api/sessions", {"limit": 100, "offset": 0})
         session = next((s for s in sessions.get("sessions", []) if s.get("id") == task_id), None)
 
         if not session:
             raise HTTPException(status_code=404, detail="Task not found")
+
+        # Get messages for this session
+        messages = await hermes_get(f"/api/sessions/{task_id}/messages")
 
         return {
             "task_id": task_id,
             "name": session.get("title") or f"Session {task_id[:8]}",
             "status": "running" if session.get("is_active") else "completed",
             "progress": 100 if not session.get("is_active") else 50,
-            "messages": messages.get("messages", [])
+            "messages": messages.get("messages", []),
         }
     except HTTPException:
         raise

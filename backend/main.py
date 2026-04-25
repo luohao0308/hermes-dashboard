@@ -1,28 +1,128 @@
-"""Hermès Bridge Service - FastAPI + SSE Backend"""
+"""Hermès Bridge Service - FastAPI + SSE Backend
+Proxies requests to real Hermès Agent Dashboard API (localhost:9119)
+"""
 
 import asyncio
 import json
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, Dict, Any
 from fastapi import FastAPI, Request, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
+import httpx
 
 from sse_manager import sse_manager
 from config import settings
 
-# Sample task data for simulation
-SAMPLE_TASKS = [
-    {"task_id": "1", "name": "示例任务", "status": "running", "progress": 45},
-    {"task_id": "2", "name": "数据采集", "status": "pending", "progress": 0},
-    {"task_id": "3", "name": "模型推理", "status": "completed", "progress": 100},
-]
+# Hermès Agent Dashboard API base URL
+HERMES_API_BASE = "http://127.0.0.1:9119"
 
-# Task storage
-tasks_db: Dict[str, Dict] = {task["task_id"]: task for task in SAMPLE_TASKS}
 
+# ============================================================================
+# Hermès API Client
+# ============================================================================
+
+async def hermes_get(endpoint: str, params: dict = None) -> dict[str, Any]:
+    """Proxy GET request to Hermès Agent API"""
+    url = f"{HERMES_API_BASE}{endpoint}"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(url, params=params)
+        response.raise_for_status()
+        return response.json()
+
+
+async def hermes_get_raw(endpoint: str, params: dict = None) -> str:
+    """Proxy GET request to Hermès Agent API, return raw text"""
+    url = f"{HERMES_API_BASE}{endpoint}"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(url, params=params)
+        response.raise_for_status()
+        return response.text
+
+
+# ============================================================================
+# SSE Event Generator - Real-time data from Hermès
+# ============================================================================
+
+async def generate_events():
+    """Generate events by polling Hermès Agent API periodically"""
+    counter = 0
+    while True:
+        try:
+            await asyncio.sleep(settings.event_generation_interval)
+            counter += 1
+
+            # Poll Hermès status every cycle
+            try:
+                status = await hermes_get("/api/status")
+                sessions = await hermes_get("/api/sessions", {"limit": 5, "offset": 0})
+            except Exception as e:
+                # Hermes not running, broadcast simulated status
+                event_type = "system_status"
+                data = {
+                    "status": "hermes_offline",
+                    "message": "Hermès Agent 未运行或 Dashboard 未启动",
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e),
+                    "active_connections": sse_manager.get_connection_count()
+                }
+                await sse_manager.broadcast(event_type, data)
+                continue
+
+            # Every 3 cycles: send system status
+            if counter % 3 == 0:
+                event_type = "system_status"
+                data = {
+                    "status": "healthy" if status.get("gateway_running") else "gateway_stopped",
+                    "version": status.get("version"),
+                    "release_date": status.get("release_date"),
+                    "gateway_running": status.get("gateway_running"),
+                    "gateway_pid": status.get("gateway_pid"),
+                    "active_sessions": status.get("active_sessions"),
+                    "gateway_platforms": status.get("gateway_platforms"),
+                    "timestamp": datetime.now().isoformat(),
+                    "active_connections": sse_manager.get_connection_count()
+                }
+                await sse_manager.broadcast(event_type, data)
+
+            # Every 5 cycles: send session update
+            if counter % 5 == 0:
+                event_type = "sessions_update"
+                data = {
+                    "sessions": sessions.get("sessions", [])[:5],
+                    "total": sessions.get("total", 0),
+                    "timestamp": datetime.now().isoformat()
+                }
+                await sse_manager.broadcast(event_type, data)
+
+            # Every heartbeat cycle
+            if counter % settings.heartbeat_interval == 0:
+                event_type = "heartbeat"
+                data = {
+                    "timestamp": datetime.now().isoformat(),
+                    "hermes_version": status.get("version")
+                }
+                await sse_manager.broadcast(event_type, data)
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            print(f"Error generating events: {e}")
+            # Send error event
+            try:
+                await sse_manager.broadcast("error", {
+                    "message": str(e),
+                    "timestamp": datetime.now().isoformat()
+                })
+            except Exception:
+                pass
+
+
+# ============================================================================
+# Lifespan & App Setup
+# ============================================================================
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,8 +140,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Hermès Bridge Service",
-    description="SSE-based bridge service for Hermès monitoring platform",
-    version="1.0.0",
+    description="SSE-based bridge service that proxies to Hermès Agent Dashboard API",
+    version="1.1.0",
     lifespan=lifespan
 )
 
@@ -55,38 +155,9 @@ app.add_middleware(
 )
 
 
-async def generate_events():
-    """Generate simulated Hermès events periodically"""
-    counter = 0
-    while True:
-        try:
-            await asyncio.sleep(settings.event_generation_interval)
-            counter += 1
-
-            # Simulate different event types
-            if counter % 5 == 0:
-                event_type = "task_update"
-                data = SAMPLE_TASKS[counter % 3]
-            elif counter % 3 == 0:
-                event_type = "system_status"
-                data = {
-                    "status": "healthy",
-                    "active_connections": sse_manager.get_connection_count(),
-                    "timestamp": datetime.now().isoformat(),
-                    "total_tasks": len(tasks_db),
-                    "running_tasks": sum(1 for t in tasks_db.values() if t["status"] == "running")
-                }
-            else:
-                event_type = "heartbeat"
-                data = {"timestamp": datetime.now().isoformat()}
-
-            # Broadcast to all connected clients
-            await sse_manager.broadcast(event_type, data)
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            print(f"Error generating events: {e}")
-
+# ============================================================================
+# SSE Endpoint
+# ============================================================================
 
 @app.get("/sse")
 async def sse_endpoint(request: Request):
@@ -105,6 +176,7 @@ async def sse_endpoint(request: Request):
                 "data": json.dumps({
                     "client_id": client_id,
                     "message": "Connected to Hermès Bridge Service",
+                    "hermes_api": HERMES_API_BASE,
                     "timestamp": datetime.now().isoformat()
                 })
             }
@@ -132,14 +204,31 @@ async def sse_endpoint(request: Request):
     return EventSourceResponse(event_generator())
 
 
+# ============================================================================
+# Health & Connection Management
+# ============================================================================
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    # Try to reach Hermès API
+    hermes_reachable = False
+    hermes_status = {}
+    try:
+        hermes_status = await hermes_get("/api/status")
+        hermes_reachable = True
+    except Exception:
+        pass
+
     return {
         "status": "healthy",
         "service": "hermes-bridge",
-        "version": "1.0.0",
-        "active_connections": sse_manager.get_connection_count()
+        "version": "1.1.0",
+        "active_connections": sse_manager.get_connection_count(),
+        "hermes_reachable": hermes_reachable,
+        "hermes_api_base": HERMES_API_BASE,
+        "hermes_version": hermes_status.get("version") if hermes_reachable else None,
+        "gateway_running": hermes_status.get("gateway_running") if hermes_reachable else None
     }
 
 
@@ -161,6 +250,238 @@ async def get_connection(client_id: str):
     return {"client_id": client_id, **info}
 
 
+# ============================================================================
+# Hermès API Proxy Endpoints
+# ============================================================================
+
+@app.get("/api/status")
+async def proxy_status():
+    """Proxy to Hermès /api/status - Gateway status overview"""
+    try:
+        return await hermes_get("/api/status")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
+
+
+@app.get("/api/sessions")
+async def proxy_sessions(
+    limit: int = Query(20, ge=1, le=100, description="Number of sessions to return"),
+    offset: int = Query(0, ge=0, description="Offset for pagination")
+):
+    """Proxy to Hermès /api/sessions - List sessions"""
+    try:
+        return await hermes_get("/api/sessions", {"limit": limit, "offset": offset})
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
+
+
+@app.get("/api/sessions/search")
+async def proxy_search_sessions(q: str = Query(..., description="Search query")):
+    """Proxy to Hermès /api/sessions/search - Search sessions"""
+    try:
+        return await hermes_get("/api/sessions/search", {"q": q})
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
+
+
+@app.get("/api/sessions/{session_id}/messages")
+async def proxy_session_messages(session_id: str):
+    """Proxy to Hermès /api/sessions/{id}/messages - Get session messages"""
+    try:
+        return await hermes_get(f"/api/sessions/{session_id}/messages")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
+
+
+@app.delete("/api/sessions/{session_id}")
+async def proxy_delete_session(session_id: str):
+    """Proxy to Hermès /api/sessions/{id} DELETE - Delete a session"""
+    url = f"{HERMES_API_BASE}/api/sessions/{session_id}"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            response = await client.delete(url)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
+
+
+@app.get("/api/logs")
+async def proxy_logs(
+    lines: int = Query(100, ge=1, le=1000, description="Number of log lines"),
+    level: str = Query("INFO", description="Log level filter"),
+    file: Optional[str] = Query(None, description="Log file path"),
+    component: Optional[str] = Query(None, description="Component filter")
+):
+    """Proxy to Hermès /api/logs - Get log entries"""
+    params: dict[str, Any] = {"lines": lines, "level": level}
+    if file:
+        params["file"] = file
+    if component and component != "all":
+        params["component"] = component
+
+    try:
+        return await hermes_get("/api/logs", params)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
+
+
+@app.get("/api/analytics/usage")
+async def proxy_analytics(days: int = Query(7, ge=1, le=90, description="Number of days")):
+    """Proxy to Hermès /api/analytics/usage - Get usage analytics"""
+    try:
+        return await hermes_get("/api/analytics/usage", {"days": days})
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
+
+
+@app.get("/api/config")
+async def proxy_config():
+    """Proxy to Hermès /api/config - Get current config"""
+    try:
+        return await hermes_get("/api/config")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
+
+
+@app.get("/api/model/info")
+async def proxy_model_info():
+    """Proxy to Hermès /api/model/info - Get model info"""
+    try:
+        return await hermes_get("/api/model/info")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
+
+
+@app.get("/api/skills")
+async def proxy_skills():
+    """Proxy to Hermès /api/skills - Get skills list"""
+    try:
+        return await hermes_get("/api/skills")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
+
+
+@app.get("/api/cron/jobs")
+async def proxy_cron_jobs():
+    """Proxy to Hermès /api/cron/jobs - Get cron jobs"""
+    try:
+        return await hermes_get("/api/cron/jobs")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
+
+
+@app.get("/api/plugins")
+async def proxy_plugins():
+    """Proxy to Hermès /api/dashboard/plugins - Get dashboard plugins"""
+    try:
+        return await hermes_get("/api/dashboard/plugins")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
+
+
+# ============================================================================
+# Legacy Endpoints (for backward compatibility with frontend)
+# ============================================================================
+
+@app.get("/tasks")
+async def list_tasks():
+    """List tasks from Hermès sessions (derived from recent sessions)"""
+    try:
+        sessions = await hermes_get("/api/sessions", {"limit": 20, "offset": 0})
+        # Convert sessions to tasks format
+        tasks = []
+        for session in sessions.get("sessions", []):
+            tasks.append({
+                "task_id": session.get("id", ""),
+                "name": session.get("title") or f"Session {session.get('id', '')[:8]}",
+                "status": "running" if session.get("is_active") else "completed",
+                "progress": 100 if not session.get("is_active") else 50,
+                "message_count": session.get("message_count", 0),
+                "model": session.get("model"),
+                "started_at": datetime.fromtimestamp(session.get("started_at", 0)/1000).isoformat() if session.get("started_at") else None
+            })
+        return {"tasks": tasks, "total": len(tasks)}
+    except Exception as e:
+        # Fallback: return empty
+        return {"tasks": [], "total": 0, "error": str(e)}
+
+
+@app.get("/tasks/{task_id}")
+async def get_task(task_id: str):
+    """Get specific task/session by ID"""
+    try:
+        messages = await hermes_get(f"/api/sessions/{task_id}/messages")
+        sessions = await hermes_get("/api/sessions", {"limit": 1, "offset": 0})
+        session = next((s for s in sessions.get("sessions", []) if s.get("id") == task_id), None)
+
+        if not session:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        return {
+            "task_id": task_id,
+            "name": session.get("title") or f"Session {task_id[:8]}",
+            "status": "running" if session.get("is_active") else "completed",
+            "progress": 100 if not session.get("is_active") else 50,
+            "messages": messages.get("messages", [])
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to get task: {e}")
+
+
+@app.get("/history")
+async def list_history(limit: int = Query(20, ge=1, le=100)):
+    """List historical tasks/sessions"""
+    try:
+        sessions = await hermes_get("/api/sessions", {"limit": limit, "offset": 0})
+        history = []
+        for session in sessions.get("sessions", []):
+            if not session.get("is_active"):
+                history.append({
+                    "task_id": session.get("id", ""),
+                    "name": session.get("title") or f"Session {session.get('id', '')[:8]}",
+                    "completed_at": datetime.fromtimestamp(session.get("ended_at", session.get("last_active", 0))/1000).isoformat() if session.get("ended_at") or session.get("last_active") else None,
+                    "duration": (session.get("ended_at", 0) - session.get("started_at", 0)) // 1000 if session.get("ended_at") and session.get("started_at") else 0,
+                    "message_count": session.get("message_count", 0),
+                    "model": session.get("model"),
+                    "input_tokens": session.get("input_tokens", 0),
+                    "output_tokens": session.get("output_tokens", 0)
+                })
+        return {"history": history, "total": sessions.get("total", 0)}
+    except Exception as e:
+        return {"history": [], "total": 0, "error": str(e)}
+
+
+# ============================================================================
+# Broadcast (legacy)
+# ============================================================================
+
 @app.post("/broadcast")
 async def broadcast_event(
     event_type: str = Query(..., description="Event type for the broadcast"),
@@ -180,51 +501,44 @@ async def broadcast_event(
     }
 
 
-@app.get("/tasks")
-async def list_tasks():
-    """List all tasks"""
-    return {
-        "tasks": list(tasks_db.values()),
-        "total": len(tasks_db)
-    }
-
-
-@app.get("/tasks/{task_id}")
-async def get_task(task_id: str):
-    """Get a specific task by ID"""
-    if task_id not in tasks_db:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return tasks_db[task_id]
-
-
 @app.post("/tasks/{task_id}/broadcast")
 async def broadcast_task_update(task_id: str):
     """Broadcast a task update event"""
-    if task_id not in tasks_db:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    task = tasks_db[task_id]
-    await sse_manager.broadcast("task_update", task)
-    
-    return {
-        "status": "broadcast_sent",
-        "task": task
-    }
+    try:
+        session = await hermes_get(f"/api/sessions/{task_id}")
+        await sse_manager.broadcast("task_update", session)
+        return {"status": "broadcast_sent", "task": session}
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Task not found: {e}")
 
+
+# ============================================================================
+# Root
+# ============================================================================
 
 @app.get("/")
 async def root():
     """Root endpoint"""
     return {
         "service": "Hermès Bridge Service",
-        "version": "1.0.0",
-        "description": "SSE-based bridge service for Hermès monitoring platform",
+        "version": "1.1.0",
+        "description": "SSE-based bridge service that proxies to Hermès Agent Dashboard API",
+        "hermes_api_base": HERMES_API_BASE,
         "endpoints": {
             "sse": "/sse",
             "health": "/health",
             "connections": "/connections",
             "broadcast": "/broadcast",
-            "tasks": "/tasks"
+            "tasks": "/tasks",
+            "history": "/history",
+            "api": {
+                "status": "/api/status",
+                "sessions": "/api/sessions",
+                "logs": "/api/logs",
+                "analytics": "/api/analytics/usage",
+                "config": "/api/config",
+                "skills": "/api/skills"
+            }
         }
     }
 

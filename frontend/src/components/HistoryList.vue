@@ -2,7 +2,13 @@
   <div class="panel">
     <div class="panel-header">
       <h2>历史任务</h2>
-      <span class="history-count">{{ history.length }} 个任务</span>
+      <div class="header-right">
+        <span class="history-count">{{ filteredHistory.length }} 个任务</span>
+        <button class="refresh-btn" @click="$emit('refresh')" :disabled="loading">
+          <span v-if="loading" class="spinner"></span>
+          {{ loading ? '加载中...' : '刷新' }}
+        </button>
+      </div>
     </div>
 
     <div class="history-stats">
@@ -79,10 +85,19 @@ export interface HistoryItem {
   completed_at: string
   duration: number
   status: 'success' | 'failed' | 'cancelled'
+  message_count?: number
+  model?: string
+  input_tokens?: number
+  output_tokens?: number
 }
 
 const props = defineProps<{
   history: HistoryItem[]
+  loading?: boolean
+}>()
+
+defineEmits<{
+  refresh: []
 }>()
 
 const emit = defineEmits<{
@@ -102,7 +117,6 @@ const statusIcon: Record<string, string> = {
 const filteredHistory = computed(() => {
   let result = [...props.history]
 
-  // Filter by search query
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
     result = result.filter(item =>
@@ -111,7 +125,6 @@ const filteredHistory = computed(() => {
     )
   }
 
-  // Sort
   result.sort((a, b) => {
     switch (sortBy.value) {
       case 'completed_at':
@@ -188,6 +201,12 @@ function reRunTask(item: HistoryItem) {
   font-weight: 600;
   color: #f8fafc;
   margin: 0;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .history-count {
@@ -362,5 +381,41 @@ function reRunTask(item: HistoryItem) {
 
 .empty-icon {
   font-size: 2rem;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  background: #334155;
+  color: #e2e8f0;
+  border: none;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #475569;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #64748b;
+  border-top-color: #e2e8f0;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

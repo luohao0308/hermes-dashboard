@@ -3,6 +3,10 @@
     <div class="panel-header">
       <h2>实时日志</h2>
       <div class="log-controls">
+        <button class="refresh-btn" @click="$emit('refresh')" :disabled="loading">
+          <span v-if="loading" class="spinner"></span>
+          {{ loading ? '加载中...' : '刷新' }}
+        </button>
         <select v-model="levelFilter" class="level-select">
           <option value="all">全部</option>
           <option value="info">信息</option>
@@ -85,6 +89,11 @@ export interface Log {
 
 const props = defineProps<{
   logs: Log[]
+  loading?: boolean
+}>()
+
+defineEmits<{
+  refresh: []
 }>()
 
 const MAX_LOGS = 500
@@ -372,5 +381,41 @@ function scrollToTop() {
 
 .empty-icon {
   font-size: 2rem;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  background: #334155;
+  color: #e2e8f0;
+  border: none;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #475569;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #64748b;
+  border-top-color: #e2e8f0;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

@@ -227,6 +227,30 @@ main (保护分支)
   - 切换页面时 Terminal 保持连接（KeepAlive）
   - 点击 × 关闭标签页
 
+## Phase 6: CI/CD + Security + Performance ✅ (2026-04-26)
+
+- **分支**: `feature/phase-6-ci-cd-security` (已合并，PR #11)
+- **PR**: https://github.com/luohao0308/hermes-dashboard/pull/11
+
+#### Task 6.1: CI 流水线 ✅
+- GitHub Actions: backend-quality (flake8) + backend-test (pytest) + frontend-quality (ESLint + vue-tsc) + frontend-test (vitest) + frontend-build + security-audit (npm audit + safety)
+- ESLint 9 flat config，仅 lint .ts 文件
+- pytest pythonpath = backend
+
+#### Task 6.2: 安全加固 ✅
+- slowapi Rate Limiting: SSE 端点 30/min，其他端点默认 100/min
+- 安全响应头 middleware: X-Frame-Options=DENY, X-Content-Type-Options=nosniff, X-XSS-Protection, Referrer-Policy
+- CORS 收紧: allow_methods=[GET,POST,DELETE], allow_headers=[Authorization,Content-Type]
+- CORS 默认值改为 localhost (生产通过 CORS_ORIGINS env 覆盖)
+
+#### Task 6.3: 性能监控 ✅
+- web-vitals Core Web Vitals 监控 (LCP/INP/CLS/FCP/TTFB)
+- Vite manualChunks: naive-ui 和 xterm 独立分 chunk
+- chunkSizeWarningLimit: 500KB
+
+#### Task 6.4: 发布检查清单 ✅
+- `docs/CHECKLIST.md`: 完整的发布前检查清单（代码质量、安全、性能、基础设施、文档）
+
 ## GitHub 操作指南
 
 ### 首次设置

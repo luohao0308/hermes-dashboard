@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hermès Dashboard Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      margin-bottom: 2rem;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: #22d3ee;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    .subtitle {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      margin-left: 1.75rem;
+    }
+
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+
+    svg {
+      width: 100%;
+      min-width: 900px;
+      display: block;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+
+    .card h3 {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .card ul {
+      list-style: none;
+      color: #94a3b8;
+      font-size: 0.75rem;
+    }
+
+    .card li {
+      margin-bottom: 0.375rem;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      color: #475569;
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Hermès Dashboard Architecture</h1>
+      </div>
+      <p class="subtitle">Real-time Hermès Agent Monitoring System</p>
+    </div>
+
+    <!-- Main Diagram -->
+    <div class="diagram-container">
+      <svg viewBox="0 0 1000 750">
+        <!-- Definitions -->
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowhead-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+          </marker>
+          <marker id="arrowhead-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <marker id="arrowhead-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background Grid -->
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ==================== BOUNDARIES ==================== -->
+
+        <!-- Local Development Boundary -->
+        <rect x="20" y="20" width="960" height="280" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x=\"35\" y=\"38\" fill="#fbbf24" font-size="10" font-weight="600">Local Environment</text>
+
+        <!-- GitHub Boundary -->
+        <rect x="20" y="320" width="450" height="180" rx="12" fill="rgba(136, 19, 55, 0.05)" stroke="#fb7185" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="35" y="338" fill="#fb7185" font-size="10" font-weight="600">GitHub Workflow</text>
+
+        <!-- Browser Boundary -->
+        <rect x="500" y="320" width="480" height="180" rx="12" fill="rgba(8, 51, 68, 0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="515" y="338" fill="#22d3ee" font-size="10" font-weight="600">Browser Client</text>
+
+        <!-- ==================== COMPONENTS ==================== -->
+
+        <!-- Hermès Agent -->
+        <rect x="60" y="80" width="140" height="80" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="130" y="105" fill="white" font-size="11" font-weight="600" text-anchor="middle">Hermès Agent</text>
+        <text x="130" y="122" fill="#94a3b8" font-size="9" text-anchor="middle">Running Instance</text>
+        <text x="130" y="138" fill="#34d399" font-size="8" text-anchor="middle">CLI / ACP Protocol</text>
+
+        <!-- Bridge Server -->
+        <rect x="280" y="80" width="160" height="130" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="360" y="105" fill="white" font-size="11" font-weight="600" text-anchor="middle">Bridge Server</text>
+        <text x="360" y="122" fill="#94a3b8" font-size="9" text-anchor="middle">FastAPI + SSE</text>
+        <text x="360" y="142" fill="#94a3b8" font-size="8" text-anchor="middle">• /sse endpoint</text>
+        <text x="360" y="156" fill="#94a3b8" font-size="8" text-anchor="middle">• Event Broadcaster</text>
+        <text x="360" y="170" fill="#34d399" font-size="8" text-anchor="middle">port:8000</text>
+
+        <!-- SSE Manager -->
+        <rect x="280" y="230" width="160" height="50" rx="6" fill="rgba(6, 78, 59, 0.3)" stroke="#34d399" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="360" y="250" fill="#94a3b8" font-size="9" text-anchor="middle">SSE Connection Manager</text>
+        <text x="360" y="265" fill="#34d399" font-size="8" text-anchor="middle">Broadcast Pool</text>
+
+        <!-- Frontend Vue App -->
+        <rect x="520" y="80" width="180" height="130" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="610" y="105" fill="white" font-size="11" font-weight="600" text-anchor="middle">Vue 3 Frontend</text>
+        <text x="610" y="122" fill="#94a3b8" font-size="9" text-anchor="middle">Vite + TailwindCSS</text>
+        <text x="610" y="142" fill="#94a3b8" font-size="8" text-anchor="middle">• TaskPanel.vue</text>
+        <text x="610" y="156" fill="#94a3b8" font-size="8" text-anchor="middle">• LogStream.vue</text>
+        <text x="610" y="170" fill="#94a3b8" font-size="8" text-anchor="middle">• HistoryList.vue</text>
+        <text x="610" y="188" fill="#22d3ee" font-size="8" text-anchor="middle">Naive UI Components</text>
+
+        <!-- Browser -->
+        <rect x="540" y="370" width="140" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="610" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">Web Browser</text>
+        <text x="610" y="415" fill="#94a3b8" font-size="9" text-anchor="middle">Chrome / Safari</text>
+
+        <!-- GitHub Repository -->
+        <rect x="60" y="370" width="140" height="60" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="130" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">GitHub Repo</text>
+        <text x="130" y="415" fill="#94a3b8" font-size="9" text-anchor="middle">luohao0308</text>
+
+        <!-- PR Workflow -->
+        <rect x="240" y="360" width="200" height="100" rx="6" fill="rgba(136, 19, 55, 0.3)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="340" y="385" fill="white" font-size="10" font-weight="600" text-anchor="middle">PR Review Workflow</text>
+        <text x="340" y="405" fill="#94a3b8" font-size="8" text-anchor="middle">1. Engineer → Create PR</text>
+        <text x="340" y="420" fill="#94a3b8" font-size="8" text-anchor="middle">2. QA → Run Tests</text>
+        <text x="340" y="435" fill="#94a3b8" font-size="8" text-anchor="middle">3. Lead → Approve & Merge</text>
+
+        <!-- Test Runner -->
+        <rect x="700" y="370" width="140" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="770" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">Test Suite</text>
+        <text x="770" y="415" fill="#94a3b8" font-size="9" text-anchor="middle">pytest + Vitest</text>
+
+        <!-- Obsidian -->
+        <rect x="860" y="370" width="100" height="60" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="910" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">Obsidian</text>
+        <text x="910" y="415" fill="#94a3b8" font-size="9" text-anchor="middle">Workspace</text>
+
+        <!-- ==================== ARROWS ==================== -->
+
+        <!-- Hermès to Bridge Server -->
+        <line x1="200" y1="120" x2="278" y2="120" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)"/>
+        <text x="239" y="112" fill="#34d399" font-size="8" text-anchor="middle">Events</text>
+
+        <!-- Bridge Server to SSE Manager -->
+        <line x1="360" y1="210" x2="360" y2="228" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <text x="375" y="222" fill="#94a3b8" font-size="8">broadcast</text>
+
+        <!-- SSE Manager to Frontend -->
+        <line x1="440" y1="255" x2="518" y2="130" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-cyan)"/>
+        <text x="479" y="185" fill="#22d3ee" font-size="8" text-anchor="middle">SSE</text>
+
+        <!-- Frontend to Browser -->
+        <line x1="610" y1="210" x2="610" y2="368" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <text x="625" y="295" fill="#22d3ee" font-size="8">HTTP</text>
+
+        <!-- GitHub to PR Workflow -->
+        <line x1="200" y1="400" x2="238" y2="400" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead-amber)"/>
+
+        <!-- PR Workflow to Test -->
+        <line x1="440" y1="400" x2="540" y2="400" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="490" y="395" fill="#94a3b8" font-size="8" text-anchor="middle">triggers</text>
+
+        <!-- Test to Frontend -->
+        <line x1="770" y1="370" x2="770" y2="212" stroke="#a78bfa" stroke-width="1.5" marker-dasharray="4,4"/>
+        <line x1="770" y1="212" x2="702" y2="212" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="780" y="290" fill="#a78bfa" font-size="8">test results</text>
+
+        <!-- PR Workflow to Obsidian (dashed) -->
+        <path d="M 440 400 L 500 400 Q 520 400 520 420 L 520 440 Q 520 460 540 460 L 860 460" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="650" y="455" fill="#94a3b8" font-size="8">update docs</text>
+
+        <!-- ==================== LEGEND ==================== -->
+        <text x="30" y="520" fill="white" font-size="10" font-weight="600">Legend</text>
+
+        <rect x="30" y="532" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="52" y="540" fill="#94a3b8" font-size="8">Frontend (Vue 3)</text>
+
+        <rect x="30" y="548" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="52" y="556" fill="#94a3b8" font-size="8">Backend (FastAPI)</text>
+
+        <rect x="180" y="532" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="202" y="540" fill="#94a3b8" font-size="8">GitHub</text>
+
+        <rect x="180" y="548" width="16" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="202" y="556" fill="#94a3b8" font-size="8">PR Workflow</text>
+
+        <rect x="330" y="532" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="352" y="540" fill="#94a3b8" font-size="8">Testing</text>
+
+        <rect x="330" y="548" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="352" y="556" fill="#94a3b8" font-size="8">Obsidian</text>
+
+        <line x1="480" y1="540" x2="496" y2="540" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-cyan)"/>
+        <text x="502" y="543" fill="#94a3b8" font-size="8">SSE Stream</text>
+
+        <line x1="480" y1="556" x2="496" y2="556" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)"/>
+        <text x="502" y="559" fill="#94a3b8" font-size="8">Event Flow</text>
+
+        <!-- ==================== FLOW NUMBERS ==================== -->
+        <text x="30" y="620" fill="white" font-size="10" font-weight="600">Team Workflow</text>
+
+        <rect x="30" y="632" width="20" height="20" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="40" y="646" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">1</text>
+        <text x="58" y="646" fill="#94a3b8" font-size="9">Engineer implements feature</text>
+
+        <rect x="240" y="632" width="20" height="20" rx="4" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="250" y="646" fill="#fb7185" font-size="10" font-weight="600" text-anchor="middle">2</text>
+        <text x="268" y="646" fill="#94a3b8" font-size="9">QA runs tests via PR</text>
+
+        <rect x="450" y="632" width="20" height="20" rx="4" fill="rgba(251, 191, 36, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="460" y="646" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">3</text>
+        <text x="478" y="646" fill="#94a3b8" font-size="9">Lead reviews & merges</text>
+
+        <rect x="660" y="632" width="20" height="20" rx="4" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="670" y="646" fill="#22d3ee" font-size="10" font-weight="600" text-anchor="middle">4</text>
+        <text x="688" y="646" fill="#94a3b8" font-size="9">Auto-deploy to staging</text>
+
+        <!-- Branch Strategy -->
+        <text x="30" y="700" fill="white" font-size="10" font-weight="600">Branch Strategy</text>
+
+        <rect x="30" y="712" width="60" height="18" rx="3" fill="rgba(6, 78, 59, 0.3)" stroke="#34d399" stroke-width="1"/>
+        <text x="60" y="724" fill="#34d399" font-size="8" font-weight="600" text-anchor="middle">main</text>
+
+        <line x1="95" y1="721" x2="115" y2="721" stroke="#34d399" stroke-width="1"/>
+
+        <rect x="120" y="712" width="80" height="18" rx="3" fill="rgba(6, 78, 59, 0.2)" stroke="#34d399" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="160" y="724" fill="#94a3b8" font-size="8" font-weight="600" text-anchor="middle">feature/*</text>
+
+        <line x1="205" y1="721" x2="225" y2="721" stroke="#34d399" stroke-width="1"/>
+
+        <rect x="230" y="712" width="60" height="18" rx="3" fill="rgba(136, 19, 55, 0.2)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="260" y="724" fill="#94a3b8" font-size="8" font-weight="600" text-anchor="middle">PR</text>
+
+      </svg>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>Backend Stack</h3>
+        </div>
+        <ul>
+          <li>• FastAPI - Web framework</li>
+          <li>• SSE - Real-time streaming</li>
+          <li>• uvicorn - ASGI server</li>
+          <li>• pytest - Testing</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>Frontend Stack</h3>
+        </div>
+        <ul>
+          <li>• Vue 3 + Composition API</li>
+          <li>• Vite - Build tool</li>
+          <li>• TailwindCSS - Styling</li>
+          <li>• Naive UI - Components</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>Team Workflow</h3>
+        </div>
+        <ul>
+          <li>• Engineer → Implement</li>
+          <li>• QA → Test & Verify</li>
+          <li>• Lead → Review & Merge</li>
+          <li>• Obsidian → Documentation</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <p class="footer">
+      Hermès Dashboard • luohao0308/hermes-dashboard • 2026
+    </p>
+  </div>
+</body>
+</html>

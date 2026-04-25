@@ -64,7 +64,27 @@
 
         <!-- Terminal 终端页面 -->
         <template v-else-if="currentNav === 'terminal'">
-          <Terminal />
+          <div class="terminal-tabs">
+            <div class="terminal-tab-bar">
+              <button
+                v-for="(tab, idx) in terminalTabs"
+                :key="tab.id"
+                :class="['terminal-tab', { active: activeTerminalId === tab.id }]"
+                @click="switchTerminal(tab.id)"
+              >
+                {{ tab.name }}
+                <span class="terminal-tab-close" @click.stop="closeTerminal(idx)">×</span>
+              </button>
+              <button class="terminal-tab-add" @click="addTerminal">+ 新终端</button>
+            </div>
+            <KeepAlive>
+              <Terminal
+                v-if="activeTerminalId"
+                :key="activeTerminalId"
+                @connected="onTerminalConnected"
+              />
+            </KeepAlive>
+          </div>
         </template>
 
         <!-- Tasks 任务页面 -->
@@ -159,6 +179,39 @@ interface Toast {
 }
 const toasts = ref<Toast[]>([])
 let toastId = 0
+
+// Terminal tab management
+interface TerminalTab {
+  id: string
+  name: string
+}
+const terminalTabs = ref<TerminalTab[]>([{ id: 'terminal-1', name: 'Terminal 1' }])
+const activeTerminalId = ref<string>('terminal-1')
+let terminalCounter = 1
+
+function addTerminal() {
+  terminalCounter++
+  const newId = `terminal-${terminalCounter}`
+  terminalTabs.value.push({ id: newId, name: `Terminal ${terminalCounter}` })
+  activeTerminalId.value = newId
+}
+
+function switchTerminal(id: string) {
+  activeTerminalId.value = id
+}
+
+function closeTerminal(idx: number) {
+  if (terminalTabs.value.length === 1) return // Keep at least one
+  const tab = terminalTabs.value[idx]
+  terminalTabs.value.splice(idx, 1)
+  if (activeTerminalId.value === tab.id) {
+    activeTerminalId.value = terminalTabs.value[Math.max(0, idx - 1)].id
+  }
+}
+
+function onTerminalConnected() {
+  // Terminal connected successfully
+}
 
 function addToast(type: Toast['type'], message: string) {
   const id = ++toastId
@@ -520,6 +573,71 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* Terminal tabs */
+.terminal-tabs {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 140px);
+}
+
+.terminal-tab-bar {
+  display: flex;
+  gap: 2px;
+  padding: 8px 8px 0;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.terminal-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.terminal-tab.active {
+  background: #1e1e1e;
+  color: var(--text-primary);
+  border-color: #3c3c3c;
+}
+
+.terminal-tab-close {
+  margin-left: 4px;
+  padding: 0 2px;
+  font-size: 14px;
+  color: var(--text-muted);
+  border-radius: 2px;
+}
+
+.terminal-tab-close:hover {
+  background: var(--error-color);
+  color: white;
+}
+
+.terminal-tab-add {
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px dashed var(--border-color);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.terminal-tab-add:hover {
+  background: var(--bg-primary);
+  color: var(--accent-color);
+  border-color: var(--accent-color);
 }
 
 .toast {

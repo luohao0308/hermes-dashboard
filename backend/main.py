@@ -20,6 +20,10 @@ import httpx
 
 from sse_manager import sse_manager
 from config import settings
+from agent import AgentOrchestrator
+
+# Global agent orchestrator (started via lifespan)
+_agent_orchestrator: AgentOrchestrator | None = None
 
 # Hermès Agent Dashboard API base URL (override with HERMES_API_URL env var)
 HERMES_API_BASE = os.environ.get("HERMES_API_URL", "http://127.0.0.1:9119")
@@ -167,15 +171,30 @@ async def generate_events():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events"""
+    global _agent_orchestrator
+
     # Startup: start the event generator
-    task = asyncio.create_task(generate_events())
+    event_task = asyncio.create_task(generate_events())
+
+    # Start agent orchestrator
+    _agent_orchestrator = AgentOrchestrator(
+        sse_broadcaster=lambda et, d: asyncio.create_task(
+            sse_manager.broadcast(et, d)
+        )
+    )
+    await _agent_orchestrator.start()
+
     yield
-    # Shutdown: cancel the event generator
-    task.cancel()
+
+    # Shutdown: cancel the event generator and orchestrator
+    event_task.cancel()
     try:
-        await task
+        await event_task
     except asyncio.CancelledError:
         pass
+
+    if _agent_orchestrator:
+        await _agent_orchestrator.stop()
 
 
 app = FastAPI(
@@ -624,6 +643,74 @@ async def terminal_websocket(websocket: WebSocket):
             await websocket.send_text(f"\r\n\x1b[31mConnection error: {str(e)}\x1b[0m\r\n")
         except:
             pass
+
+
+# ============================================================================
+# Agent API Endpoints
+# ============================================================================
+
+@app.get("/api/agents")
+async def list_agents():
+    """List all agent instances and their current status."""
+    if _agent_orchestrator is None:
+        raise HTTPException(status_code=503, detail="Agent system not initialized")
+    agents = _agent_orchestrator.list_agents()
+    return {
+        "agents": [a.model_dump() for a in agents],
+        "count": len(agents),
+    }
+
+
+@app.post("/api/agents/invoke")
+async def invoke_agent(message: dict):
+    """Invoke the triage agent with a user message."""
+    if _agent_orchestrator is None:
+        raise HTTPException(status_code=503, detail="Agent system not initialized")
+    msg = message.get("message", "")
+    if not msg:
+        raise HTTPException(status_code=400, detail="message is required")
+    from agent.models import InvokeRequest
+    req = InvokeRequest(message=msg)
+    task_id = await _agent_orchestrator.invoke(req)
+    return {"task_id": task_id, "status": "dispatched"}
+
+
+@app.get("/api/agents/events")
+async def agent_events_sse(request: Request):
+    """SSE stream for agent events - same channel as main SSE but filtered for agent events."""
+
+    async def agent_event_generator():
+        client_id = str(uuid.uuid4())
+        await sse_manager.connect(client_id, request)
+
+        # Yield initial event
+        yield {
+            "event": "agent_stream_start",
+            "data": json.dumps({
+                "client_id": client_id,
+                "timestamp": datetime.now().isoformat(),
+            })
+        }
+
+        # Track which events this client has seen (simple approach: just pass through)
+        # The SSE manager will push agent_* and hermes_alert events automatically
+        # since we registered with the same sse_manager
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                await asyncio.sleep(settings.heartbeat_interval)
+                yield {
+                    "event": "heartbeat",
+                    "data": json.dumps({
+                        "status": "alive",
+                        "timestamp": datetime.now().isoformat(),
+                    })
+                }
+        finally:
+            sse_manager.disconnect(client_id)
+
+    return EventSourceResponse(agent_event_generator())
 
 
 # ============================================================================

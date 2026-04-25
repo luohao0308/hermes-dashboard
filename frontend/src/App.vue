@@ -113,6 +113,11 @@
             @reRunTask="handleReRunTask"
           />
         </template>
+
+        <!-- Agent 多智能体协作页面 -->
+        <template v-else-if="currentNav === 'agents'">
+          <AgentPanel />
+        </template>
       </main>
     </div>
 
@@ -135,6 +140,7 @@ import TaskPanel from './components/TaskPanel.vue'
 import LogStream from './components/LogStream.vue'
 import HistoryList from './components/HistoryList.vue'
 import Terminal from './components/Terminal.vue'
+import AgentPanel from './components/AgentPanel.vue'
 
 const API_BASE = 'http://localhost:8000'
 
@@ -145,7 +151,8 @@ const navTitleMap: Record<string, string> = {
   terminal: '终端',
   tasks: '任务',
   logs: '日志',
-  history: '历史'
+  history: '历史',
+  agents: 'Agent'
 }
 
 function handleNavChange(navId: string) {

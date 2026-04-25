@@ -82,7 +82,8 @@ main (保护分支)
 ├── feature/hermes-proxy (Phase 3.1)
 ├── feature/ui-optimization (Phase 3.2)
 ├── feature/ui-minimalist (Phase 3.3)
-└── feature/sidebar-terminal (Phase 4)
+├── feature/sidebar-terminal (Phase 4)
+└── fix/terminal-persistence (Phase 5)
 ```
 
 ### 工作流程 (每步骤)
@@ -208,6 +209,23 @@ main (保护分支)
   - Terminal.vue: xterm.js + WebSocket 实现浏览器内终端
   - 后端 `/ws/terminal` WebSocket 端点，支持命令执行
   - `@xterm/xterm` + `@xterm/addon-fit` 依赖
+
+### Phase 5: Bug修复 + Terminal持久化 ✅
+
+#### Task 5.1: 修复日志获取失败 ✅
+- **分支**: `fix/terminal-persistence` (已合并)
+- **完成时间**: 2026-04-26
+- **实现内容**:
+  - 移除 `httpx.AsyncClient` 的 `proxies=None` 参数
+  - `trust_env=False` 已足够禁用系统代理
+
+#### Task 5.2: Terminal多开标签页 ✅
+- **分支**: `fix/terminal-persistence` (已合并)
+- **完成时间**: 2026-04-26
+- **实现内容**:
+  - Terminal 页面支持多开标签页（+ 新终端按钮）
+  - 切换页面时 Terminal 保持连接（KeepAlive）
+  - 点击 × 关闭标签页
 
 ## GitHub 操作指南
 
@@ -384,7 +402,7 @@ npm run build
 ---
 
 *计划生成时间：2026-04-25 20:07*
-*最后更新：2026-04-26 02:00（Phase 1-4 全部完成，PR #1-9 已合并）*
+*最后更新：2026-04-26 02:15（Phase 5 完成 - 日志修复 + Terminal持久化）*
 
 ## Notion 集成
 

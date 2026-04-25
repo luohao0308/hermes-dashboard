@@ -4,17 +4,25 @@ import asyncio
 import json
 import uuid
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from datetime import datetime
+from typing import Optional, List, Dict
+from fastapi import FastAPI, Request, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
 from sse_manager import sse_manager
+from config import settings
 
 # Sample task data for simulation
 SAMPLE_TASKS = [
-    {"task_id": "1", "name": "示例任务", "status": "running"},
-    {"task_id": "2", "name": "数据采集", "status": "pending"},
-    {"task_id": "3", "name": "模型推理", "status": "completed"},
+    {"task_id": "1", "name": "示例任务", "status": "running", "progress": 45},
+    {"task_id": "2", "name": "数据采集", "status": "pending", "progress": 0},
+    {"task_id": "3", "name": "模型推理", "status": "completed", "progress": 100},
 ]
+
+# Task storage
+tasks_db: Dict[str, Dict] = {task["task_id"]: task for task in SAMPLE_TASKS}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,14 +37,30 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
-app = FastAPI(title="Hermès Bridge Service", lifespan=lifespan)
+
+app = FastAPI(
+    title="Hermès Bridge Service",
+    description="SSE-based bridge service for Hermès monitoring platform",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 async def generate_events():
-    """Generate simulated Hermès events every second"""
+    """Generate simulated Hermès events periodically"""
     counter = 0
     while True:
         try:
-            await asyncio.sleep(1)
+            await asyncio.sleep(settings.event_generation_interval)
             counter += 1
 
             # Simulate different event types
@@ -47,12 +71,14 @@ async def generate_events():
                 event_type = "system_status"
                 data = {
                     "status": "healthy",
-                    "active_connections": len(sse_manager.connections),
-                    "timestamp": str(asyncio.get_event_loop().time())
+                    "active_connections": sse_manager.get_connection_count(),
+                    "timestamp": datetime.now().isoformat(),
+                    "total_tasks": len(tasks_db),
+                    "running_tasks": sum(1 for t in tasks_db.values() if t["status"] == "running")
                 }
             else:
                 event_type = "heartbeat"
-                data = {"timestamp": str(asyncio.get_event_loop().time())}
+                data = {"timestamp": datetime.now().isoformat()}
 
             # Broadcast to all connected clients
             await sse_manager.broadcast(event_type, data)
@@ -60,6 +86,7 @@ async def generate_events():
             break
         except Exception as e:
             print(f"Error generating events: {e}")
+
 
 @app.get("/sse")
 async def sse_endpoint(request: Request):
@@ -77,7 +104,8 @@ async def sse_endpoint(request: Request):
                 "event": "connected",
                 "data": json.dumps({
                     "client_id": client_id,
-                    "message": "Connected to Hermès Bridge Service"
+                    "message": "Connected to Hermès Bridge Service",
+                    "timestamp": datetime.now().isoformat()
                 })
             }
 
@@ -87,11 +115,14 @@ async def sse_endpoint(request: Request):
                 if await request.is_disconnected():
                     break
 
-                # Send heartbeat every 30 seconds to keep connection alive
-                await asyncio.sleep(30)
+                # Send heartbeat to keep connection alive
+                await asyncio.sleep(settings.heartbeat_interval)
                 yield {
                     "event": "heartbeat",
-                    "data": json.dumps({"status": "alive"})
+                    "data": json.dumps({
+                        "status": "alive",
+                        "timestamp": datetime.now().isoformat()
+                    })
                 }
 
         finally:
@@ -100,14 +131,86 @@ async def sse_endpoint(request: Request):
 
     return EventSourceResponse(event_generator())
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
         "service": "hermes-bridge",
-        "active_connections": len(sse_manager.connections)
+        "version": "1.0.0",
+        "active_connections": sse_manager.get_connection_count()
     }
+
+
+@app.get("/connections")
+async def list_connections():
+    """List all active SSE connections"""
+    return {
+        "count": sse_manager.get_connection_count(),
+        "connections": sse_manager.get_all_connections()
+    }
+
+
+@app.get("/connections/{client_id}")
+async def get_connection(client_id: str):
+    """Get information about a specific connection"""
+    info = sse_manager.get_connection_info(client_id)
+    if not info:
+        raise HTTPException(status_code=404, detail="Connection not found")
+    return {"client_id": client_id, **info}
+
+
+@app.post("/broadcast")
+async def broadcast_event(
+    event_type: str = Query(..., description="Event type for the broadcast"),
+    message: str = Query(..., description="Message to broadcast")
+):
+    """Broadcast a custom event to all connected clients"""
+    data = {
+        "message": message,
+        "timestamp": datetime.now().isoformat(),
+        "event_type": event_type
+    }
+    await sse_manager.broadcast(event_type, data)
+    return {
+        "status": "broadcast_sent",
+        "event_type": event_type,
+        "recipient_count": sse_manager.get_connection_count()
+    }
+
+
+@app.get("/tasks")
+async def list_tasks():
+    """List all tasks"""
+    return {
+        "tasks": list(tasks_db.values()),
+        "total": len(tasks_db)
+    }
+
+
+@app.get("/tasks/{task_id}")
+async def get_task(task_id: str):
+    """Get a specific task by ID"""
+    if task_id not in tasks_db:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return tasks_db[task_id]
+
+
+@app.post("/tasks/{task_id}/broadcast")
+async def broadcast_task_update(task_id: str):
+    """Broadcast a task update event"""
+    if task_id not in tasks_db:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    task = tasks_db[task_id]
+    await sse_manager.broadcast("task_update", task)
+    
+    return {
+        "status": "broadcast_sent",
+        "task": task
+    }
+
 
 @app.get("/")
 async def root():
@@ -115,12 +218,22 @@ async def root():
     return {
         "service": "Hermès Bridge Service",
         "version": "1.0.0",
+        "description": "SSE-based bridge service for Hermès monitoring platform",
         "endpoints": {
             "sse": "/sse",
-            "health": "/health"
+            "health": "/health",
+            "connections": "/connections",
+            "broadcast": "/broadcast",
+            "tasks": "/tasks"
         }
     }
 
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        "main:app",
+        host=settings.host,
+        port=settings.port,
+        reload=settings.reload
+    )

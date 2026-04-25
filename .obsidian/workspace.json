@@ -201,6 +201,8 @@
   },
   "active": "7d8f648db3f27e1d",
   "lastOpenFiles": [
+    "backend/README.md",
+    "backend/config.py",
     "docs/ARCHITECTURE.md",
     "docs/architecture-diagram.html",
     "docs",
@@ -212,7 +214,6 @@
     "backend/__pycache__",
     "backend/=1.6.0",
     "backend/requirements.txt",
-    "backend/main.py",
     "README.md"
   ]
 }

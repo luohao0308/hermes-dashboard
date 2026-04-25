@@ -2,7 +2,13 @@
   <div class="panel">
     <div class="panel-header">
       <h2>当前任务</h2>
-      <span class="task-count">{{ tasks.length }} 个任务</span>
+      <div class="header-actions">
+        <span class="task-count">{{ tasks.length }} 个任务</span>
+        <button class="refresh-btn" @click="emit('refresh')" :disabled="loading">
+          <span v-if="loading" class="spinner"></span>
+          {{ loading ? '加载中...' : '刷新' }}
+        </button>
+      </div>
     </div>
 
     <div class="filter-bar">
@@ -78,15 +84,19 @@ export interface Task {
   progress: number
   started_at?: string
   estimated_end?: string
+  message_count?: number
+  model?: string
 }
 
 const props = defineProps<{
   tasks: Task[]
+  loading?: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   pause: [taskId: string]
   cancel: [taskId: string]
+  refresh: []
 }>()
 
 const filters = [
@@ -372,5 +382,47 @@ const tasksWithElapsed = computed(() => {
 
 .empty-icon {
   font-size: 2rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  background: #334155;
+  color: #e2e8f0;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #475569;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #64748b;
+  border-top-color: #e2e8f0;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

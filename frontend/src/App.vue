@@ -1,13 +1,13 @@
 <template>
   <div class="app-layout">
     <!-- 侧边栏 -->
-    <Sidebar :isConnected="isConnected" />
+    <Sidebar :isConnected="isConnected" @nav-change="handleNavChange" />
 
     <!-- 主内容区 -->
     <div class="main-wrapper">
       <!-- 顶部栏 -->
       <TopBar
-        title="概览"
+        :title="navTitleMap[currentNav] || '概览'"
         :hermesStatus="hermesStatus"
         :loading="isRefreshing"
         @refresh="refreshAll"
@@ -15,34 +15,60 @@
 
       <!-- 页面内容 -->
       <main class="main-content">
-        <!-- 概览卡片 -->
-        <div class="overview-grid">
-          <div class="overview-card">
-            <div class="overview-label">活跃会话</div>
-            <div class="overview-value">{{ hermesStatus?.active_sessions || 0 }}</div>
-          </div>
-          <div class="overview-card">
-            <div class="overview-label">Gateway 状态</div>
-            <div class="overview-value">
-              <span class="status-dot" :class="hermesStatus?.gateway_running ? 'success' : 'error'"></span>
-              {{ hermesStatus?.gateway_running ? '运行中' : '已停止' }}
+        <!-- Dashboard 概览页面 -->
+        <template v-if="currentNav === 'dashboard'">
+          <div class="overview-grid">
+            <div class="overview-card">
+              <div class="overview-label">活跃会话</div>
+              <div class="overview-value">{{ hermesStatus?.active_sessions || 0 }}</div>
+            </div>
+            <div class="overview-card">
+              <div class="overview-label">Gateway 状态</div>
+              <div class="overview-value">
+                <span class="status-dot" :class="hermesStatus?.gateway_running ? 'success' : 'error'"></span>
+                {{ hermesStatus?.gateway_running ? '运行中' : '已停止' }}
+              </div>
+            </div>
+            <div class="overview-card">
+              <div class="overview-label">版本</div>
+              <div class="overview-value">{{ hermesStatus?.version || 'N/A' }}</div>
+            </div>
+            <div class="overview-card">
+              <div class="overview-label">连接状态</div>
+              <div class="overview-value">
+                <span class="status-dot" :class="isConnected ? 'success' : 'error'"></span>
+                {{ isConnected ? '已连接' : '未连接' }}
+              </div>
             </div>
           </div>
-          <div class="overview-card">
-            <div class="overview-label">版本</div>
-            <div class="overview-value">{{ hermesStatus?.version || 'N/A' }}</div>
-          </div>
-          <div class="overview-card">
-            <div class="overview-label">连接状态</div>
-            <div class="overview-value">
-              <span class="status-dot" :class="isConnected ? 'success' : 'error'"></span>
-              {{ isConnected ? '已连接' : '未连接' }}
-            </div>
-          </div>
-        </div>
 
-        <!-- 功能面板 -->
-        <div class="panels-grid">
+          <!-- 功能面板 -->
+          <div class="panels-grid">
+            <TaskPanel
+              :tasks="tasks"
+              :loading="loadingTasks"
+              @pause="handlePause"
+              @cancel="handleCancel"
+              @refresh="fetchTasks"
+            />
+            <LogStream :logs="logs" :loading="loadingLogs" @refresh="fetchLogs" />
+            <HistoryList
+              :history="history"
+              :loading="loadingHistory"
+              @refresh="fetchHistory"
+              @viewDetails="handleViewDetails"
+              @reRunTask="handleReRunTask"
+            />
+          </div>
+        </template>
+
+        <!-- Terminal 终端页面 -->
+        <template v-else-if="currentNav === 'terminal'">
+          <Terminal />
+        </template>
+
+        <!-- Tasks 任务页面 -->
+        <template v-else-if="currentNav === 'tasks'">
           <TaskPanel
             :tasks="tasks"
             :loading="loadingTasks"
@@ -50,7 +76,15 @@
             @cancel="handleCancel"
             @refresh="fetchTasks"
           />
+        </template>
+
+        <!-- Logs 日志页面 -->
+        <template v-else-if="currentNav === 'logs'">
           <LogStream :logs="logs" :loading="loadingLogs" @refresh="fetchLogs" />
+        </template>
+
+        <!-- History 历史页面 -->
+        <template v-else-if="currentNav === 'history'">
           <HistoryList
             :history="history"
             :loading="loadingHistory"
@@ -58,7 +92,7 @@
             @viewDetails="handleViewDetails"
             @reRunTask="handleReRunTask"
           />
-        </div>
+        </template>
       </main>
     </div>
 
@@ -79,8 +113,23 @@ import TopBar from './components/TopBar.vue'
 import TaskPanel from './components/TaskPanel.vue'
 import LogStream from './components/LogStream.vue'
 import HistoryList from './components/HistoryList.vue'
+import Terminal from './components/Terminal.vue'
 
 const API_BASE = 'http://localhost:8000'
+
+// Navigation state
+const currentNav = ref('dashboard')
+const navTitleMap: Record<string, string> = {
+  dashboard: '概览',
+  terminal: '终端',
+  tasks: '任务',
+  logs: '日志',
+  history: '历史'
+}
+
+function handleNavChange(navId: string) {
+  currentNav.value = navId
+}
 
 // Connection state
 const isConnected = ref(false)

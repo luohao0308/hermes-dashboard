@@ -12,7 +12,7 @@
         v-for="item in navItems"
         :key="item.id"
         :class="['nav-item', { active: activeNav === item.id }]"
-        @click="activeNav = item.id"
+        @click="handleNavClick(item.id)"
       >
         <span class="nav-icon">{{ item.icon }}</span>
         <span class="nav-label">{{ item.label }}</span>
@@ -42,14 +42,24 @@ defineProps<{
   isConnected?: boolean
 }>()
 
+const emit = defineEmits<{
+  'nav-change': [navId: string]
+}>()
+
 const navItems: NavItem[] = [
   { id: 'dashboard', label: '概览', icon: '◈' },
+  { id: 'terminal', label: '终端', icon: '▸' },
   { id: 'tasks', label: '任务', icon: '◎' },
   { id: 'logs', label: '日志', icon: '☰' },
   { id: 'history', label: '历史', icon: '◷' },
 ]
 
 const activeNav = ref('dashboard')
+
+function handleNavClick(navId: string) {
+  activeNav.value = navId
+  emit('nav-change', navId)
+}
 </script>
 
 <style scoped>

@@ -17,8 +17,8 @@ import httpx
 from sse_manager import sse_manager
 from config import settings
 
-# Hermès Agent Dashboard API base URL
-HERMES_API_BASE = "http://127.0.0.1:9119"
+# Hermès Agent Dashboard API base URL (override with HERMES_API_URL env var)
+HERMES_API_BASE = os.environ.get("HERMES_API_URL", "http://127.0.0.1:9119")
 
 # Clear proxy env vars for httpx (avoid SOCKS proxy issues)
 for _k in list(os.environ.keys()):

@@ -265,14 +265,69 @@ gh pr merge <PR_NUMBER> --squash --delete-branch
 | `tests/frontend/test_log_stream.spec.ts` | 新建 |
 | `tests/frontend/test_history_list.spec.ts` | 新建 |
 
+## 部署指南
+
+### Docker Compose 部署（推荐）
+
+```bash
+# 构建并启动所有服务
+docker-compose up -d
+
+# 查看服务状态
+docker-compose ps
+
+# 查看日志
+docker-compose logs -f backend
+docker-compose logs -f frontend
+
+# 停止服务
+docker-compose down
+```
+
+访问 `http://localhost` 即可使用。
+
+### 手动部署
+
+**后端：**
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+**前端：**
+```bash
+cd frontend
+npm install
+npm run build
+# 将 dist/ 目录部署到 nginx
+```
+
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `HERMES_API_URL` | `http://localhost:9119` | Hermes Dashboard API 地址 |
+| `TRUST_ENV` | `false` | 禁用环境变量代理（避免 SOCKS 干扰）|
+
+### 生产环境注意事项
+
+- 后端需要能够访问 Hermes Dashboard API（:9119）
+- 前端通过 nginx 代理 `/api/` 和 `/sse` 到后端
+- SSE 连接需要 `proxy_read_timeout 86400` 避免超时
+
+---
+
 ## 风险与权衡
 
 || 风险 | 应对 |
 |------|------|------|
 | Hermès 事件接口不明确 | ✅ 已解决：通过 Dashboard API (localhost:9119) |
 | 实时数据量大导致前端卡顿 | ✅ 已解决：日志上限 500 条，骨架屏优化加载 |
-| SSE 在某些网络环境下断开 | ⚠️ 未实现：当前仅本地使用，无重连机制 |
+| SSE 在某些网络环境下断开 | ✅ 已解决：指数退避自动重连，最多重试 10 次 |
 | SOCKS 代理干扰本地连接 | ✅ 已解决：httpx 禁用 trust_env，清除 proxy 环境变量 |
+| 前端测试 (vitest) | ✅ 已解决：6 个组件测试全部通过 |
+| E2E 测试 (Playwright) | ✅ 已解决：6 个 E2E 测试全部通过 |
 
 ## 开放问题
 
@@ -280,9 +335,11 @@ gh pr merge <PR_NUMBER> --squash --delete-branch
 2. 是否需要用户认证？ → 否（当前仅本地使用）
 3. 是否需要持久化存储历史任务？ → 否（从 Hermès API 实时读取）
 4. 是否需要支持多用户同时在线？ → 否（当前仅本地单用户）
-5. 前端测试 (vitest) 和 E2E 测试 (Playwright) → 未实现
+5. ~~前端测试 (vitest) 和 E2E 测试 (Playwright)~~ → ✅ 已实现
+6. ~~SSE 断连自动重连~~ → ✅ 已实现
+7. ~~生产环境部署~~ → ✅ Docker Compose 已配置
 
 ---
 
 *计划生成时间：2026-04-25 20:07*
-*最后更新：2026-04-25 22:20（Phase 3 完成）*
+*最后更新：2026-04-25 22:40（Phase 3 + 未完成项全部解决）*

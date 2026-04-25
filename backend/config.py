@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     event_generation_interval: int = 1  # seconds
     
     # CORS settings
-    cors_origins: list = ["http://localhost:5173", "http://localhost:8000"]
+    cors_origins: list = ["http://localhost:5173", "http://localhost:5174", "http://localhost:8000"]
     
     class Config:
         env_file = ".env"

@@ -167,10 +167,10 @@ function scrollToTop() {
 
 <style scoped>
 .panel {
-  background: #1e293b;
-  border-radius: 0.75rem;
-  padding: 1.25rem;
-  border: 1px solid #334155;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   max-height: 500px;
@@ -180,58 +180,67 @@ function scrollToTop() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .panel-header h2 {
-  font-size: 1.125rem;
+  font-size: 14px;
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--text-primary);
   margin: 0;
 }
 
 .log-controls {
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
 .level-select {
-  background: #0f172a;
-  border: 1px solid #334155;
-  border-radius: 0.375rem;
-  color: #e2e8f0;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+}
+
+.level-select:focus {
+  border-color: var(--accent-color);
 }
 
 .clear-btn {
-  background: #334155;
-  border: none;
-  border-radius: 0.375rem;
-  color: #94a3b8;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  font-size: 12px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
 }
 
 .clear-btn:hover {
-  background: #ef4444;
-  color: #fff;
+  background: #fef2f2;
+  border-color: var(--error-color);
+  color: var(--error-color);
 }
 
 .log-stats {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 0.75rem;
-  font-size: 0.75rem;
+  gap: 16px;
+  padding: 12px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
 }
 
 .stat {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  color: #94a3b8;
+  gap: 6px;
+  color: var(--text-secondary);
 }
 
 .stat-dot {
@@ -240,98 +249,86 @@ function scrollToTop() {
   border-radius: 50%;
 }
 
-.stat-dot.info {
-  background: #3b82f6;
-}
-
-.stat-dot.warning {
-  background: #f59e0b;
-}
-
-.stat-dot.error {
-  background: #ef4444;
-}
+.stat-dot.info { background: var(--accent-color); }
+.stat-dot.warning { background: var(--warning-color); }
+.stat-dot.error { background: var(--error-color); }
 
 .log-list {
   flex: 1;
   overflow-y: auto;
-  font-family: monospace;
-  font-size: 0.8125rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
   max-height: 320px;
+  background: var(--bg-secondary);
 }
 
 .log-item {
-  padding: 0.5rem;
-  border-radius: 0.375rem;
-  margin-bottom: 0.25rem;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--border-color);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.15s ease;
 }
 
 .log-item:hover {
-  background: #334155;
+  background: var(--bg-tertiary);
 }
 
 .log-main {
   display: flex;
-  gap: 0.5rem;
+  gap: 12px;
   align-items: flex-start;
 }
 
 .log-icon {
   flex-shrink: 0;
+  font-size: 14px;
 }
 
 .log-time {
-  color: #64748b;
+  color: var(--text-muted);
   flex-shrink: 0;
-  font-size: 0.75rem;
+  font-size: 11px;
 }
 
 .log-message {
-  color: #e2e8f0;
+  color: var(--text-secondary);
   word-break: break-all;
   flex: 1;
+  line-height: 1.5;
 }
 
 .expand-icon {
-  color: #64748b;
-  font-size: 0.625rem;
+  color: var(--text-muted);
+  font-size: 10px;
   flex-shrink: 0;
 }
 
-.log-item.info .log-message {
-  color: #93c5fd;
-}
+.log-item.info .log-message { color: var(--text-secondary); }
 
 .log-item.warning {
-  background: rgba(245, 158, 11, 0.1);
+  background: #fef3c720;
 }
 
-.log-item.warning .log-message {
-  color: #fde68a;
-}
+.log-item.warning .log-message { color: var(--warning-color); }
 
 .log-item.error {
-  background: rgba(239, 68, 68, 0.1);
+  background: #fef2f220;
 }
 
-.log-item.error .log-message {
-  color: #fca5a5;
-}
+.log-item.error .log-message { color: var(--error-color); }
 
 .log-details {
-  margin-top: 0.5rem;
-  padding: 0.5rem;
-  background: #0f172a;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
 }
 
 .detail-row {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.25rem;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
 .detail-row:last-child {
@@ -339,41 +336,41 @@ function scrollToTop() {
 }
 
 .detail-label {
-  color: #64748b;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
 .detail-value {
-  color: #94a3b8;
+  color: var(--text-secondary);
 }
 
 .log-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 0.75rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid #334155;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-color);
 }
 
 .log-count {
-  font-size: 0.75rem;
-  color: #64748b;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .scroll-top-btn {
   background: transparent;
-  border: 1px solid #334155;
-  border-radius: 0.25rem;
-  color: #94a3b8;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  font-size: 12px;
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .scroll-top-btn:hover {
-  background: #334155;
-  color: #e2e8f0;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .empty-state {
@@ -381,31 +378,33 @@ function scrollToTop() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 3rem 1rem;
-  color: #64748b;
-  gap: 0.5rem;
+  padding: 48px 16px;
+  color: var(--text-muted);
+  gap: 8px;
+  font-size: 13px;
 }
 
 .empty-icon {
-  font-size: 2rem;
+  font-size: 32px;
 }
 
 .refresh-btn {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.625rem;
-  background: #334155;
-  color: #e2e8f0;
-  border: none;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.15s ease;
 }
 
 .refresh-btn:hover:not(:disabled) {
-  background: #475569;
+  background: var(--border-color);
+  color: var(--text-primary);
 }
 
 .refresh-btn:disabled {
@@ -416,8 +415,8 @@ function scrollToTop() {
 .spinner {
   width: 10px;
   height: 10px;
-  border: 2px solid #64748b;
-  border-top-color: #e2e8f0;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--text-secondary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -430,16 +429,16 @@ function scrollToTop() {
 .skeleton .skeleton-item {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  border-bottom: 1px solid #1e293b;
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .skeleton-line {
   height: 12px;
-  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%);
   background-size: 200% 100%;
-  border-radius: 0.25rem;
+  border-radius: var(--radius-sm);
   animation: shimmer 1.5s infinite;
 }
 

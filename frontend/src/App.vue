@@ -1,88 +1,81 @@
 <template>
-  <div class="app-container">
-    <!-- Toast Notifications -->
+  <div class="app-layout">
+    <!-- 侧边栏 -->
+    <Sidebar :isConnected="isConnected" />
+
+    <!-- 主内容区 -->
+    <div class="main-wrapper">
+      <!-- 顶部栏 -->
+      <TopBar
+        title="概览"
+        :hermesStatus="hermesStatus"
+        :loading="isRefreshing"
+        @refresh="refreshAll"
+      />
+
+      <!-- 页面内容 -->
+      <main class="main-content">
+        <!-- 概览卡片 -->
+        <div class="overview-grid">
+          <div class="overview-card">
+            <div class="overview-label">活跃会话</div>
+            <div class="overview-value">{{ hermesStatus?.active_sessions || 0 }}</div>
+          </div>
+          <div class="overview-card">
+            <div class="overview-label">Gateway 状态</div>
+            <div class="overview-value">
+              <span class="status-dot" :class="hermesStatus?.gateway_running ? 'success' : 'error'"></span>
+              {{ hermesStatus?.gateway_running ? '运行中' : '已停止' }}
+            </div>
+          </div>
+          <div class="overview-card">
+            <div class="overview-label">版本</div>
+            <div class="overview-value">{{ hermesStatus?.version || 'N/A' }}</div>
+          </div>
+          <div class="overview-card">
+            <div class="overview-label">连接状态</div>
+            <div class="overview-value">
+              <span class="status-dot" :class="isConnected ? 'success' : 'error'"></span>
+              {{ isConnected ? '已连接' : '未连接' }}
+            </div>
+          </div>
+        </div>
+
+        <!-- 功能面板 -->
+        <div class="panels-grid">
+          <TaskPanel
+            :tasks="tasks"
+            :loading="loadingTasks"
+            @pause="handlePause"
+            @cancel="handleCancel"
+            @refresh="fetchTasks"
+          />
+          <LogStream :logs="logs" :loading="loadingLogs" @refresh="fetchLogs" />
+          <HistoryList
+            :history="history"
+            :loading="loadingHistory"
+            @refresh="fetchHistory"
+            @viewDetails="handleViewDetails"
+            @reRunTask="handleReRunTask"
+          />
+        </div>
+      </main>
+    </div>
+
+    <!-- Toast 通知 -->
     <TransitionGroup name="toast" tag="div" class="toast-container">
-      <div
-        v-for="toast in toasts"
-        :key="toast.id"
-        :class="['toast', `toast-${toast.type}`]"
-      >
-        <span class="toast-icon">{{ toastIcon(toast.type) }}</span>
-        <span class="toast-message">{{ toast.message }}</span>
+      <div v-for="toast in toasts" :key="toast.id" :class="['toast', `toast-${toast.type}`]">
+        <span>{{ toast.message }}</span>
         <button class="toast-close" @click="removeToast(toast.id)">×</button>
       </div>
     </TransitionGroup>
-
-    <!-- Header -->
-    <header class="app-header">
-      <div class="header-left">
-        <h1>Hermès 监控</h1>
-        <span class="header-time">{{ currentTime }}</span>
-      </div>
-      <div class="header-stats">
-        <template v-if="hermesStatus">
-          <div class="stat-pill" :class="{ active: hermesStatus.gateway_running }">
-            <span class="pill-dot"></span>
-            <span class="pill-label">Gateway</span>
-            <span class="pill-value">{{ hermesStatus.gateway_running ? '运行中' : '已停止' }}</span>
-          </div>
-          <div class="stat-pill">
-            <span class="pill-label">会话</span>
-            <span class="pill-value">{{ hermesStatus.active_sessions || 0 }}</span>
-          </div>
-          <div class="stat-pill">
-            <span class="pill-label">版本</span>
-            <span class="pill-value">{{ hermesStatus.version || 'N/A' }}</span>
-          </div>
-        </template>
-        <template v-else-if="!initError">
-          <div class="stat-pill loading">
-            <span class="pill-spinner"></span>
-            <span class="pill-label">连接中...</span>
-          </div>
-        </template>
-      </div>
-      <div class="header-right">
-        <div class="connection-badge" :class="{ connected: isConnected }">
-          <span class="badge-dot"></span>
-          <span>{{ isConnected ? '实时同步' : '已断开' }}</span>
-        </div>
-        <button class="header-btn" @click="refreshAll" title="刷新全部数据">
-          <span :class="{ spinning: isRefreshing }">⟳</span>
-        </button>
-      </div>
-    </header>
-
-    <!-- Init Error Banner -->
-    <div v-if="initError" class="error-banner">
-      <span class="banner-icon">⚠️</span>
-      <span class="banner-text">{{ initError }}</span>
-      <button class="banner-btn" @click="retryInit">重试</button>
-    </div>
-
-    <!-- Main Content -->
-    <main class="app-main">
-      <TaskPanel
-        :tasks="tasks"
-        :loading="loadingTasks"
-        @pause="handlePause"
-        @cancel="handleCancel"
-        @refresh="fetchTasks"
-      />
-      <LogStream :logs="logs" :loading="loadingLogs" @refresh="fetchLogs" />
-      <HistoryList
-        :history="history"
-        :loading="loadingHistory"
-        @refresh="fetchHistory"
-        @viewDetails="handleViewDetails"
-        @reRunTask="handleReRunTask"
-      />
-    </main>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import Sidebar from './components/Sidebar.vue'
+import TopBar from './components/TopBar.vue'
 import TaskPanel from './components/TaskPanel.vue'
 import LogStream from './components/LogStream.vue'
 import HistoryList from './components/HistoryList.vue'
@@ -127,24 +120,6 @@ function addToast(type: Toast['type'], message: string) {
 function removeToast(id: number) {
   const idx = toasts.value.findIndex(t => t.id === id)
   if (idx >= 0) toasts.value.splice(idx, 1)
-}
-
-function toastIcon(type: Toast['type']): string {
-  return { info: 'ℹ️', success: '✅', warning: '⚠️', error: '❌' }[type]
-}
-
-// Current time
-const currentTime = ref('')
-let timeInterval: number | null = null
-
-function updateTime() {
-  currentTime.value = new Date().toLocaleString('zh-CN', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
 }
 
 // Polling interval
@@ -289,10 +264,7 @@ async function refreshAll() {
   addToast('success', '数据已刷新')
 }
 
-async function retryInit() {
-  initError.value = null
-  await refreshAll()
-}
+// retryInit removed - unused
 
 function parseLogLine(line: string): Log | null {
   if (!line || typeof line !== 'string') return null
@@ -370,7 +342,6 @@ const BASE_RECONNECT_DELAY = 1000 // 1s initial
 const MAX_RECONNECT_ATTEMPTS = 10
 
 function getReconnectDelay(attempt: number): number {
-  // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (capped)
   return Math.min(BASE_RECONNECT_DELAY * Math.pow(2, attempt), MAX_RECONNECT_DELAY)
 }
 
@@ -393,7 +364,6 @@ function connectSSE() {
     isConnected.value = true
     isReconnecting.value = false
     reconnectAttempts.value = 0
-    // Clear any reconnect error toasts
   }
 
   eventSource.onerror = () => {
@@ -418,266 +388,151 @@ function connectSSE() {
 }
 
 onMounted(async () => {
-  updateTime()
-  timeInterval = window.setInterval(updateTime, 1000)
-
   await refreshAll()
   statusPollInterval = window.setInterval(fetchHermesStatus, 30000)
-
   connectSSE()
 })
 
 onUnmounted(() => {
   if (statusPollInterval) clearInterval(statusPollInterval)
-  if (timeInterval) clearInterval(timeInterval)
   eventSource?.close()
 })
 </script>
 
-<style scoped>
-.app-container {
+<style>
+@import './styles/minimal.css';
+
+.app-layout {
+  display: flex;
   min-height: 100vh;
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--bg-secondary);
 }
 
-/* Toast Notifications */
+.main-wrapper {
+  flex: 1;
+  margin-left: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+}
+
+.main-content {
+  flex: 1;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* 概览网格 */
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.overview-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.overview-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.overview-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 功能面板网格 */
+.panels-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+}
+
+/* Toast */
 .toast-container {
   position: fixed;
-  top: 1rem;
-  right: 1rem;
+  bottom: 24px;
+  right: 24px;
   z-index: 1000;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  max-width: 400px;
+  gap: 8px;
 }
 
 .toast {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.875rem 1rem;
-  background: #1e293b;
-  border-radius: 0.5rem;
-  border-left: 4px solid;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  font-size: 0.875rem;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  color: var(--text-primary);
+  min-width: 280px;
 }
 
-.toast-info { border-color: #3b82f6; }
-.toast-success { border-color: #22c55e; }
-.toast-warning { border-color: #f59e0b; }
-.toast-error { border-color: #ef4444; }
+.toast-success { border-left: 3px solid var(--success-color); }
+.toast-error { border-left: 3px solid var(--error-color); }
+.toast-warning { border-left: 3px solid var(--warning-color); }
+.toast-info { border-left: 3px solid var(--accent-color); }
 
-.toast-icon { font-size: 1rem; }
-.toast-message { flex: 1; }
 .toast-close {
+  margin-left: auto;
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--text-muted);
   cursor: pointer;
-  font-size: 1.25rem;
+  font-size: 16px;
   padding: 0;
-  line-height: 1;
 }
-.toast-close:hover { color: #e2e8f0; }
 
-.toast-enter-active { animation: slideIn 0.3s ease; }
-.toast-leave-active { animation: slideOut 0.3s ease; }
+.toast-close:hover {
+  color: var(--text-primary);
+}
+
+.toast-enter-active { animation: slideIn 0.2s ease; }
+.toast-leave-active { animation: slideOut 0.2s ease; }
 
 @keyframes slideIn {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
+
 @keyframes slideOut {
   from { transform: translateX(0); opacity: 1; }
   to { transform: translateX(100%); opacity: 0; }
 }
 
-/* Header */
-.app-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 1.5rem;
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-  border-bottom: 1px solid #334155;
-  gap: 1rem;
-  flex-wrap: wrap;
+@media (max-width: 1200px) {
+  .overview-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
-.header-left {
-  display: flex;
-  align-items: baseline;
-  gap: 1rem;
-}
-
-.app-header h1 {
-  font-size: 1.375rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, #f8fafc 0%, #94a3b8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.header-time {
-  font-size: 0.75rem;
-  color: #64748b;
-  font-family: monospace;
-}
-
-.header-stats {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.stat-pill {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.375rem 0.75rem;
-  background: #0f172a;
-  border-radius: 9999px;
-  border: 1px solid #334155;
-  font-size: 0.75rem;
-}
-
-.stat-pill.loading {
-  border-color: #3b82f6;
-}
-
-.pill-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #64748b;
-}
-
-.stat-pill.active .pill-dot {
-  background: #22c55e;
-  box-shadow: 0 0 6px #22c55e;
-}
-
-.pill-spinner {
-  width: 10px;
-  height: 10px;
-  border: 2px solid #334155;
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.pill-label { color: #64748b; }
-.pill-value { color: #e2e8f0; font-weight: 500; }
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.connection-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.375rem 0.875rem;
-  background: #0f172a;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  color: #64748b;
-  border: 1px solid #334155;
-}
-
-.connection-badge.connected {
-  color: #22c55e;
-  border-color: #22c55e30;
-}
-
-.badge-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #64748b;
-}
-
-.connection-badge.connected .badge-dot {
-  background: #22c55e;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 #22c55e40; }
-  50% { opacity: 0.8; box-shadow: 0 0 0 4px #22c55e00; }
-}
-
-.header-btn {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #0f172a;
-  border: 1px solid #334155;
-  border-radius: 0.5rem;
-  color: #94a3b8;
-  cursor: pointer;
-  font-size: 1.125rem;
-  transition: all 0.2s;
-}
-
-.header-btn:hover {
-  background: #1e293b;
-  color: #e2e8f0;
-  border-color: #475569;
-}
-
-.header-btn .spinning {
-  display: inline-block;
-  animation: spin 1s linear infinite;
-}
-
-/* Error Banner */
-.error-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.875rem 1.5rem;
-  background: linear-gradient(90deg, #7f1d1d 0%, #991b1b 100%);
-  color: #fecaca;
-  font-size: 0.875rem;
-}
-
-.banner-icon { font-size: 1.125rem; }
-.banner-text { flex: 1; }
-.banner-btn {
-  padding: 0.375rem 0.875rem;
-  background: #dc2626;
-  border: none;
-  border-radius: 0.375rem;
-  color: white;
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.banner-btn:hover { background: #b91c1c; }
-
-/* Main Content */
-.app-main {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-  gap: 1.5rem;
-  padding: 1.5rem;
-}
-
-@media (max-width: 900px) {
-  .app-main {
+@media (max-width: 768px) {
+  .main-wrapper {
+    margin-left: 0;
+  }
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+  .panels-grid {
     grid-template-columns: 1fr;
   }
 }

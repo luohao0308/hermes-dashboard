@@ -91,8 +91,10 @@ const API_BASE = 'http://localhost:8000'
 
 // Connection state
 const isConnected = ref(false)
+const isReconnecting = ref(false)
 const isRefreshing = ref(false)
 const initError = ref<string | null>(null)
+const reconnectAttempts = ref(0)
 
 // Hermes status
 const hermesStatus = ref<Record<string, any> | null>(null)
@@ -362,12 +364,21 @@ function handleSSEMessage(event: MessageEvent) {
   }
 }
 
-onMounted(async () => {
-  updateTime()
-  timeInterval = window.setInterval(updateTime, 1000)
+// SSE reconnect config
+const MAX_RECONNECT_DELAY = 30000 // 30s max
+const BASE_RECONNECT_DELAY = 1000 // 1s initial
+const MAX_RECONNECT_ATTEMPTS = 10
 
-  await refreshAll()
-  statusPollInterval = window.setInterval(fetchHermesStatus, 30000)
+function getReconnectDelay(attempt: number): number {
+  // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (capped)
+  return Math.min(BASE_RECONNECT_DELAY * Math.pow(2, attempt), MAX_RECONNECT_DELAY)
+}
+
+function connectSSE() {
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
+  }
 
   eventSource = new EventSource(`${API_BASE}/sse`)
 
@@ -378,10 +389,42 @@ onMounted(async () => {
   eventSource.addEventListener('heartbeat', handleSSEMessage)
   eventSource.addEventListener('error', handleSSEMessage)
 
+  eventSource.onopen = () => {
+    isConnected.value = true
+    isReconnecting.value = false
+    reconnectAttempts.value = 0
+    // Clear any reconnect error toasts
+  }
+
   eventSource.onerror = () => {
     isConnected.value = false
-    addToast('warning', 'SSE 连接断开，正在重连...')
+    eventSource?.close()
+
+    if (reconnectAttempts.value >= MAX_RECONNECT_ATTEMPTS) {
+      addToast('error', `SSE 连接失败，已停止重连。请刷新页面重试。`)
+      return
+    }
+
+    const delay = getReconnectDelay(reconnectAttempts.value)
+    reconnectAttempts.value++
+
+    if (!isReconnecting.value) {
+      isReconnecting.value = true
+      addToast('warning', `SSE 连接断开，${Math.round(delay / 1000)}s 后自动重连...`)
+    }
+
+    setTimeout(connectSSE, delay)
   }
+}
+
+onMounted(async () => {
+  updateTime()
+  timeInterval = window.setInterval(updateTime, 1000)
+
+  await refreshAll()
+  statusPollInterval = window.setInterval(fetchHermesStatus, 30000)
+
+  connectSSE()
 })
 
 onUnmounted(() => {

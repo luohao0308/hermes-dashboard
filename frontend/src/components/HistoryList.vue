@@ -68,7 +68,19 @@
           </button>
         </div>
       </div>
-      <div v-if="filteredHistory.length === 0" class="empty-state">
+      <!-- Skeleton Loading -->
+      <div class="skeleton" v-if="loading">
+        <div class="skeleton-item" v-for="i in 3" :key="i">
+          <div class="skeleton-left">
+            <div class="skeleton-line w-50"></div>
+            <div class="skeleton-line w-30"></div>
+          </div>
+          <div class="skeleton-right">
+            <div class="skeleton-line w-20"></div>
+          </div>
+        </div>
+      </div>
+      <div v-if="filteredHistory.length === 0 && !loading" class="empty-state">
         <span class="empty-icon">📋</span>
         <span>{{ searchQuery ? '没有匹配的任务' : '暂无历史任务' }}</span>
       </div>
@@ -96,11 +108,8 @@ const props = defineProps<{
   loading?: boolean
 }>()
 
-defineEmits<{
-  refresh: []
-}>()
-
 const emit = defineEmits<{
+  refresh: []
   viewDetails: [item: HistoryItem]
   reRunTask: [item: HistoryItem]
 }>()
@@ -417,5 +426,43 @@ function reRunTask(item: HistoryItem) {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Skeleton Loading */
+.skeleton .skeleton-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: #0f172a;
+  border-radius: 0.5rem;
+}
+
+.skeleton-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.skeleton-right {
+  display: flex;
+  align-items: center;
+}
+
+.skeleton-line {
+  height: 12px;
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+  border-radius: 0.25rem;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-line.w-50 { width: 50%; }
+.skeleton-line.w-30 { width: 30%; }
+.skeleton-line.w-20 { width: 40px; }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 </style>

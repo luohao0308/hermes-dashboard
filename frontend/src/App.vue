@@ -8,7 +8,11 @@
       </div>
     </header>
     <main class="app-main">
-      <TaskPanel :tasks="tasks" />
+      <TaskPanel
+        :tasks="tasks"
+        @pause="handlePause"
+        @cancel="handleCancel"
+      />
       <LogStream :logs="logs" />
       <HistoryList :history="history" />
     </main>
@@ -26,6 +30,8 @@ interface Task {
   name: string
   status: 'running' | 'pending' | 'completed'
   progress: number
+  started_at?: string
+  elapsed?: number
 }
 
 interface Log {
@@ -47,11 +53,32 @@ const logs = ref<Log[]>([])
 const history = ref<HistoryItem[]>([])
 let eventSource: EventSource | null = null
 
+function handlePause(taskId: string) {
+  console.log('Pause task:', taskId)
+}
+
+function handleCancel(taskId: string) {
+  console.log('Cancel task:', taskId)
+}
+
 onMounted(() => {
+  // 初始化示例数据
+  tasks.value = [
+    { task_id: '1', name: '数据同步', status: 'running', progress: 45, started_at: new Date(Date.now() - 120000).toISOString() },
+    { task_id: '2', name: '模型训练', status: 'pending', progress: 0 },
+    { task_id: '3', name: '报告生成', status: 'completed', progress: 100, started_at: new Date(Date.now() - 300000).toISOString() }
+  ]
+
+  // 连接 SSE
   eventSource = new EventSource('http://localhost:8000/sse')
 
   eventSource.addEventListener('connected', () => {
     isConnected.value = true
+    logs.value.unshift({
+      timestamp: new Date().toISOString(),
+      message: '已连接到 Hermès 服务',
+      type: 'info'
+    })
   })
 
   eventSource.addEventListener('task_update', (event) => {
@@ -59,23 +86,36 @@ onMounted(() => {
     const index = tasks.value.findIndex(t => t.task_id === data.task_id)
     if (index >= 0) {
       tasks.value[index] = data
+    } else {
+      tasks.value.push(data)
     }
+    logs.value.unshift({
+      timestamp: new Date().toISOString(),
+      message: `任务更新: ${data.name} - ${data.progress}%`,
+      type: 'info'
+    })
   })
 
   eventSource.addEventListener('system_status', (event) => {
+    const data = JSON.parse(event.data)
     logs.value.unshift({
       timestamp: new Date().toISOString(),
-      message: `系统状态: ${data.status}`,
+      message: `系统状态: ${data.status}, 活跃连接: ${data.active_connections}`,
       type: 'info'
     })
   })
 
   eventSource.addEventListener('heartbeat', () => {
-    // Heartbeat received
+    // 心跳保持连接
   })
 
   eventSource.onerror = () => {
     isConnected.value = false
+    logs.value.unshift({
+      timestamp: new Date().toISOString(),
+      message: '连接断开，正在重连...',
+      type: 'warning'
+    })
   }
 })
 
@@ -127,6 +167,12 @@ onUnmounted(() => {
 
 .connection-status.connected .status-dot {
   background: #4ade80;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .app-main {

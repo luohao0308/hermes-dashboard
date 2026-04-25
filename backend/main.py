@@ -25,6 +25,28 @@ for _k in list(os.environ.keys()):
     if 'proxy' in _k.lower():
         del os.environ[_k]
 
+# Session token for authenticated API calls
+_hermes_session_token = None
+
+
+def _get_hermes_token():
+    """Fetch session token from dashboard page"""
+    global _hermes_session_token
+    if _hermes_session_token:
+        return _hermes_session_token
+    try:
+        import re
+        import urllib.request
+        response = urllib.request.urlopen(f"{HERMES_API_BASE}/", timeout=3)
+        html = response.read().decode('utf-8')
+        match = re.search(r'window\.__HERMES_SESSION_TOKEN__="([^"]+)"', html)
+        if match:
+            _hermes_session_token = match.group(1)
+            return _hermes_session_token
+    except Exception:
+        pass
+    return None
+
 
 # ============================================================================
 # Hermès API Client
@@ -33,8 +55,12 @@ for _k in list(os.environ.keys()):
 async def hermes_get(endpoint: str, params: dict = None) -> dict[str, Any]:
     """Proxy GET request to Hermès Agent API"""
     url = f"{HERMES_API_BASE}{endpoint}"
+    headers = {}
+    token = _get_hermes_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     async with httpx.AsyncClient(timeout=10.0, proxies=None, trust_env=False) as client:
-        response = await client.get(url, params=params)
+        response = await client.get(url, params=params, headers=headers)
         response.raise_for_status()
         return response.json()
 
@@ -42,8 +68,12 @@ async def hermes_get(endpoint: str, params: dict = None) -> dict[str, Any]:
 async def hermes_get_raw(endpoint: str, params: dict = None) -> str:
     """Proxy GET request to Hermès Agent API, return raw text"""
     url = f"{HERMES_API_BASE}{endpoint}"
+    headers = {}
+    token = _get_hermes_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     async with httpx.AsyncClient(timeout=10.0, proxies=None, trust_env=False) as client:
-        response = await client.get(url, params=params)
+        response = await client.get(url, params=params, headers=headers)
         response.raise_for_status()
         return response.text
 

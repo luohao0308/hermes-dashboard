@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hermès Dashboard 架构图</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'JetBrains Mono', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      margin-bottom: 2rem;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: #22d3ee;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    .subtitle {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      margin-left: 1.75rem;
+    }
+
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+
+    svg {
+      width: 100%;
+      min-width: 900px;
+      display: block;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+
+    .card h3 {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .card ul {
+      list-style: none;
+      color: #94a3b8;
+      font-size: 0.75rem;
+    }
+
+    .card li {
+      margin-bottom: 0.375rem;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      color: #475569;
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Hermès Dashboard 系统架构图</h1>
+      </div>
+      <p class="subtitle">实时监控 Hermès Agent 工作状态</p>
+    </div>
+
+    <!-- Main Diagram -->
+    <div class="diagram-container">
+      <svg viewBox="0 0 1000 750">
+        <!-- Definitions -->
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowhead-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+          </marker>
+          <marker id="arrowhead-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <marker id="arrowhead-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background Grid -->
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ==================== BOUNDARIES ==================== -->
+
+        <!-- 本地开发环境 -->
+        <rect x="20" y="20" width="960" height="280" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="35" y="38" fill="#fbbf24" font-size="10" font-weight="600">本地开发环境</text>
+
+        <!-- GitHub 工作流 -->
+        <rect x="20" y="320" width="450" height="180" rx="12" fill="rgba(136, 19, 55, 0.05)" stroke="#fb7185" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="35" y="338" fill="#fb7185" font-size="10" font-weight="600">GitHub 协作流程</text>
+
+        <!-- 浏览器客户端 -->
+        <rect x="500" y="320" width="480" height="180" rx="12" fill="rgba(8, 51, 68, 0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="515" y="338" fill="#22d3ee" font-size="10" font-weight="600">浏览器客户端</text>
+
+        <!-- ==================== COMPONENTS ==================== -->
+
+        <!-- Hermès Agent -->
+        <rect x="60" y="80" width="140" height="80" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="130" y="105" fill="white" font-size="11" font-weight="600" text-anchor="middle">Hermès Agent</text>
+        <text x="130" y="122" fill="#94a3b8" font-size="9" text-anchor="middle">运行中的实例</text>
+        <text x="130" y="138" fill="#34d399" font-size="8" text-anchor="middle">CLI / ACP 协议</text>
+
+        <!-- Bridge Server 后端服务 -->
+        <rect x="280" y="80" width="160" height="130" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="360" y="105" fill="white" font-size="11" font-weight="600" text-anchor="middle">Bridge Server</text>
+        <text x="360" y="122" fill="#94a3b8" font-size="9" text-anchor="middle">FastAPI + SSE</text>
+        <text x="360" y="142" fill="#94a3b8" font-size="8" text-anchor="middle">• /sse 端点</text>
+        <text x="360" y="156" fill="#94a3b8" font-size="8" text-anchor="middle">• 事件广播器</text>
+        <text x="360" y="170" fill="#34d399" font-size="8" text-anchor="middle">端口:8000</text>
+
+        <!-- SSE Manager -->
+        <rect x="280" y="230" width="160" height="50" rx="6" fill="rgba(6, 78, 59, 0.3)" stroke="#34d399" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="360" y="250" fill="#94a3b8" font-size="9" text-anchor="middle">SSE 连接管理器</text>
+        <text x="360" y="265" fill="#34d399" font-size="8" text-anchor="middle">广播连接池</text>
+
+        <!-- Vue 前端 -->
+        <rect x="520" y="80" width="180" height="130" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="610" y="105" fill="white" font-size="11" font-weight="600" text-anchor="middle">Vue 3 前端</text>
+        <text x="610" y="122" fill="#94a3b8" font-size="9" text-anchor="middle">Vite + TailwindCSS</text>
+        <text x="610" y="142" fill="#94a3b8" font-size="8" text-anchor="middle">• TaskPanel.vue 任务面板</text>
+        <text x="610" y="156" fill="#94a3b8" font-size="8" text-anchor="middle">• LogStream.vue 日志流</text>
+        <text x="610" y="170" fill="#94a3b8" font-size="8" text-anchor="middle">• HistoryList.vue 历史列表</text>
+        <text x="610" y="188" fill="#22d3ee" font-size="8" text-anchor="middle">Naive UI 组件库</text>
+
+        <!-- Web Browser 浏览器 -->
+        <rect x="540" y="370" width="140" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="610" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">Web 浏览器</text>
+        <text x="610" y="415" fill="#94a3b8" font-size="9" text-anchor="middle">Chrome / Safari</text>
+
+        <!-- GitHub Repository 仓库 -->
+        <rect x="60" y="370" width="140" height="60" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="130" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">GitHub 仓库</text>
+        <text x="130" y="415" fill="#94a3b8" font-size="9" text-anchor="middle">luohao0308</text>
+
+        <!-- PR 工作流 -->
+        <rect x="240" y="360" width="200" height="100" rx="6" fill="rgba(136, 19, 55, 0.3)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="340" y="385" fill="white" font-size="10" font-weight="600" text-anchor="middle">PR 审核流程</text>
+        <text x="340" y="405" fill="#94a3b8" font-size="8" text-anchor="middle">1. 工程师 → 提交代码</text>
+        <text x="340" y="420" fill="#94a3b8" font-size="8" text-anchor="middle">2. 测试 → 执行测试</text>
+        <text x="340" y="435" fill="#94a3b8" font-size="8" text-anchor="middle">3. 领导 → 审核并合并</text>
+
+        <!-- 测试套件 -->
+        <rect x="700" y="370" width="140" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="770" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">测试套件</text>
+        <text x="770" y="415" fill="#94a3b8" font-size="9" text-anchor="middle">pytest + Vitest</text>
+
+        <!-- Obsidian -->
+        <rect x="860" y="370" width="100" height="60" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="910" y="395" fill="white" font-size="11" font-weight="600" text-anchor="middle">Obsidian</text>
+        <text x="910" y="415" fill="#94a3b8" font-size="9" text-anchor="middle">工作空间</text>
+
+        <!-- ==================== ARROWS 连接线 ==================== -->
+
+        <!-- Hermès 到 Bridge Server -->
+        <line x1="200" y1="120" x2="278" y2="120" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)"/>
+        <text x="239" y="112" fill="#34d399" font-size="8" text-anchor="middle">事件流</text>
+
+        <!-- Bridge Server 到 SSE Manager -->
+        <line x1="360" y1="210" x2="360" y2="228" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <text x="375" y="222" fill="#94a3b8" font-size="8">广播</text>
+
+        <!-- SSE Manager 到 Vue 前端 -->
+        <line x1="440" y1="255" x2="518" y2="130" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-cyan)"/>
+        <text x="479" y="185" fill="#22d3ee" font-size="8" text-anchor="middle">SSE</text>
+
+        <!-- Vue 前端到浏览器 -->
+        <line x1="610" y1="210" x2="610" y2="368" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <text x="625" y="295" fill="#22d3ee" font-size="8">HTTP</text>
+
+        <!-- GitHub 到 PR 工作流 -->
+        <line x1="200" y1="400" x2="238" y2="400" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead-amber)"/>
+
+        <!-- PR 工作流到测试 -->
+        <line x1="440" y1="400" x2="540" y2="400" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="490" y="395" fill="#94a3b8" font-size="8" text-anchor="middle">触发</text>
+
+        <!-- 测试到前端 -->
+        <line x1="770" y1="370" x2="770" y2="212" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <line x1="770" y1="212" x2="702" y2="212" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="780" y="290" fill="#a78bfa" font-size="8">测试结果</text>
+
+        <!-- PR 工作流到 Obsidian -->
+        <path d="M 440 400 L 500 400 Q 520 400 520 420 L 520 440 Q 520 460 540 460 L 860 460" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="650" y="455" fill="#94a3b8" font-size="8">更新文档</text>
+
+        <!-- ==================== LEGEND 图例 ==================== -->
+        <text x="30" y="520" fill="white" font-size="10" font-weight="600">图例</text>
+
+        <rect x="30" y="532" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="52" y="540" fill="#94a3b8" font-size="8">前端 (Vue 3)</text>
+
+        <rect x="30" y="548" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="52" y="556" fill="#94a3b8" font-size="8">后端 (FastAPI)</text>
+
+        <rect x="180" y="532" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="202" y="540" fill="#94a3b8" font-size="8">GitHub</text>
+
+        <rect x="180" y="548" width="16" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="202" y="556" fill="#94a3b8" font-size="8">PR 工作流</text>
+
+        <rect x="330" y="532" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="352" y="540" fill="#94a3b8" font-size="8">测试</text>
+
+        <rect x="330" y="548" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="352" y="556" fill="#94a3b8" font-size="8">Obsidian</text>
+
+        <line x1="480" y1="540" x2="496" y2="540" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-cyan)"/>
+        <text x="502" y="543" fill="#94a3b8" font-size="8">SSE 流</text>
+
+        <line x1="480" y1="556" x2="496" y2="556" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)"/>
+        <text x="502" y="559" fill="#94a3b8" font-size="8">事件流</text>
+
+        <!-- ==================== 流程说明 ==================== -->
+        <text x="30" y="620" fill="white" font-size="10" font-weight="600">团队协作流程</text>
+
+        <rect x="30" y="632" width="20" height="20" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="40" y="646" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">1</text>
+        <text x="58" y="646" fill="#94a3b8" font-size="9">工程师实现功能</text>
+
+        <rect x="240" y="632" width="20" height="20" rx="4" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="250" y="646" fill="#fb7185" font-size="10" font-weight="600" text-anchor="middle">2</text>
+        <text x="268" y="646" fill="#94a3b8" font-size="9">测试通过 PR 执行测试</text>
+
+        <rect x="450" y="632" width="20" height="20" rx="4" fill="rgba(251, 191, 36, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="460" y="646" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">3</text>
+        <text x="478" y="646" fill="#94a3b8" font-size="9">领导审核并合并代码</text>
+
+        <rect x="660" y="632" width="20" height="20" rx="4" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="670" y="646" fill="#22d3ee" font-size="10" font-weight="600" text-anchor="middle">4</text>
+        <text x="688" y="646" fill="#94a3b8" font-size="9">自动部署到测试环境</text>
+
+        <!-- 分支策略 -->
+        <text x="30" y="700" fill="white" font-size="10" font-weight="600">分支策略</text>
+
+        <rect x="30" y="712" width="50" height="18" rx="3" fill="rgba(6, 78, 59, 0.3)" stroke="#34d399" stroke-width="1"/>
+        <text x="55" y="724" fill="#34d399" font-size="8" font-weight="600" text-anchor="middle">main</text>
+
+        <line x1="85" y1="721" x2="105" y2="721" stroke="#34d399" stroke-width="1"/>
+
+        <rect x="110" y="712" width="80" height="18" rx="3" fill="rgba(6, 78, 59, 0.2)" stroke="#34d399" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="150" y="724" fill="#94a3b8" font-size="8" font-weight="600" text-anchor="middle">feature/*</text>
+
+        <line x1="195" y1="721" x2="215" y2="721" stroke="#34d399" stroke-width="1"/>
+
+        <rect x="220" y="712" width="50" height="18" rx="3" fill="rgba(136, 19, 55, 0.2)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="245" y="724" fill="#94a3b8" font-size="8" font-weight="600" text-anchor="middle">PR</text>
+
+      </svg>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>后端技术栈</h3>
+        </div>
+        <ul>
+          <li>• FastAPI - Python Web 框架</li>
+          <li>• SSE - 服务器推送事件</li>
+          <li>• uvicorn - ASGI 服务器</li>
+          <li>• pytest - 自动化测试</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>前端技术栈</h3>
+        </div>
+        <ul>
+          <li>• Vue 3 - 渐进式 JS 框架</li>
+          <li>• Vite - 快速构建工具</li>
+          <li>• TailwindCSS - 原子化 CSS</li>
+          <li>• Naive UI - Vue 3 组件库</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>团队角色</h3>
+        </div>
+        <ul>
+          <li>• 工程师 - 实现功能代码</li>
+          <li>• 测试 (QA) - 执行测试验证</li>
+          <li>• 领导 (Lead) - 审核并合并</li>
+          <li>• Obsidian - 项目文档</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <p class="footer">
+      Hermès Dashboard • luohao0308/hermes-dashboard • 2026
+    </p>
+  </div>
+</body>
+</html>

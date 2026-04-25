@@ -1,0 +1,18 @@
+Looking in indexes: https://pypi.org/simple/
+Collecting sse-starlette
+  Downloading sse_starlette-3.3.0-py3-none-any.whl (14 kB)
+Requirement already satisfied: anyio>=4.7.0 in /Users/luohao/opt/anaconda3/lib/python3.9/site-packages (from sse-starlette) (4.10.0)
+Collecting starlette>=0.49.1
+  Downloading starlette-0.49.3-py3-none-any.whl (74 kB)
+Requirement already satisfied: typing_extensions>=4.5 in /Users/luohao/opt/anaconda3/lib/python3.9/site-packages (from anyio>=4.7.0->sse-starlette) (4.15.0)
+Requirement already satisfied: sniffio>=1.1 in /Users/luohao/opt/anaconda3/lib/python3.9/site-packages (from anyio>=4.7.0->sse-starlette) (1.2.0)
+Requirement already satisfied: idna>=2.8 in /Users/luohao/opt/anaconda3/lib/python3.9/site-packages (from anyio>=4.7.0->sse-starlette) (3.3)
+Requirement already satisfied: exceptiongroup>=1.0.2 in /Users/luohao/opt/anaconda3/lib/python3.9/site-packages (from anyio>=4.7.0->sse-starlette) (1.1.1)
+Installing collected packages: starlette, sse-starlette
+  Attempting uninstall: starlette
+    Found existing installation: starlette 0.47.3
+    Uninstalling starlette-0.47.3:
+      Successfully uninstalled starlette-0.47.3
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+fastapi 0.116.1 requires starlette<0.48.0,>=0.40.0, but you have starlette 0.49.3 which is incompatible.
+Successfully installed sse-starlette-3.3.0 starlette-0.49.3

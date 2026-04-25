@@ -75,7 +75,7 @@ main (保护分支)
 ├── feature/task-panel (Phase 2.1)
 ├── feature/log-stream (Phase 2.2)
 ├── feature/history-list (Phase 2.3)
-├── feature/hermes-integration (Phase 3.1)
+├── feature/hermes-proxy (Phase 3.1)
 └── feature/ui-optimization (Phase 3.2)
 ```
 
@@ -143,13 +143,32 @@ main (保护分支)
 
 ### Phase 3: 集成与美化
 
-#### Task 3.1: 接入真实 Hermès 数据源
-- **分支**: `feature/hermes-integration`
-- **测试验证**: 端到端测试通过
+#### Task 3.1: 接入真实 Hermès 数据源 ✅
+- **分支**: `feature/hermes-proxy` (已合并)
+- **完成时间**: 2026-04-25
+- **实现内容**:
+  - 后端 FastAPI 代理 Hermes Dashboard API (localhost:9119)
+  - 自动获取 session token 认证
+  - 清除 proxy 环境变量避免 SOCKS 干扰
+  - 前端从后端代理获取真实数据
+- **测试验证**:
+  ```bash
+  curl http://localhost:8000/api/status  # 返回真实 Hermès 状态
+  curl http://localhost:8000/api/sessions  # 返回 27 个会话
+  curl http://localhost:8000/api/logs  # 返回真实日志
+  ```
 
-#### Task 3.2: UI/UX 优化
-- **分支**: `feature/ui-optimization`
-- **测试验证**: Playwright E2E 测试通过
+#### Task 3.2: UI/UX 优化 ✅
+- **分支**: `feature/ui-optimization` (已合并)
+- **完成时间**: 2026-04-25
+- **实现内容**:
+  - App.vue: Toast 通知系统、增强 Header、实时时间、Gateway 状态徽章
+  - TaskPanel: 骨架屏加载效果
+  - LogStream: 骨架屏加载效果
+  - HistoryList: 骨架屏加载效果
+- **测试验证**:
+  - 访问 http://localhost:5173 查看完整 UI
+  - TypeScript 编译通过: `npx vue-tsc --noEmit`
 
 ## GitHub 操作指南
 
@@ -248,19 +267,22 @@ gh pr merge <PR_NUMBER> --squash --delete-branch
 
 ## 风险与权衡
 
-| 风险 | 应对 |
-|------|------|
-| Hermès 事件接口不明确 | 先用模拟数据开发，后期适配真实接口 |
-| 实时数据量大导致前端卡顿 | 添加日志条数上限，虚拟滚动 |
-| SSE 在某些网络环境下断开 | 添加心跳重连机制 |
+|| 风险 | 应对 |
+|------|------|------|
+| Hermès 事件接口不明确 | ✅ 已解决：通过 Dashboard API (localhost:9119) |
+| 实时数据量大导致前端卡顿 | ✅ 已解决：日志上限 500 条，骨架屏优化加载 |
+| SSE 在某些网络环境下断开 | ⚠️ 未实现：当前仅本地使用，无重连机制 |
+| SOCKS 代理干扰本地连接 | ✅ 已解决：httpx 禁用 trust_env，清除 proxy 环境变量 |
 
 ## 开放问题
 
-1. Hermès 的事件/日志以什么形式暴露？
-2. 是否需要用户认证？
-3. 是否需要持久化存储历史任务？
-4. 是否需要支持多用户同时在线？
+1. ~~Hermès 的事件/日志以什么形式暴露？~~ → 已解决：通过 Dashboard API (localhost:9119) 的 REST API + SSE
+2. 是否需要用户认证？ → 否（当前仅本地使用）
+3. 是否需要持久化存储历史任务？ → 否（从 Hermès API 实时读取）
+4. 是否需要支持多用户同时在线？ → 否（当前仅本地单用户）
+5. 前端测试 (vitest) 和 E2E 测试 (Playwright) → 未实现
 
 ---
 
 *计划生成时间：2026-04-25 20:07*
+*最后更新：2026-04-25 22:20（Phase 3 完成）*

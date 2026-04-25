@@ -34,7 +34,7 @@
 
     <div class="log-list" ref="logListRef">
       <div
-        v-for="(log, index) in filteredLogs"
+        v-for="log in filteredLogs"
         :key="log.id"
         class="log-item"
         :class="[log.type, { expanded: expandedLogs.has(log.id) }]"
@@ -61,9 +61,17 @@
           </div>
         </div>
       </div>
-      <div v-if="filteredLogs.length === 0" class="empty-state">
+      <div v-if="filteredLogs.length === 0 && !loading" class="empty-state">
         <span class="empty-icon">📜</span>
         <span>{{ levelFilter === 'all' ? '暂无日志' : `没有${logTypeText[levelFilter]}级别的日志` }}</span>
+      </div>
+
+      <!-- Skeleton Loading -->
+      <div class="skeleton" v-if="loading">
+        <div class="skeleton-item" v-for="i in 5" :key="i">
+          <div class="skeleton-line w-20"></div>
+          <div class="skeleton-line w-80"></div>
+        </div>
       </div>
     </div>
 
@@ -83,7 +91,7 @@ export interface Log {
   id?: number
   timestamp: string
   message: string
-  type: 'info' | 'warning' | 'error'
+  type: 'info' | 'warning' | 'error' | 'debug'
   source?: string
 }
 
@@ -97,7 +105,6 @@ defineEmits<{
 }>()
 
 const MAX_LOGS = 500
-let logIdCounter = 0
 
 const levelFilter = ref<'all' | 'info' | 'warning' | 'error'>('all')
 const expandedLogs = ref(new Set<number>())
@@ -417,5 +424,30 @@ function scrollToTop() {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Skeleton Loading */
+.skeleton .skeleton-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid #1e293b;
+}
+
+.skeleton-line {
+  height: 12px;
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+  border-radius: 0.25rem;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-line.w-20 { width: 20%; }
+.skeleton-line.w-80 { width: 80%; }
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 </style>

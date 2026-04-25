@@ -23,7 +23,7 @@
       </button>
     </div>
 
-    <div class="task-list" v-if="filteredTasks.length > 0">
+    <div class="task-list" v-if="!loading && filteredTasks.length > 0">
       <div
         v-for="task in filteredTasks"
         :key="task.task_id"
@@ -50,20 +50,26 @@
           </div>
           <div class="progress-info">
             <span class="progress-text">{{ task.progress }}%</span>
-            <span class="progress-time" v-if="task.started_at">
-              {{ formatDuration(task.elapsed) }}
-            </span>
           </div>
         </div>
 
         <div class="task-actions" v-if="task.status === 'running'">
-          <button class="action-btn pause" @click="$emit('pause', task.task_id)">
+          <button class="action-btn pause" @click="emit('pause', task.task_id)">
             ⏸ 暂停
           </button>
-          <button class="action-btn cancel" @click="$emit('cancel', task.task_id)">
+          <button class="action-btn cancel" @click="emit('cancel', task.task_id)">
             ✕ 取消
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- Skeleton Loading -->
+    <div class="task-list skeleton" v-else-if="loading">
+      <div class="skeleton-item" v-for="i in 3" :key="i">
+        <div class="skeleton-line w-60"></div>
+        <div class="skeleton-line w-40"></div>
+        <div class="skeleton-progress"></div>
       </div>
     </div>
 
@@ -75,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 
 export interface Task {
   task_id: string
@@ -128,37 +134,6 @@ const emptyMessage = computed(() => {
   }
   return messages[activeFilter.value]
 })
-
-// 计算已用时间
-const now = ref(Date.now())
-let timer: ReturnType<typeof setInterval> | null = null
-
-onMounted(() => {
-  timer = setInterval(() => {
-    now.value = Date.now()
-  }, 1000)
-})
-
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
-
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${mins}m ${secs}s`
-}
-
-// 为每个 task 计算 elapsed
-const tasksWithElapsed = computed(() => {
-  return props.tasks.map(task => ({
-    ...task,
-    elapsed: task.started_at
-      ? Math.floor((now.value - new Date(task.started_at).getTime()) / 1000)
-      : 0
-  }))
-})
 </script>
 
 <style scoped>
@@ -181,207 +156,6 @@ const tasksWithElapsed = computed(() => {
   font-weight: 600;
   color: #f8fafc;
   margin: 0;
-}
-
-.task-count {
-  font-size: 0.75rem;
-  color: #64748b;
-  background: #0f172a;
-  padding: 0.25rem 0.5rem;
-  border-radius: 9999px;
-}
-
-.filter-bar {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.filter-btn {
-  padding: 0.375rem 0.75rem;
-  border-radius: 0.375rem;
-  border: none;
-  background: #0f172a;
-  color: #94a3b8;
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.filter-btn:hover {
-  background: #334155;
-}
-
-.filter-btn.active {
-  background: #3b82f6;
-  color: #fff;
-}
-
-.task-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.task-item {
-  background: #0f172a;
-  border-radius: 0.5rem;
-  padding: 1rem;
-  border-left: 3px solid #334155;
-}
-
-.task-item.running {
-  border-left-color: #3b82f6;
-}
-
-.task-item.pending {
-  border-left-color: #f59e0b;
-}
-
-.task-item.completed {
-  border-left-color: #22c55e;
-}
-
-.task-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 0.75rem;
-}
-
-.task-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-
-.task-name {
-  font-weight: 500;
-  color: #e2e8f0;
-}
-
-.task-id {
-  font-size: 0.75rem;
-  color: #64748b;
-  font-family: monospace;
-}
-
-.task-status-badge {
-  font-size: 0.75rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: 9999px;
-  background: #334155;
-  color: #94a3b8;
-}
-
-.task-status-badge.running {
-  background: #1d4ed8;
-  color: #93c5fd;
-}
-
-.task-status-badge.pending {
-  background: #713f12;
-  color: #fde68a;
-}
-
-.task-status-badge.completed {
-  background: #14532d;
-  color: #86efac;
-}
-
-.progress-section {
-  margin-bottom: 0.75rem;
-}
-
-.progress-bar {
-  height: 0.5rem;
-  background: #334155;
-  border-radius: 9999px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  border-radius: 9999px;
-  transition: width 0.3s ease;
-}
-
-.progress-fill.running {
-  background: linear-gradient(90deg, #3b82f6, #60a5fa);
-}
-
-.progress-fill.pending {
-  background: #f59e0b;
-}
-
-.progress-fill.completed {
-  background: #22c55e;
-}
-
-.progress-info {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 0.25rem;
-}
-
-.progress-text {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  font-family: monospace;
-}
-
-.progress-time {
-  font-size: 0.75rem;
-  color: #64748b;
-  font-family: monospace;
-}
-
-.task-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.action-btn {
-  padding: 0.25rem 0.75rem;
-  border-radius: 0.375rem;
-  border: none;
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.action-btn.pause {
-  background: #334155;
-  color: #e2e8f0;
-}
-
-.action-btn.pause:hover {
-  background: #475569;
-}
-
-.action-btn.cancel {
-  background: transparent;
-  color: #ef4444;
-  border: 1px solid #ef4444;
-}
-
-.action-btn.cancel:hover {
-  background: #ef4444;
-  color: #fff;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 3rem 1rem;
-  color: #64748b;
-  gap: 0.5rem;
-}
-
-.empty-icon {
-  font-size: 2rem;
 }
 
 .header-actions {
@@ -424,5 +198,240 @@ const tasksWithElapsed = computed(() => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+.filter-bar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.filter-btn {
+  padding: 0.375rem 0.75rem;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.375rem;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-btn:hover {
+  border-color: #475569;
+  color: #e2e8f0;
+}
+
+.filter-btn.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: white;
+}
+
+.task-count {
+  font-size: 0.75rem;
+  color: #64748b;
+  background: #0f172a;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+}
+
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.task-item {
+  padding: 1rem;
+  background: #0f172a;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+.task-item:hover {
+  background: #1e293b;
+}
+
+.task-item.running {
+  border-left: 3px solid #3b82f6;
+}
+
+.task-item.pending {
+  border-left: 3px solid #f59e0b;
+}
+
+.task-item.completed {
+  border-left: 3px solid #22c55e;
+}
+
+.task-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.task-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.task-name {
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.task-id {
+  font-size: 0.7rem;
+  color: #64748b;
+  font-family: monospace;
+}
+
+.task-status-badge {
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.task-status-badge.running {
+  background: #3b82f620;
+  color: #60a5fa;
+}
+
+.task-status-badge.pending {
+  background: #f59e0b20;
+  color: #fbbf24;
+}
+
+.task-status-badge.completed {
+  background: #22c55e20;
+  color: #4ade80;
+}
+
+.progress-section {
+  margin-bottom: 0.75rem;
+}
+
+.progress-bar {
+  height: 6px;
+  background: #1e293b;
+  border-radius: 0.25rem;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 0.25rem;
+  transition: width 0.3s ease;
+}
+
+.progress-fill.running {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+}
+
+.progress-fill.pending {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.progress-fill.completed {
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+}
+
+.progress-text {
+  color: #94a3b8;
+  font-family: monospace;
+}
+
+.task-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #1e293b;
+}
+
+.action-btn {
+  flex: 1;
+  padding: 0.5rem;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn.pause {
+  background: #3b82f620;
+  color: #60a5fa;
+}
+
+.action-btn.pause:hover {
+  background: #3b82f640;
+}
+
+.action-btn.cancel {
+  background: #ef444420;
+  color: #f87171;
+}
+
+.action-btn.cancel:hover {
+  background: #ef444440;
+}
+
+.empty-state {
+  color: #64748b;
+  text-align: center;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.empty-icon {
+  font-size: 2rem;
+}
+
+/* Skeleton Loading */
+.skeleton .skeleton-item {
+  padding: 1rem;
+  background: #0f172a;
+  border-radius: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.skeleton-line {
+  height: 14px;
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+  border-radius: 0.25rem;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeleton-line.w-60 { width: 60%; }
+.skeleton-line.w-40 { width: 40%; }
+
+.skeleton-progress {
+  height: 6px;
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+  border-radius: 0.25rem;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 </style>

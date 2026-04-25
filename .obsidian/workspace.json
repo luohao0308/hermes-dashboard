@@ -201,6 +201,8 @@
   },
   "active": "7d8f648db3f27e1d",
   "lastOpenFiles": [
+    "frontend/vitest.config.ts.timestamp-1777127494660-e6940d2a33fb3.mjs",
+    "frontend/vitest.config.ts.timestamp-1777127455207-424209e2e60fa.mjs",
     "frontend/dist/assets/index-D1sNclyB.js",
     "frontend/dist/assets/index-6jlTwOZs.css",
     "frontend/dist/index.html",
@@ -210,8 +212,6 @@
     "frontend/node_modules/naive-ui/volar.d.ts",
     "frontend/node_modules/naive-ui/generic/index.ts",
     "frontend/node_modules/naive-ui/generic/AvatarGroup.vue",
-    "frontend/node_modules/naive-ui/generic",
-    "frontend/node_modules/date-fns/yearsToQuarters.d.ts",
     "frontend/node_modules/date-fns/SECURITY.md",
     "frontend/node_modules/date-fns/LICENSE.md",
     "frontend/node_modules/date-fns/README.md",

@@ -7,16 +7,16 @@ describe('HistoryList', () => {
     const wrapper = mount(HistoryList, {
       props: { history: [] }
     })
-    expect(wrapper.find('.empty-state').text()).toBe('暂无历史任务')
+    expect(wrapper.find('.empty-state').text()).toBe('📋暂无历史任务')
   })
 
   it('renders history entries', () => {
     const history = [
-      { task_id: '1', name: '已完成任务', completed_at: '2024-01-01T12:00:00Z', duration: 120 }
+      { task_id: '1', name: '已完成任务', completed_at: '2024-01-01T12:00:00Z', duration: 120, status: 'success' }
     ]
     const wrapper = mount(HistoryList, {
       props: { history }
     })
-    expect(wrapper.find('.history-name').text()).toBe('已完成任务')
+    expect(wrapper.find('.item-name').text()).toBe('已完成任务')
   })
 })

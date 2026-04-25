@@ -7,7 +7,7 @@ describe('LogStream', () => {
     const wrapper = mount(LogStream, {
       props: { logs: [] }
     })
-    expect(wrapper.find('.empty-state').text()).toBe('暂无日志')
+    expect(wrapper.find('.empty-state').text()).toBe('📜暂无日志')
   })
 
   it('renders log entries', () => {

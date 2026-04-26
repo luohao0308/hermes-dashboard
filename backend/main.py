@@ -822,6 +822,111 @@ async def terminal_websocket(
 
 
 # ============================================================================
+# Agent Config API
+# ============================================================================
+
+from pydantic import BaseModel
+from typing import Optional
+from agent.config_loader import load_config, save_config
+from agent.agent_manager import reload_agents
+
+
+class AgentToggle(BaseModel):
+    enabled: bool
+
+
+class SetMainRequest(BaseModel):
+    main_agent: str
+
+
+class CustomAgentCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    instructions: Optional[str] = ""
+    enabled: bool = True
+
+
+@app.get("/api/agent/config")
+async def get_agent_config():
+    """Return full agent configuration."""
+    cfg = load_config()
+    return {
+        "main_agent": cfg.get("main_agent"),
+        "agents": cfg.get("agents", {}),
+        "custom_agents": cfg.get("custom_agents", []),
+    }
+
+
+@app.put("/api/agent/config/enabled")
+async def toggle_agent(name: str, body: AgentToggle):
+    """Enable or disable an agent."""
+    cfg = load_config()
+    if name in cfg["agents"]:
+        cfg["agents"][name]["enabled"] = body.enabled
+    else:
+        for ca in cfg.get("custom_agents", []):
+            if ca["name"].lower().replace(" ", "_") == name:
+                ca["enabled"] = body.enabled
+                break
+        else:
+            raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+    save_config(cfg)
+    reload_agents()
+    return {"ok": True, "agent": name, "enabled": body.enabled}
+
+
+@app.post("/api/agent/config/main")
+async def set_main_agent(body: SetMainRequest):
+    """Set the main (entry) agent."""
+    cfg = load_config()
+    key = body.main_agent
+    if key not in cfg["agents"] and not any(
+        c["name"].lower().replace(" ", "_") == key for c in cfg.get("custom_agents", [])
+    ):
+        raise HTTPException(status_code=404, detail=f"Agent '{key}' not found")
+    cfg["main_agent"] = key
+    save_config(cfg)
+    reload_agents()
+    return {"ok": True, "main_agent": key}
+
+
+@app.post("/api/agent/config/custom")
+async def add_custom_agent(body: CustomAgentCreate):
+    """Add a custom agent."""
+    cfg = load_config()
+    key = body.name.lower().replace(" ", "_")
+    if key in cfg["agents"] or any(
+        c["name"].lower().replace(" ", "_") == key for c in cfg.get("custom_agents", [])
+    ):
+        raise HTTPException(status_code=409, detail=f"Agent '{key}' already exists")
+    cfg.setdefault("custom_agents", []).append({
+        "name": body.name,
+        "description": body.description,
+        "instructions": body.instructions or f"You are {body.name}.",
+        "enabled": body.enabled,
+    })
+    save_config(cfg)
+    reload_agents()
+    return {"ok": True, "agent": key}
+
+
+@app.delete("/api/agent/config/custom/{agent_key}")
+async def delete_custom_agent(agent_key: str):
+    """Delete a custom agent by key."""
+    cfg = load_config()
+    original_len = len(cfg.get("custom_agents", []))
+    cfg["custom_agents"] = [
+        c for c in cfg.get("custom_agents", [])
+        if c["name"].lower().replace(" ", "_") != agent_key
+    ]
+    if len(cfg["custom_agents"]) == original_len:
+        raise HTTPException(status_code=404, detail=f"Custom agent '{agent_key}' not found")
+    save_config(cfg)
+    reload_agents()
+    return {"ok": True}
+
+
+# ============================================================================
 # Agent API Endpoints
 # ============================================================================
 

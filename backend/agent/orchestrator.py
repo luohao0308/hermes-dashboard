@@ -10,8 +10,8 @@ from agents import Agent, Runner
 from agents.stream_events import StreamEvent
 
 from .models import AgentInfo, AgentStatus, AgentEvent, AgentRole, InvokeRequest
-from .agents.triage import get_triage_agent
 from .client import get_model
+from . import agent_manager
 
 
 class AgentOrchestrator:
@@ -36,29 +36,24 @@ class AgentOrchestrator:
     # -------------------------------------------------------------------------
 
     async def start(self):
-        """Start the orchestrator - boot all system agents."""
+        """Start the orchestrator - load agents from config."""
         if self._started:
             return
         self._started = True
 
-        # Boot all system agents (others boot lazily on first invoke)
-        triage = get_triage_agent()
-        await self._register_agent(triage, AgentRole.TRIAGE)
-
-        # Monitor agent (starts background polling loop)
-        from .agents.monitor import get_monitor_agent
-        monitor = get_monitor_agent()
-        await self._register_agent(monitor, AgentRole.MONITOR)
-
-        # Analyst agent (idle until invoked)
-        from .agents.analyst import get_analyst_agent
-        analyst = get_analyst_agent()
-        await self._register_agent(analyst, AgentRole.ANALYST)
-
-        # Executor agent (idle until invoked)
-        from .agents.executor import get_executor_agent
-        executor = get_executor_agent()
-        await self._register_agent(executor, AgentRole.EXECUTOR)
+        # Load all configured agents and register them for SSE listing
+        agents = agent_manager.get_all_agents()
+        role_map = {
+            "dispatcher": AgentRole.DISPATCHER,
+            "researcher": AgentRole.RESEARCHER,
+            "developer": AgentRole.DEVELOPER,
+            "reviewer": AgentRole.REVIEWER,
+            "tester": AgentRole.TESTER,
+            "devops": AgentRole.DEVOPS,
+        }
+        for key, agent in agents.items():
+            role = role_map.get(key, AgentRole.DISPATCHER)
+            await self._register_agent(agent, role)
 
         # Start SSE event broadcaster (consumes _event_queue in the background)
         self._broadcast_task = asyncio.create_task(self._run_broadcaster())
@@ -113,27 +108,31 @@ class AgentOrchestrator:
     # -------------------------------------------------------------------------
 
     async def invoke(self, req: InvokeRequest) -> str:
-        """Invoke an agent with a message. Returns task_id."""
-        agent = get_triage_agent()
-        agent_info = self._find_agent_by_role(AgentRole.TRIAGE)
+        """Invoke the main agent with a message. Returns task_id."""
+        agent = agent_manager.get_main_agent()
+        task_id = str(uuid.uuid4())
 
-        task_id = f"task_{uuid.uuid4().hex[:8]}"
+        # Emit running status
+        await self._emit(AgentEvent(
+            type="agent_status",
+            agent_id=task_id,
+            agent_name=agent.name,
+            status=AgentStatus.RUNNING,
+            status_message="正在处理...",
+        ))
         self._running_tasks[task_id] = asyncio.create_task(
-            self._run_agent_stream(task_id, agent, agent_info, req.message)
+            self._run_agent_stream(task_id, agent, req.message)
         )
         return task_id
 
     async def _run_agent_stream(
-        self, task_id: str, agent: Agent, agent_info: AgentInfo, message: str
+        self, task_id: str, agent: Agent, message: str
     ):
         """Run an agent and stream events back via SSE."""
-        # Update status
-        agent_info.status = AgentStatus.RUNNING
-        agent_info.event_count += 1
         await self._emit(AgentEvent(
             type="agent_status",
-            agent_id=agent_info.id,
-            agent_name=agent_info.name,
+            agent_id=task_id,
+            agent_name=agent.name,
             status=AgentStatus.RUNNING,
             message="running",
         ))
@@ -144,7 +143,7 @@ class AgentOrchestrator:
             all_output = []
 
             async for event in result.stream_events():
-                ev_type, payload = self._classify_event(event, agent_info, current_agent_name)
+                ev_type, payload = self._classify_event(task_id, current_agent_name, event)
 
                 if ev_type == "agent_handoff":
                     current_agent_name = payload.get("to_agent", current_agent_name)
@@ -156,32 +155,28 @@ class AgentOrchestrator:
                     await self._emit(AgentEvent(type=ev_type, **payload))
 
             # Done
-            agent_info.status = AgentStatus.IDLE
             final_text = "".join(all_output)
             await self._emit(AgentEvent(
                 type="agent_complete",
-                agent_id=agent_info.id,
-                agent_name=agent_info.name,
+                agent_id=task_id,
+                agent_name=agent.name,
                 status=AgentStatus.IDLE,
                 result=final_text[:500],
             ))
 
         except Exception as exc:
-            agent_info.status = AgentStatus.ERROR
-            agent_info.last_error = str(exc)
             await self._emit(AgentEvent(
                 type="agent_error",
-                agent_id=agent_info.id,
-                agent_name=agent_info.name,
+                agent_id=task_id,
+                agent_name=agent.name,
                 error=str(exc),
             ))
         finally:
-            agent_info.last_active = datetime.utcnow()
             if task_id in self._running_tasks:
                 del self._running_tasks[task_id]
 
     def _classify_event(
-        self, event: StreamEvent, agent_info: AgentInfo, current_agent_name: str
+        self, task_id: str, current_agent_name: str, event: StreamEvent
     ):
         """Convert openai-agents stream event to SSE payload dict."""
         if hasattr(event, "type"):
@@ -200,7 +195,7 @@ class AgentOrchestrator:
                             text = str(delta)
                         if text:
                             return "agent_output", {
-                                "agent_id": agent_info.id,
+                                "agent_id": task_id,
                                 "agent_name": current_agent_name,
                                 "delta": text,
                             }
@@ -211,7 +206,7 @@ class AgentOrchestrator:
                             output = resp.output
                             if hasattr(output, "text") and output.text:
                                 return "agent_output", {
-                                    "agent_id": agent_info.id,
+                                    "agent_id": task_id,
                                     "agent_name": current_agent_name,
                                     "delta": output.text,
                                 }
@@ -235,7 +230,7 @@ class AgentOrchestrator:
                         else:
                             text = str(content)
                         return "agent_output", {
-                            "agent_id": agent_info.id,
+                            "agent_id": task_id,
                             "agent_name": current_agent_name,
                             "delta": text,
                         }
@@ -244,7 +239,7 @@ class AgentOrchestrator:
 
                 elif name in ("tool_called", "tool_output"):
                     return "agent_output", {
-                        "agent_id": agent_info.id,
+                        "agent_id": task_id,
                         "agent_name": current_agent_name,
                         "delta": f"[{name}]",
                     }
@@ -253,7 +248,7 @@ class AgentOrchestrator:
                     # Extract target agent name from handoff item if possible
                     to_name = current_agent_name
                     return "agent_handoff", {
-                        "agent_id": agent_info.id,
+                        "agent_id": task_id,
                         "from_agent": current_agent_name,
                         "to_agent": to_name,
                         "message": f"Handoff from {current_agent_name}",
@@ -263,7 +258,7 @@ class AgentOrchestrator:
                 new_agent = getattr(event, "new_agent", None)
                 new_name = new_agent.name if new_agent else current_agent_name
                 return "agent_handoff", {
-                    "agent_id": agent_info.id,
+                    "agent_id": task_id,
                     "from_agent": current_agent_name,
                     "to_agent": new_name,
                     "message": f"Handoff to {new_name}",

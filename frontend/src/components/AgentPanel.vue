@@ -2,509 +2,432 @@
   <div class="agent-panel">
     <!-- Header -->
     <div class="agent-header">
-      <div class="agent-title">🤖 Agent 工作台</div>
+      <div class="agent-title">🤖 Agent 配置</div>
       <div class="agent-actions">
-        <button class="btn-refresh" @click="fetchAgents" :disabled="loading">
+        <button class="btn-secondary" @click="fetchConfig" :disabled="loading">
           刷新
         </button>
       </div>
     </div>
 
+    <!-- Main Agent Selector -->
+    <div class="config-section">
+      <div class="section-label">主 Agent</div>
+      <div class="section-hint">用户消息的默认入口 Agent</div>
+      <select v-model="config.main_agent" class="select-main" @change="saveConfig">
+        <option v-for="agent in enabledAgents" :key="agent.id" :value="agent.id">
+          {{ agent.name }} ({{ agent.description }})
+        </option>
+      </select>
+    </div>
+
     <!-- Agent Cards Grid -->
-    <div class="agent-cards">
-      <div
-        v-for="agent in agents"
-        :key="agent.id"
-        class="agent-card"
-        :class="`status-${agent.status}`"
-      >
-        <div class="agent-card-header">
-          <div class="agent-name">{{ agent.name }}</div>
-          <div class="agent-status-badge" :class="agent.status">
-            <span class="status-dot-sm"></span>
-            {{ agent.status }}
-          </div>
-        </div>
-
-        <div class="agent-card-meta">
-          <div class="meta-item">
-            <span class="meta-label">Role:</span>
-            <span class="meta-value">{{ agent.role }}</span>
-          </div>
-          <div class="meta-item">
-            <span class="meta-label">Events:</span>
-            <span class="meta-value">{{ agent.event_count }}</span>
-          </div>
-          <div class="meta-item" v-if="agent.last_error">
-            <span class="meta-label">Error:</span>
-            <span class="meta-value error">{{ agent.last_error }}</span>
-          </div>
-        </div>
-
-        <!-- Recent logs for this agent -->
-        <div class="agent-logs" v-if="agentLogs[agent.id]?.length">
-          <div
-            v-for="(log, i) in agentLogs[agent.id].slice(-5)"
-            :key="i"
-            class="agent-log-line"
-            :class="log.type"
-          >
-            {{ log.text }}
-          </div>
-        </div>
-      </div>
-
-      <!-- Empty state -->
-      <div v-if="agents.length === 0 && !loading" class="agent-empty">
-        暂无 Agent 连接<br>
-        <small>Agent 系统已启动，正在初始化...</small>
-      </div>
-    </div>
-
-    <!-- Hermes Alerts -->
-    <div class="alerts-section" v-if="alerts.length">
-      <div class="alerts-title">⚠️ Hermès 告警</div>
-      <div
-        v-for="alert in alerts"
-        :key="alert.id"
-        class="alert-item"
-        :class="alert.level"
-      >
-        <span class="alert-time">{{ alert.time }}</span>
-        <span class="alert-msg">{{ alert.message }}</span>
-      </div>
-    </div>
-
-    <!-- Message Input -->
-    <div class="agent-input-section">
-      <div class="input-label">💬 发送消息给 TriageAgent:</div>
-      <div class="input-row">
-        <input
-          v-model="inputMessage"
-          class="agent-input"
-          placeholder="例如: check hermes status, why did my session fail, ..."
-          @keyup.enter="sendMessage"
-          :disabled="sending"
-        />
-        <button
-          class="btn-send"
-          @click="sendMessage"
-          :disabled="sending || !inputMessage.trim()"
+    <div class="config-section">
+      <div class="section-label">可选 Agent</div>
+      <div class="agent-cards-grid">
+        <div
+          v-for="agent in config.agents"
+          :key="agent.id"
+          class="agent-card"
+          :class="{ disabled: !agent.enabled }"
         >
-          {{ sending ? '发送中...' : '发送' }}
+          <div class="card-toggle">
+            <label class="toggle">
+              <input type="checkbox" v-model="agent.enabled" @change="saveConfig" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="card-body">
+            <div class="card-name">{{ agent.name }}</div>
+            <div class="card-desc">{{ agent.description }}</div>
+            <div class="card-skill">Skill: {{ agent.skill || '无' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Custom Agent -->
+    <div class="config-section">
+      <div class="section-label">新建自定义 Agent</div>
+      <div class="create-form">
+        <input
+          v-model="newAgent.name"
+          class="form-input"
+          placeholder="Agent 名称"
+        />
+        <input
+          v-model="newAgent.description"
+          class="form-input"
+          placeholder="简短描述"
+        />
+        <textarea
+          v-model="newAgent.instructions"
+          class="form-textarea"
+          placeholder="Agent 指令（可选，覆盖默认指令）"
+          rows="3"
+        ></textarea>
+        <button
+          class="btn-primary"
+          @click="createAgent"
+          :disabled="!newAgent.name.trim() || saving"
+        >
+          {{ saving ? '创建中...' : '创建 Agent' }}
         </button>
       </div>
+    </div>
+
+    <!-- Status -->
+    <div class="status-bar">
+      <span v-if="lastSaved" class="status-ok">✓ 配置已保存</span>
+      <span v-if="saveError" class="status-err">✗ {{ saveError }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 const API_BASE = 'http://localhost:8000'
 
-interface AgentInfo {
+interface AgentConfig {
   id: string
   name: string
-  role: string
-  status: 'idle' | 'running' | 'error' | 'done'
-  status_message?: string
-  event_count: number
-  last_error?: string
-  created_at: string
+  description: string
+  instructions?: string
+  skill?: string
+  enabled: boolean
+  is_custom?: boolean
 }
 
-interface AgentLog {
-  id: string
-  type: 'output' | 'handoff' | 'error' | 'status'
-  text: string
-  time: string
+interface Config {
+  main_agent: string
+  agents: AgentConfig[]
 }
 
-interface Alert {
-  id: string
-  level: 'info' | 'warning' | 'error'
-  message: string
-  time: string
-  session_id?: string
-}
-
-const agents = ref<AgentInfo[]>([])
-const agentLogs = ref<Record<string, AgentLog[]>>({})
-const alerts = ref<Alert[]>([])
-const inputMessage = ref('')
+const config = ref<Config>({ main_agent: 'dispatcher', agents: [] })
 const loading = ref(false)
-const sending = ref(false)
-const agentEventSource = ref<EventSource | null>(null)
+const saving = ref(false)
+const lastSaved = ref(false)
+const saveError = ref('')
 
-let alertCounter = 0
+const enabledAgents = computed(() =>
+  config.value.agents.filter(a => a.enabled)
+)
 
-async function fetchAgents() {
+async function fetchConfig() {
   loading.value = true
   try {
-    const res = await fetch(`${API_BASE}/api/agents`)
+    const res = await fetch(`${API_BASE}/api/agent/config`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
-    agents.value = data.agents || []
+    // Transform dict of agents to array format
+    const agentsArray = Object.entries(data.agents || {}).map(([id, cfg]: [string, any]) => ({
+      id,
+      name: cfg.name,
+      description: cfg.description,
+      instructions: cfg.instructions,
+      enabled: cfg.enabled,
+      is_custom: false,
+    }))
+    config.value = {
+      main_agent: data.main_agent || 'dispatcher',
+      agents: agentsArray,
+    }
   } catch (e) {
-    console.error('Failed to fetch agents:', e)
+    console.error('Failed to fetch agent config:', e)
+    saveError.value = '加载配置失败'
   } finally {
     loading.value = false
   }
 }
 
-async function sendMessage() {
-  const msg = inputMessage.value.trim()
-  if (!msg || sending.value) return
-
-  sending.value = true
+async function saveConfig() {
+  saving.value = true
+  lastSaved.value = false
+  saveError.value = ''
   try {
-    const res = await fetch(`${API_BASE}/api/agents/invoke`, {
+    // Save main agent
+    await fetch(`${API_BASE}/api/agent/config/main`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: msg }),
+      body: JSON.stringify({ main_agent: config.value.main_agent }),
     })
-    const data = await res.json()
-    console.log('Task dispatched:', data)
-    inputMessage.value = ''
+    lastSaved.value = true
+    setTimeout(() => { lastSaved.value = false }, 2000)
   } catch (e) {
-    console.error('Failed to invoke agent:', e)
+    console.error('Failed to save agent config:', e)
+    saveError.value = '保存失败'
   } finally {
-    sending.value = false
+    saving.value = false
   }
 }
 
-function connectAgentSSE() {
-  if (agentEventSource.value) {
-    agentEventSource.value.close()
-  }
-
-  agentEventSource.value = new EventSource(`${API_BASE}/api/agents/events`)
-
-  agentEventSource.value.addEventListener('agent_created', (e: MessageEvent) => {
-    const data = JSON.parse(e.data)
-    agents.value = agents.value.filter(a => a.id !== data.agent_id)
-    agents.value.push({
-      id: data.agent_id,
-      name: data.agent_name,
-      role: 'unknown',
-      status: 'idle',
-      event_count: 0,
-      created_at: new Date().toISOString(),
-    })
-    agentLogs.value[data.agent_id] = []
-  })
-
-  agentEventSource.value.addEventListener('agent_status', (e: MessageEvent) => {
-    const data = JSON.parse(e.data)
-    const agent = agents.value.find(a => a.id === data.agent_id)
-    if (agent) {
-      agent.status = data.status
-      agent.status_message = data.message
-    }
-    pushLog(data.agent_id, {
-      id: crypto.randomUUID(),
-      type: 'status',
-      text: `[${data.status}] ${data.message || ''}`,
-      time: new Date().toLocaleTimeString(),
-    })
-  })
-
-  agentEventSource.value.addEventListener('agent_output', (e: MessageEvent) => {
-    const data = JSON.parse(e.data)
-    pushLog(data.agent_id, {
-      id: crypto.randomUUID(),
-      type: 'output',
-      text: data.delta || '',
-      time: new Date().toLocaleTimeString(),
-    })
-  })
-
-  agentEventSource.value.addEventListener('agent_handoff', (e: MessageEvent) => {
-    const data = JSON.parse(e.data)
-    pushLog(data.agent_id, {
-      id: crypto.randomUUID(),
-      type: 'handoff',
-      text: `→ ${data.from_agent} → ${data.to_agent}`,
-      time: new Date().toLocaleTimeString(),
-    })
-  })
-
-  agentEventSource.value.addEventListener('agent_error', (e: MessageEvent) => {
-    const data = JSON.parse(e.data)
-    const agent = agents.value.find(a => a.id === data.agent_id)
-    if (agent) {
-      agent.status = 'error'
-      agent.last_error = data.error
-    }
-    pushLog(data.agent_id, {
-      id: crypto.randomUUID(),
-      type: 'error',
-      text: `ERROR: ${data.error}`,
-      time: new Date().toLocaleTimeString(),
-    })
-  })
-
-  agentEventSource.value.addEventListener('agent_complete', (e: MessageEvent) => {
-    const data = JSON.parse(e.data)
-    const agent = agents.value.find(a => a.id === data.agent_id)
-    if (agent) {
-      agent.status = 'idle'
-      if (data.result) {
-        pushLog(data.agent_id, {
-          id: crypto.randomUUID(),
-          type: 'output',
-          text: `Done: ${data.result.slice(0, 100)}`,
-          time: new Date().toLocaleTimeString(),
-        })
-      }
-    }
-  })
-
-  agentEventSource.value.addEventListener('hermes_alert', (e: MessageEvent) => {
-    const data = JSON.parse(e.data)
-    alerts.value.push({
-      id: `alert-${++alertCounter}`,
-      level: data.hermes_level || 'info',
-      message: data.message,
-      time: new Date().toLocaleTimeString(),
-      session_id: data.session_id,
-    })
-    // Keep last 20 alerts
-    if (alerts.value.length > 20) {
-      alerts.value = alerts.value.slice(-20)
-    }
-  })
-
-  agentEventSource.value.onerror = () => {
-    console.log('Agent SSE connection error, will reconnect...')
-  }
-}
-
-function pushLog(agentId: string, log: AgentLog) {
-  if (!agentLogs.value[agentId]) {
-    agentLogs.value[agentId] = []
-  }
-  agentLogs.value[agentId].push(log)
-  if (agentLogs.value[agentId].length > 50) {
-    agentLogs.value[agentId] = agentLogs.value[agentId].slice(-50)
-  }
-}
-
-onMounted(async () => {
-  await fetchAgents()
-  connectAgentSSE()
+const newAgent = ref({
+  name: '',
+  description: '',
+  instructions: '',
 })
 
-onUnmounted(() => {
-  if (agentEventSource.value) {
-    agentEventSource.value.close()
+async function createAgent() {
+  if (!newAgent.value.name.trim()) return
+  saving.value = true
+  try {
+    const res = await fetch(`${API_BASE}/api/agent/config/custom`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: newAgent.value.name,
+        description: newAgent.value.description,
+        instructions: newAgent.value.instructions,
+      }),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    await fetchConfig()
+    newAgent.value = { name: '', description: '', instructions: '' }
+  } catch (e) {
+    console.error('Failed to create agent:', e)
+    saveError.value = '创建失败'
+  } finally {
+    saving.value = false
   }
+}
+
+onMounted(() => {
+  fetchConfig()
 })
 </script>
 
 <style scoped>
 .agent-panel {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  padding: 24px;
+  max-width: 900px;
 }
 
 .agent-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
 }
 
 .agent-title {
   font-size: 18px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
-.btn-refresh {
-  padding: 6px 14px;
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
+.config-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.section-label {
   font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
 }
 
-.btn-refresh:hover { background: var(--hover-bg, #f5f5f5); }
+.section-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
 
-.agent-cards {
+.select-main {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.agent-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
 }
 
 .agent-card {
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 8px;
+  display: flex;
+  gap: 12px;
   padding: 14px;
-  background: var(--bg-secondary, #fafafa);
-  transition: border-color 0.2s;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  transition: opacity 0.2s;
 }
 
-.agent-card.status-running {
-  border-color: var(--color-primary, #4a9eff);
-  background: color-mix(in srgb, var(--color-primary, #4a9eff) 5%, white);
+.agent-card.disabled {
+  opacity: 0.5;
 }
 
-.agent-card.status-error {
-  border-color: var(--color-error, #e53935);
-  background: color-mix(in srgb, var(--color-error, #e53935) 5%, white);
+.card-toggle {
+  flex-shrink: 0;
+  padding-top: 2px;
 }
 
-.agent-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
 }
 
-.agent-name {
-  font-weight: 600;
-  font-size: 14px;
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
 
-.agent-status-badge {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  text-transform: uppercase;
-  font-weight: 600;
-}
-
-.status-dot-sm {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.agent-status-badge.idle { background: #e8f5e9; color: #2e7d32; }
-.agent-status-badge.running { background: #e3f2fd; color: #1565c0; }
-.agent-status-badge.error { background: #ffebee; color: #c62828; }
-.agent-status-badge.done { background: #f3e5f5; color: #6a1b9a; }
-
-.agent-card-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-}
-
-.meta-item {
-  display: flex;
-  gap: 6px;
-}
-
-.meta-label { color: var(--text-secondary, #888); }
-.meta-value { font-family: monospace; }
-.meta-value.error { color: var(--color-error, #e53935); }
-
-.agent-logs {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-color, #eee);
-  font-family: monospace;
-  font-size: 11px;
-  max-height: 100px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.agent-log-line { color: var(--text-secondary, #666); }
-.agent-log-line.output { color: var(--text-primary, #333); }
-.agent-log-line.handoff { color: var(--color-primary, #4a9eff); }
-.agent-log-line.error { color: var(--color-error, #e53935); }
-
-.agent-empty {
-  text-align: center;
-  padding: 40px;
-  color: var(--text-secondary, #888);
-  grid-column: 1 / -1;
-}
-
-.alerts-section {
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 8px;
-  padding: 12px;
-  background: #fff8e1;
-}
-
-.alerts-title {
-  font-weight: 600;
-  margin-bottom: 8px;
-  font-size: 13px;
-}
-
-.alert-item {
-  display: flex;
-  gap: 8px;
-  font-size: 12px;
-  padding: 4px 0;
-  border-bottom: 1px solid #ffe082;
-}
-
-.alert-item:last-child { border-bottom: none; }
-
-.alert-time { color: #888; font-family: monospace; font-size: 11px; }
-.alert-msg { color: #333; }
-.alert-item.error .alert-msg { color: #c62828; }
-.alert-item.warning .alert-msg { color: #e65100; }
-
-.agent-input-section {
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 8px;
-  padding: 12px;
-}
-
-.input-label {
-  font-size: 13px;
-  margin-bottom: 8px;
-  font-weight: 500;
-}
-
-.input-row {
-  display: flex;
-  gap: 8px;
-}
-
-.agent-input {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 6px;
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-}
-
-.agent-input:focus {
-  border-color: var(--color-primary, #4a9eff);
-}
-
-.btn-send {
-  padding: 8px 20px;
-  background: var(--color-primary, #4a9eff);
-  color: white;
-  border: none;
-  border-radius: 6px;
+.toggle-slider {
+  position: absolute;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-primary);
+  border-radius: 20px;
+  transition: 0.2s;
 }
 
-.btn-send:disabled {
+.toggle-slider:before {
+  position: absolute;
+  content: '';
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: 0.2s;
+}
+
+.toggle input:checked + .toggle-slider {
+  background: var(--color-success, #22c55e);
+}
+
+.toggle input:checked + .toggle-slider:before {
+  transform: translateX(16px);
+}
+
+.card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.card-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-skill {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.form-input,
+.form-textarea {
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.form-input::placeholder,
+.form-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--color-accent, #6366f1);
+}
+
+.form-textarea {
+  resize: vertical;
+}
+
+.btn-secondary {
+  padding: 8px 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-primary);
+}
+
+.btn-secondary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.btn-primary {
+  padding: 10px 20px;
+  background: var(--color-accent, #6366f1);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  align-self: flex-start;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.status-bar {
+  height: 24px;
+  font-size: 13px;
+}
+
+.status-ok {
+  color: var(--color-success, #22c55e);
+}
+
+.status-err {
+  color: var(--color-error, #ef4444);
 }
 </style>

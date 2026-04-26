@@ -1,88 +1,85 @@
-"""SSE Connection Manager for Hermès Bridge Service"""
+"""SSE Connection Manager for Hermès Bridge Service — queue-based broadcast."""
 
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from fastapi import Request
-from sse_starlette.sse import EventSourceResponse
+from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 import asyncio
 import json
 from datetime import datetime
 
+
 class SSEManager:
-    """Manages all SSE connections and provides broadcast functionality"""
+    """Manages SSE connections via per-client queues and provides broadcast."""
 
     def __init__(self):
-        self.connections: Dict[str, Dict] = {}
+        # client_id -> asyncio.Queue of ServerSentEvent
+        self._queues: Dict[str, asyncio.Queue] = {}
 
     async def connect(self, client_id: str, request: Request) -> str:
-        """Register a new SSE connection"""
-        self.connections[client_id] = {
-            "request": request,
-            "connected_at": datetime.now().isoformat(),
-            "last_activity": datetime.now().isoformat()
-        }
+        """Register a new SSE connection — create a queue for this client."""
+        queue: asyncio.Queue[ServerSentEvent] = asyncio.Queue()
+        self._queues[client_id] = queue
         return client_id
 
-    def disconnect(self, client_id: str):
-        """Remove a SSE connection"""
-        if client_id in self.connections:
-            del self.connections[client_id]
-
-    def update_activity(self, client_id: str):
-        """Update last activity timestamp for a client"""
-        if client_id in self.connections:
-            self.connections[client_id]["last_activity"] = datetime.now().isoformat()
-
-    async def broadcast(self, event_type: str, data: dict):
-        """Broadcast an event to all connected clients"""
-        if not self.connections:
+    async def event_generator(self, client_id: str):
+        """Yield events from this client's queue. Blocks until queue is closed."""
+        queue = self._queues.get(client_id)
+        if not queue:
             return
 
-        disconnected_clients = []
-
-        # Send to all clients concurrently
-        tasks = [self._send_to_client(client_id, event_type, data) for client_id in list(self.connections.keys())]
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Cleanup disconnected clients
-        for client_id in disconnected_clients:
-            self.disconnect(client_id)
-
-    async def _send_to_client(self, client_id: str, event_type: str, data: dict):
-        """Send an event to a specific client"""
-        conn_info = self.connections.get(client_id)
-        if not conn_info:
-            return False
-
         try:
-            await conn_info["request"].send({
-                "event": event_type,
-                "data": json.dumps(data)
-            })
-            self.update_activity(client_id)
-            return True
-        except Exception as e:
-            print(f"Error sending to client {client_id}: {e}")
+            while True:
+                event = await queue.get()
+                if event is None:  # Sentinel to signal disconnect
+                    break
+                yield event
+        finally:
             self.disconnect(client_id)
-            return False
+
+    def disconnect(self, client_id: str):
+        """Remove a SSE connection and its queue."""
+        if client_id in self._queues:
+            del self._queues[client_id]
+
+    def disconnect_sync(self, client_id: str):
+        """Synchronous disconnect (for use from non-async contexts)."""
+        if client_id in self._queues:
+            del self._queues[client_id]
+
+    async def broadcast(self, event_type: str, data: dict):
+        """Broadcast an event to all connected clients by pushing to their queues."""
+        if not self._queues:
+            print(f"[SSEManager.broadcast] event_type={event_type}, connections=0 — no clients")
+            return
+
+        print(f"[SSEManager.broadcast] event_type={event_type}, connections={len(self._queues)}")
+        disconnected = []
+
+        for client_id, queue in list(self._queues.items()):
+            try:
+                queue.put_nowait(ServerSentEvent(
+                    event=event_type,
+                    data=json.dumps(data, ensure_ascii=False, default=str),
+                ))
+            except asyncio.QueueFull:
+                print(f"[SSEManager.broadcast] Queue full for {client_id}, marking disconnected")
+                disconnected.append(client_id)
+            except Exception as e:
+                print(f"[SSEManager.broadcast] Error for {client_id}: {e}")
+                disconnected.append(client_id)
+
+        for client_id in disconnected:
+            self.disconnect(client_id)
 
     def get_connection_count(self) -> int:
-        """Get number of active connections"""
-        return len(self.connections)
+        return len(self._queues)
 
-    def get_connection_info(self, client_id: str) -> Optional[Dict]:
-        """Get information about a specific connection"""
-        return self.connections.get(client_id)
+    def get_connection_info(self, client_id: str):
+        return {"client_id": client_id} if client_id in self._queues else None
 
-    def get_all_connections(self) -> List[Dict]:
-        """Get information about all connections"""
-        return [
-            {"client_id": cid, **info}
-            for cid, info in self.connections.items()
-        ]
+    def get_all_connections(self):
+        return [{"client_id": cid} for cid in self._queues]
 
-    def _format_sse_message(self, event_type: str, data: dict) -> str:
-        """Format data as SSE message"""
-        return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
 
 # Global SSE manager instance
 sse_manager = SSEManager()

@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any
 from fastapi import FastAPI, Request, Query, HTTPException, WebSocket, WebSocketDisconnect, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sse_starlette.sse import EventSourceResponse
+from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -178,9 +178,7 @@ async def lifespan(app: FastAPI):
 
     # Start agent orchestrator
     _agent_orchestrator = AgentOrchestrator(
-        sse_broadcaster=lambda et, d: asyncio.create_task(
-            sse_manager.broadcast(et, d)
-        )
+        sse_broadcaster=lambda et, d: sse_manager.broadcast(et, d)
     )
     await _agent_orchestrator.start()
 
@@ -241,39 +239,54 @@ async def sse_endpoint(request: Request):
     client_id = str(uuid.uuid4())
 
     async def event_generator():
-        # Register connection
+        # Register connection — creates a queue for this client
         await sse_manager.connect(client_id, request)
+        queue = sse_manager._queues[client_id]
+        heartbeat_count = 0
 
         try:
             # Send initial connection event
-            yield {
-                "event": "connected",
-                "data": json.dumps({
+            yield ServerSentEvent(
+                event="connected",
+                data=json.dumps({
                     "client_id": client_id,
                     "message": "Connected to Hermès Bridge Service",
                     "hermes_api": HERMES_API_BASE,
                     "timestamp": datetime.now().isoformat()
                 })
-            }
+            )
 
-            # Keep connection alive and handle client disconnect
+            # Keep connection alive and yield events from the queue
             while True:
                 # Check if client disconnected
                 if await request.is_disconnected():
                     break
 
-                # Send heartbeat to keep connection alive
-                await asyncio.sleep(settings.heartbeat_interval)
-                yield {
-                    "event": "heartbeat",
-                    "data": json.dumps({
-                        "status": "alive",
-                        "timestamp": datetime.now().isoformat()
-                    })
-                }
+                # Wait for event from queue OR timeout for heartbeat
+                try:
+                    event = await asyncio.wait_for(
+                        queue.get(),
+                        timeout=settings.heartbeat_interval
+                    )
+                    if event is None:  # Sentinel
+                        break
+                    yield event
+                except asyncio.TimeoutError:
+                    # Send heartbeat
+                    yield ServerSentEvent(
+                        event="heartbeat",
+                        data=json.dumps({
+                            "status": "alive",
+                            "timestamp": datetime.now().isoformat()
+                        })
+                    )
 
         finally:
-            # Cleanup on disconnect
+            # Cleanup on disconnect — push sentinel to unblock queue.get()
+            try:
+                queue.put_nowait(None)
+            except asyncio.QueueFull:
+                pass
             sse_manager.disconnect(client_id)
 
     return EventSourceResponse(event_generator())
@@ -596,53 +609,133 @@ async def broadcast_task_update(task_id: str):
 
 @app.websocket("/ws/terminal")
 async def terminal_websocket(websocket: WebSocket):
-    """WebSocket endpoint for terminal emulation - executes commands locally"""
+    """WebSocket endpoint for terminal emulation using PTY.
+
+    Provides a full pseudo-terminal (PTY) experience — identical to a real
+    local terminal. All interactive TTY programs work: hermes, vim, top, etc.
+
+    Uses loop.add_reader() so PTY I/O is fully event-loop-driven (no threads).
+    """
+    import pty
+    import select as _select
+    import fcntl
+    import struct
+    import termios
+    import signal
+
     await websocket.accept()
-    
-    try:
-        # Send welcome message
-        await websocket.send_text("\r\n\x1b[36mHermès Terminal\x1b[0m - 终端已连接\r\n")
-        await websocket.send_text("输入命令与 Hermès Agent 交互...\r\n\r\n$ ")
-        
-        while True:
-            # Receive command from client
-            data = await websocket.receive_text()
-            
-            # Handle special commands
-            if data.strip() == "exit":
-                await websocket.send_text("\r\n\x1b[33m再见!\x1b[0m\r\n")
-                break
-            
-            # Execute command locally
-            try:
-                process = await asyncio.create_subprocess_shell(
-                    data,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
-                    cwd=os.path.expanduser("~")
-                )
-                stdout, _ = await process.communicate()
-                output = stdout.decode("utf-8", errors="replace") if stdout else ""
-                
-                if output:
-                    # Format output for terminal
-                    formatted = output.replace("\n", "\r\n")
-                    await websocket.send_text(formatted)
-                else:
-                    await websocket.send_text("\r\n")
-                    
-                await websocket.send_text("$ ")
-                
-            except Exception as e:
-                await websocket.send_text(f"\r\n\x1b[31mError: {str(e)}\x1b[0m\r\n$ ")
-                
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:
+    print(f"[TERMINAL] PTY WebSocket accepted", flush=True)
+
+    # pty.fork() creates both master and slave, makes slave the controlling
+    # terminal of the child, returns (pid, master_fd) to the parent.
+    pid, master_fd = pty.fork()
+    print(f"[TERMINAL] pty.fork() -> pid={pid}, master_fd={master_fd}", flush=True)
+
+    if pid == 0:
+        # Child: exec bash. --noprofile --norc avoids slow shell config.
+        # -i makes it interactive so prompt/tab-completion work.
+        os.execvp("bash", ["bash", "--noprofile", "--norc", "-i"])
+        os._exit(1)  # never reached
+
+    # ---- Event-loop-driven PTY reading (no threads) ----
+    # Use loop.add_reader() to register master_fd with the asyncio event loop.
+    # When master_fd is readable, the callback fires — zero polling, zero threads.
+    loop = asyncio.get_running_loop()
+    pending_tasks: list = []
+
+    async def send_pty_output():
+        """Called by loop.add_reader when master_fd is readable."""
         try:
-            await websocket.send_text(f"\r\n\x1b[31mConnection error: {str(e)}\x1b[0m\r\n")
-        except:
+            r, _, _ = _select.select([master_fd], [], [], 0.05)
+        except Exception:
+            return
+        if not r:
+            return
+        try:
+            data = os.read(master_fd, 4096)
+        except OSError:
+            return
+        if not data:
+            # EOF — bash exited
+            try:
+                await websocket.send_text("\r\n\x1b[33m[进程已退出]\x1b[0m\r\n")
+            except Exception:
+                pass
+            # Schedule cleanup
+            asyncio.get_event_loop().call_soon(_cleanup)
+            return
+        try:
+            text = data.decode("utf-8", errors="replace")
+            await websocket.send_text(text)
+        except Exception:
             pass
+
+    def _on_master_readable():
+        """Synchronous callback from loop.add_reader — schedule async task."""
+        t = asyncio.create_task(send_pty_output())
+        pending_tasks.append(t)
+        t.add_done_callback(lambda t: _maybe_remove(t))
+
+    def _maybe_remove(t):
+        if t in pending_tasks:
+            pending_tasks.remove(t)
+
+    def _cleanup():
+        """Run cleanup in event loop to avoid race with pending tasks."""
+        try:
+            loop.remove_reader(master_fd)
+        except Exception:
+            pass
+        try:
+            os.close(master_fd)
+        except Exception:
+            pass
+        try:
+            os.kill(pid, signal.SIGTERM)
+            os.waitpid(pid, os.WNOHANG)
+        except Exception:
+            pass
+        print("[TERMINAL] PTY session cleaned up", flush=True)
+
+    # Register master_fd with the asyncio event loop
+    loop.add_reader(master_fd, _on_master_readable)
+
+    try:
+        while True:
+            try:
+                data = await websocket.receive_text()
+            except Exception:
+                break
+
+            # Handle window resize: JSON {"type":"resize","cols":80,"rows":24}
+            if data.startswith("{"):
+                import json as _json
+                try:
+                    msg = _json.loads(data)
+                    if msg.get("type") == "resize":
+                        cols = msg.get("cols", 80)
+                        rows = msg.get("rows", 24)
+                        winsize = struct.pack("HHHH", rows, cols, 0, 0)
+                        fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+                        print(f"[TERMINAL] Resize to {cols}x{rows}", flush=True)
+                        continue
+                except Exception:
+                    pass
+
+            # Forward keystrokes to PTY master
+            cmd = data.encode("utf-8", errors="replace")
+            try:
+                os.write(master_fd, cmd)
+            except OSError as e:
+                print(f"[TERMINAL] write error: {e}", flush=True)
+                break
+
+    except WebSocketDisconnect:
+        print("[TERMINAL] Client disconnected", flush=True)
+    except Exception as e:
+        print(f"[TERMINAL] error: {e}", flush=True)
+    finally:
+        _cleanup()
 
 
 # ============================================================================
@@ -677,37 +770,50 @@ async def invoke_agent(message: dict):
 
 @app.get("/api/agents/events")
 async def agent_events_sse(request: Request):
-    """SSE stream for agent events - same channel as main SSE but filtered for agent events."""
+    """SSE stream for agent events."""
 
     async def agent_event_generator():
         client_id = str(uuid.uuid4())
         await sse_manager.connect(client_id, request)
+        queue = sse_manager._queues[client_id]
 
-        # Yield initial event
-        yield {
-            "event": "agent_stream_start",
-            "data": json.dumps({
-                "client_id": client_id,
-                "timestamp": datetime.now().isoformat(),
-            })
-        }
-
-        # Track which events this client has seen (simple approach: just pass through)
-        # The SSE manager will push agent_* and hermes_alert events automatically
-        # since we registered with the same sse_manager
         try:
+            # Yield initial event
+            yield ServerSentEvent(
+                event="agent_stream_start",
+                data=json.dumps({
+                    "client_id": client_id,
+                    "timestamp": datetime.now().isoformat(),
+                })
+            )
+
+            # Keep connection alive and yield events from the queue
             while True:
                 if await request.is_disconnected():
                     break
-                await asyncio.sleep(settings.heartbeat_interval)
-                yield {
-                    "event": "heartbeat",
-                    "data": json.dumps({
-                        "status": "alive",
-                        "timestamp": datetime.now().isoformat(),
-                    })
-                }
+                try:
+                    event = await asyncio.wait_for(
+                        queue.get(),
+                        timeout=settings.heartbeat_interval
+                    )
+                    if event is None:
+                        break
+                    yield event
+                except asyncio.TimeoutError:
+                    yield ServerSentEvent(
+                        event="heartbeat",
+                        data=json.dumps({
+                            "status": "alive",
+                            "timestamp": datetime.now().isoformat(),
+                        })
+                    )
         finally:
+            queue = sse_manager._queues.get(client_id)
+            if queue:
+                try:
+                    queue.put_nowait(None)
+                except asyncio.QueueFull:
+                    pass
             sse_manager.disconnect(client_id)
 
     return EventSourceResponse(agent_event_generator())

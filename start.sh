@@ -30,6 +30,10 @@ fi
 echo -e "\n${YELLOW}[2/3] 启动后端服务 (port 8000)...${NC}"
 cd "$SCRIPT_DIR/backend"
 
+# 激活 Python 3.10 环境
+source ~/opt/anaconda3/etc/profile.d/conda.sh
+conda activate hermes310
+
 # 检查后端依赖
 if ! pip show fastapi > /dev/null 2>&1; then
     echo -e "${YELLOW}  安装后端依赖...${NC}"
@@ -37,7 +41,7 @@ if ! pip show fastapi > /dev/null 2>&1; then
 fi
 
 # 启动后端 (后台运行)
-uvicorn main:app --host 0.0.0.0 --port 8000 &
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 echo $BACKEND_PID > "$SCRIPT_DIR/.backend.pid"
 echo -e "${GREEN}✓ 后端已启动 (PID: $BACKEND_PID)${NC}"

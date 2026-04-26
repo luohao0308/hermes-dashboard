@@ -634,7 +634,6 @@ async def _create_pty_session(session_id: str):
         "master_fd": master_fd,
         "alive": True,
         "is_attached": False,
-        "lock": asyncio.Lock(),
     }
     _terminal_sessions[session_id] = session
     return session

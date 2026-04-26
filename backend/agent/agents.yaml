@@ -2,32 +2,54 @@ agents:
   developer:
     description: 编写和调试代码，实现功能
     enabled: true
+    handoffs:
+    - Reviewer
+    - Tester
+    - Dispatcher
     instructions: 你是一个专业开发者。编写高质量代码，进行调试和优化。
     name: Developer
   devops:
     description: 自动化部署、CI/CD、基础设施管理
     enabled: true
+    handoffs:
+    - Developer
+    - Dispatcher
     instructions: 你是一个专业 DevOps 工程师。负责自动化部署和基础设施管理。
     name: DevOps
   dispatcher:
     description: 分发任务到合适的 Agent
     enabled: true
-    instructions: 你是一个任务分发员。理解用户需求后，决定调用哪个专业 Agent。
+    handoffs:
+    - Developer
+    - DevOps
+    - Researcher
+    - Reviewer
+    - Tester
+    instructions: 你是一个任务分发员。理解用户需求后，决定调用哪个专业 Agent。收到用户请求后，分析意图并使用 handoff 切换到最合适的
+      Agent。
     name: Dispatcher
   researcher:
     description: 深入研究问题，搜索信息，分析数据
     enabled: true
+    handoffs:
+    - Dispatcher
     instructions: 你是一个专业研究员。使用搜索工具深入分析问题，提供结构化的研究报告。
     name: Researcher
   reviewer:
     description: 审查代码质量，发现问题，给出改进建议
     enabled: true
+    handoffs:
+    - Developer
+    - Dispatcher
     instructions: 你是一个专业代码审查员。审查代码质量、安全性和可维护性。
     name: Reviewer
   tester:
     description: 编写测试用例，验证功能正确性
     enabled: true
+    handoffs:
+    - Developer
+    - Dispatcher
     instructions: 你是一个专业测试工程师。设计测试用例，验证功能正确性。
     name: Tester
 custom_agents: []
-main_agent: dispatcher
+main_agent: developer

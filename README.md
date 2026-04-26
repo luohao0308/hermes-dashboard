@@ -83,7 +83,10 @@ main (保护分支)
 ├── feature/ui-optimization (Phase 3.2)
 ├── feature/ui-minimalist (Phase 3.3)
 ├── feature/sidebar-terminal (Phase 4)
-└── fix/terminal-persistence (Phase 5)
+├── fix/terminal-persistence (Phase 5)
+├── feature/phase-6-ci-cd-security (Phase 6)
+├── bugfix/agent-sse-push (Phase 7)
+└── feature/phase8-agent-config (Phase 8)
 ```
 
 ### 工作流程 (每步骤)
@@ -250,6 +253,51 @@ main (保护分支)
 
 #### Task 6.4: 发布检查清单 ✅
 - `docs/CHECKLIST.md`: 完整的发布前检查清单（代码质量、安全、性能、基础设施、文档）
+
+## Phase 7: Agent SSE 推送修复 + E2E测试 + Docker部署 ✅ (2026-04-26)
+
+- **分支**: `bugfix/agent-sse-push` (已合并，PR #12)
+- **PR**: https://github.com/luohao0308/hermes-dashboard/pull/12
+
+#### Task 7.1: Agent SSE 事件不推送 ✅
+- **根因1**: `Runner.run_streamed` 的 async-for 循环内调用 `queue.put_nowait()` 会死锁 → 用 `asyncio.Queue` 解耦，broadcast 在独立 Task 中运行
+- **根因2**: MiniMax Responses API 的 `ResponseTextDeltaEvent` 使用 `.delta` 属性而非 `.text` → 修复 `_classify_event` 中的事件类型判断
+
+#### Task 7.2: E2E 测试 (Playwright) ✅
+- 新增 `tests/e2e/` 目录，6 个端到端测试覆盖 Dashboard、Terminal、Agent 页面
+- 配置 `playwright.config.ts`，使用 chromium headless
+
+#### Task 7.3: Docker 生产部署 ✅
+- `Dockerfile` (多阶段构建: backend + frontend)
+- `docker-compose.yml` (hermes-bridge + hermes-free-frontend)
+- `nginx.conf` (SPA 路由 + API 代理 + SSE 超时 86400s)
+
+## Phase 8: 多 Agent 配置系统 ✅ (2026-04-26)
+
+- **分支**: `feature/phase8-agent-config` (已合并，PR #16)
+- **PR**: https://github.com/luohao0308/hermes-dashboard/pull/16
+
+#### Task 8.1: 后端 Agent 配置架构 ✅
+- `backend/agent/agents.yaml`: 6 个预置 Agent（dispatcher/researcher/developer/reviewer/tester/devops）
+- `backend/agent/config_loader.py`: YAML 配置读写，支持热重载 + 默认配置生成
+- `backend/agent/agent_manager.py`: 动态组装 Agent、单例注册表、热重载
+- `backend/agent/models.py`: 新增 `AgentRole` enum（DISPATCHER/RESEARCHER/DEVELOPER/REVIEWER/TESTER/DEVOPS）
+- `backend/agent/orchestrator.py`: 重构为从 agent_manager 加载 Agent，移除硬编码 boot
+- `backend/main.py`: 新增 5 个 REST 端点 (`/api/agent/config/*`)
+
+#### Task 8.2: 前端 Agent 配置面板 ✅
+- `frontend/src/components/AgentPanel.vue`: 配置面板（Agent 卡片 toggle、新建自定义 Agent 表单、主 Agent 下拉选择）
+- 支持持久化配置到 YAML，UI 实时同步
+
+#### Task 8.3: OpenAI Agents SDK 集成 ✅
+- 选定 Agent 从已有 skills 映射（planning-and-task-breakdown/dispatcher、deep-research/researcher、incremental-implementation/developer、code-review-and-quality/reviewer、test-driven-development/tester、ci-cd-and-automation/devops）
+- Agent → Skill 一对一绑定，Handoff 路由由 SDK 内置机制处理
+
+#### Bug Fix: Review 发现并修复 ✅
+- Critical: `_monitor_loop` 永远不执行（在 `_run_broadcaster` while 循环内部）→ 移到 `start()` 与 broadcaster 并行
+- Critical: `_broadcast_task` 未在 `__init__` 声明，stop() 无法取消 → 声明为 `Optional[asyncio.Task]`
+- Bug: `saveConfig()` 只发 main_agent，toggle 状态被丢弃 → 添加 `Promise.all` 并发发所有请求
+- Bug: `custom_agents` 未在 UI 显示 → `fetchConfig` 中加入 `...customAgents.map(...)`
 
 ## GitHub 操作指南
 
@@ -426,7 +474,7 @@ npm run build
 ---
 
 *计划生成时间：2026-04-25 20:07*
-*最后更新：2026-04-26 02:15（Phase 5 完成 - 日志修复 + Terminal持久化）*
+*最后更新：2026-04-26（Phase 5 完成 - 日志修复 + Terminal持久化 + Phase 6-8 补充）*
 
 ## Notion 集成
 

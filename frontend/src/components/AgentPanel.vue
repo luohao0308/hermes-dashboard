@@ -178,7 +178,7 @@ function connectAgentSSE() {
     agentEventSource.value.close()
   }
 
-  agentEventSource.value = new EventSource(`${API_BASE}/sse`)
+  agentEventSource.value = new EventSource(`${API_BASE}/api/agents/events`)
 
   agentEventSource.value.addEventListener('agent_created', (e: MessageEvent) => {
     const data = JSON.parse(e.data)

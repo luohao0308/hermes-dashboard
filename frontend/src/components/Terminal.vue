@@ -21,7 +21,7 @@ let term: XTerm | null = null
 let fitAddon: FitAddon | null = null
 let ws: WebSocket | null = null
 
-const WS_URL = `ws://${window.location.hostname}:8000/ws/terminal`
+const WS_URL = `ws://localhost:8000/ws/terminal`
 
 function initTerminal() {
   if (!terminalRef.value) return
@@ -30,14 +30,14 @@ function initTerminal() {
     cursorBlink: true,
     fontSize: 13,
     fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+    allowTransparency: true,
     theme: {
       background: '#1e1e1e',
       foreground: '#d4d4d4',
       cursor: '#d4d4d4',
       selectionBackground: '#264f78'
     },
-    rows: 24,
-    cols: 80
+    rows: 24
   })
 
   fitAddon = new FitAddon()
@@ -78,11 +78,13 @@ function connectWebSocket() {
       term?.writeln('\x1b[31m✗ WebSocket 连接错误\x1b[0m')
     }
 
-    // Send user input to server
+    // Send user input to server — raw mode: forward raw keystrokes.
+    // Cooked echo is done by the PTY (bash), not locally.
     term?.onData((data) => {
-      if (ws?.readyState === WebSocket.OPEN) {
-        ws.send(data)
-      }
+      if (ws?.readyState !== WebSocket.OPEN) return
+      // xterm.js sends \r\n on Enter in cooked mode; PTY needs only \r
+      const payload = data === '\r\n' ? '\r' : data
+      ws.send(payload)
     })
   } catch (err) {
     term?.writeln(`\x1b[31m✗ 连接失败: ${err}\x1b[0m`)
@@ -162,5 +164,57 @@ onUnmounted(() => {
 
 .terminal-body :deep(.xterm-viewport) {
   overflow-y: auto;
+}
+
+.terminal-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #252526;
+  border-top: 1px solid #3c3c3c;
+}
+
+.terminal-prompt {
+  color: #d4d4d4;
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.terminal-input {
+  flex: 1;
+  background: #3c3c3c;
+  color: #d4d4d4;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  outline: none;
+}
+
+.terminal-input:focus {
+  border-color: #007acc;
+  outline: none;
+}
+
+.terminal-input::placeholder {
+  color: #6e6e6e;
+}
+
+.terminal-send-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  background: #007acc;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.terminal-send-btn:hover {
+  background: #0098ff;
 }
 </style>

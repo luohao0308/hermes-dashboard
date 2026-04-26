@@ -392,6 +392,8 @@ function parseLogLine(line: string): Log | null {
 
 function handleSSEMessage(event: MessageEvent) {
   try {
+    if (typeof event.data !== 'string') return
+    if (!event.data || event.data === 'undefined') return
     const data = JSON.parse(event.data)
     const eventType = event.type
 

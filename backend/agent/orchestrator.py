@@ -28,6 +28,8 @@ class AgentOrchestrator:
         self._running_tasks: dict[str, asyncio.Task] = {}
         self._monitor_task: Optional[asyncio.Task] = None
         self._started = False
+        # Queue decouples SSE broadcast from Runner.run_streamed async-for loop
+        self._event_queue: asyncio.Queue = asyncio.Queue()
 
     # -------------------------------------------------------------------------
     # Lifecycle
@@ -39,9 +41,41 @@ class AgentOrchestrator:
             return
         self._started = True
 
-        # Boot triage agent (others boot lazily)
+        # Boot all system agents (others boot lazily on first invoke)
         triage = get_triage_agent()
         await self._register_agent(triage, AgentRole.TRIAGE)
+
+        # Monitor agent (starts background polling loop)
+        from .agents.monitor import get_monitor_agent
+        monitor = get_monitor_agent()
+        await self._register_agent(monitor, AgentRole.MONITOR)
+
+        # Analyst agent (idle until invoked)
+        from .agents.analyst import get_analyst_agent
+        analyst = get_analyst_agent()
+        await self._register_agent(analyst, AgentRole.ANALYST)
+
+        # Executor agent (idle until invoked)
+        from .agents.executor import get_executor_agent
+        executor = get_executor_agent()
+        await self._register_agent(executor, AgentRole.EXECUTOR)
+
+        # Start SSE event broadcaster (consumes _event_queue in the background)
+        self._broadcast_task = asyncio.create_task(self._run_broadcaster())
+
+    async def _run_broadcaster(self):
+        """Background task: drain the event queue and broadcast to SSE."""
+        print(f"[Broadcaster] Started, queue size: {self._event_queue.qsize()}")
+        while True:
+            try:
+                event_type, data = await self._event_queue.get()
+                print(f"[Broadcaster] Got event: type={event_type}, data_keys={list(data.keys())}")
+                await self._broadcast(event_type, data)
+                print(f"[Broadcaster] Broadcast complete, connections={self._broadcast}")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"[Broadcaster] Error: {e}")
 
         # Start background monitor loop (polls Hermès every 30s)
         self._monitor_task = asyncio.create_task(self._monitor_loop())
@@ -151,7 +185,41 @@ class AgentOrchestrator:
     ):
         """Convert openai-agents stream event to SSE payload dict."""
         if hasattr(event, "type"):
-            if event.type == "run_item_stream_event":
+            if event.type == "raw_response_event":
+                # MiniMax Responses API — ResponseTextDeltaEvent has .delta attribute
+                try:
+                    chunk = event.data
+                    if hasattr(chunk, "delta") and chunk.delta:
+                        # ResponseTextDeltaEvent — delta is the text content
+                        delta = chunk.delta
+                        if isinstance(delta, str):
+                            text = delta
+                        elif hasattr(delta, "text"):
+                            text = delta.text
+                        else:
+                            text = str(delta)
+                        if text:
+                            return "agent_output", {
+                                "agent_id": agent_info.id,
+                                "agent_name": current_agent_name,
+                                "delta": text,
+                            }
+                    elif hasattr(chunk, "response") and chunk.response:
+                        # ResponseCreatedEvent — extract initial content if any
+                        resp = chunk.response
+                        if hasattr(resp, "output") and resp.output:
+                            output = resp.output
+                            if hasattr(output, "text") and output.text:
+                                return "agent_output", {
+                                    "agent_id": agent_info.id,
+                                    "agent_name": current_agent_name,
+                                    "delta": output.text,
+                                }
+                except Exception as e:
+                    pass
+                return None, None
+
+            elif event.type == "run_item_stream_event":
                 name = getattr(event, "name", None)
                 item = getattr(event, "item", None)
 
@@ -201,6 +269,7 @@ class AgentOrchestrator:
                     "message": f"Handoff to {new_name}",
                 }
 
+        print(f"[_classify_event] event_type={event.type if hasattr(event, 'type') else 'N/A'}, name={name if 'name' in dir() else 'N/A'}")
         return None, None
 
     # -------------------------------------------------------------------------
@@ -266,9 +335,14 @@ class AgentOrchestrator:
         return None
 
     async def _emit(self, event: AgentEvent):
-        """Broadcast an event via SSE."""
+        """Queue an event for broadcast — never blocks the stream iteration."""
         try:
-            self._broadcast(event.type, event.model_dump(exclude_none=True))
+            data = event.model_dump(exclude_none=True)
+            # Convert datetime to ISO string for JSON serialization
+            for k, v in data.items():
+                if hasattr(v, 'isoformat'):
+                    data[k] = v.isoformat()
+            self._event_queue.put_nowait((event.type, data))
         except Exception:
             pass
 

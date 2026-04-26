@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/ARCHITECTURE.md",
-                "mode": "preview",
+                "file": "README.md",
+                "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "ARCHITECTURE"
+              "title": "README"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "docs/ARCHITECTURE.md",
+                "file": "README.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "ARCHITECTURE 的反向链接列表"
+              "title": "README 的反向链接列表"
             }
           },
           {
@@ -113,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "docs/ARCHITECTURE.md",
+                "file": "README.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "ARCHITECTURE 的出链列表"
+              "title": "README 的出链列表"
             }
           },
           {
@@ -156,13 +156,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "docs/ARCHITECTURE.md",
+                "file": "README.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "ARCHITECTURE 的大纲"
+              "title": "README 的大纲"
             }
           }
         ]
@@ -183,48 +183,48 @@
       "bases:新建数据库": false
     }
   },
-  "active": "eca81886baed8f5b",
+  "active": "7d8f648db3f27e1d",
   "lastOpenFiles": [
-    "frontend/vite.config.ts.timestamp-1777138064408-464a46a1382bf.mjs",
-    "README.md",
-    "frontend/src/components/Terminal.vue",
-    "frontend/node_modules/@xterm/xterm/typings/xterm.d.ts",
-    "frontend/node_modules/@xterm/xterm/typings",
-    "frontend/node_modules/@xterm/xterm/src/vs/base/browser/ui/scrollbar/verticalScrollbar.ts",
-    "frontend/node_modules/@xterm/xterm/src/vs/base/browser/ui/scrollbar/scrollbarVisibilityController.ts",
-    "frontend/node_modules/@xterm/xterm/src/vs/base/browser/ui/scrollbar/scrollbarState.ts",
-    "frontend/node_modules/@xterm/xterm/src/vs/base/browser/ui/scrollbar/scrollbarArrow.ts",
-    "frontend/node_modules/@xterm/xterm/src/vs/base/browser/ui/scrollbar/scrollableElementOptions.ts",
-    "frontend/node_modules/@xterm/xterm/src/vs/base/browser/ui/scrollbar/scrollableElement.ts",
-    "frontend/node_modules/@xterm/xterm/src/vs/base/browser/ui/scrollbar/horizontalScrollbar.ts",
-    "frontend/node_modules/@xterm/xterm/README.md",
-    "frontend/node_modules/@xterm/addon-fit/README.md",
-    "欢迎.md",
-    "frontend/node_modules/js-beautify/README.md",
+    "tests/backend/__pycache__/test_terminal_sessions.cpython-39.pyc",
+    "tests/backend/__pycache__/test_terminal_sessions.cpython-310-pytest-9.0.3.pyc",
+    "tests/backend/__pycache__/__init__.cpython-310.pyc",
+    "tests/backend/__pycache__/test_terminal_sessions.cpython-39-pytest-7.1.1.pyc",
+    "tests/backend/test_terminal_sessions.py",
+    "frontend/vite.config.ts.timestamp-1777195216783-d7b902213dbcb.mjs",
+    "frontend/dist/index.html",
+    "frontend/dist/assets/xterm-3VOAfa_q.js",
+    "frontend/dist/assets/naive-ui-BufnbbI-.js",
+    "frontend/dist/assets/index-puzWBGVi.js",
+    "frontend/dist/assets/index-CYUS1q1E.css",
+    "docs/PHASE7_PLAN.md",
+    "docs/AGENTS_INTEGRATION_PLAN.md",
+    "docs/CHECKLIST.md",
+    "frontend/node_modules/web-vitals/README.md",
+    "frontend/node_modules/eslint/node_modules/@eslint/js/README.md",
+    "frontend/node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch/README.md",
+    "frontend/node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch/LICENSE.md",
+    "frontend/node_modules/@typescript-eslint/typescript-estree/node_modules/brace-expansion/README.md",
+    "frontend/node_modules/@typescript-eslint/typescript-estree/node_modules/balanced-match/README.md",
+    "frontend/node_modules/@typescript-eslint/typescript-estree/node_modules/balanced-match/LICENSE.md",
+    "frontend/node_modules/@typescript-eslint/eslint-plugin/node_modules/ignore/README.md",
+    "frontend/node_modules/@typescript-eslint/visitor-keys/README.md",
+    "frontend/node_modules/@typescript-eslint/utils/README.md",
+    "frontend/node_modules/@typescript-eslint/typescript-estree/README.md",
+    "frontend/node_modules/@typescript-eslint/types/README.md",
+    "frontend/node_modules/@typescript-eslint/type-utils/README.md",
+    "frontend/node_modules/@typescript-eslint/tsconfig-utils/README.md",
+    "frontend/node_modules/@typescript-eslint/scope-manager/README.md",
+    "frontend/node_modules/@typescript-eslint/project-service/README.md",
+    "frontend/node_modules/@typescript-eslint/parser/README.md",
+    "frontend/node_modules/@typescript-eslint/eslint-plugin/README.md",
+    "frontend/node_modules/ts-api-utils/README.md",
+    "frontend/node_modules/ts-api-utils/LICENSE.md",
+    "frontend/node_modules/typescript-eslint/README.md",
+    "frontend/node_modules/eslint/node_modules/eslint-visitor-keys/README.md",
     "frontend/node_modules/playwright-core/lib/vite/traceViewer/playwright-logo.svg",
     "frontend/node_modules/playwright-core/lib/vite/recorder/playwright-logo.svg",
-    "frontend/node_modules/playwright-core/README.md",
-    "frontend/node_modules/playwright-core/lib/tools/cli-client/skill/references/video-recording.md",
-    "frontend/node_modules/playwright-core/lib/tools/cli-client/skill/references/tracing.md",
-    "frontend/node_modules/playwright-core/lib/tools/cli-client/skill/references/test-generation.md",
-    "frontend/node_modules/playwright-core/lib/tools/cli-client/skill/references/storage-state.md",
-    "frontend/node_modules/playwright-core/lib/tools/cli-client/skill/references/session-management.md",
-    "frontend/node_modules/playwright-core/lib/tools/cli-client/skill/references/running-code.md",
-    "frontend/node_modules/playwright-core/lib/tools/cli-client/skill/references/request-mocking.md",
-    "frontend/node_modules/playwright-core/lib/tools/cli-client/skill/references/playwright-tests.md",
-    "frontend/node_modules/playwright-core/lib/tools/cli-client/skill/references/element-attributes.md",
-    "frontend/node_modules/playwright-core/lib/tools/cli-client/skill/SKILL.md",
-    "frontend/node_modules/playwright-core/lib/tools/trace/SKILL.md",
     "frontend/node_modules/playwright-core/lib/tools/dashboard/appIcon.png",
     "frontend/node_modules/playwright-core/lib/server/chromium/appIcon.png",
-    "frontend/node_modules/playwright/node_modules/fsevents/README.md",
-    "frontend/node_modules/playwright/lib/agents/playwright-test-planner.agent.md",
-    "frontend/node_modules/playwright/lib/agents/playwright-test-plan.prompt.md",
-    "frontend/node_modules/playwright/lib/agents/playwright-test-healer.agent.md",
-    "frontend/node_modules/playwright/lib/agents/playwright-test-heal.prompt.md",
-    "frontend/node_modules/playwright/lib/agents/playwright-test-generator.agent.md",
-    "frontend/node_modules/playwright/lib/agents/playwright-test-generate.prompt.md",
-    "frontend/node_modules/playwright/lib/agents/playwright-test-coverage.prompt.md",
     "frontend/node_modules/date-fns/docs/logotype.svg",
     "frontend/node_modules/date-fns/docs/logo.svg",
     "frontend/node_modules/@css-render/vue3-ssr/coverage/lcov-report/sort-arrow-sprite.png",

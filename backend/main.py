@@ -25,6 +25,11 @@ from agent import AgentOrchestrator
 # Global agent orchestrator (started via lifespan)
 _agent_orchestrator: AgentOrchestrator | None = None
 
+# Terminal session store: session_id -> session dict
+# session dict: {pid, master_fd, alive, is_attached, pending_messages, lock, attach_count}
+_terminal_sessions: dict[str, dict] = {}
+_pty_lock = asyncio.Lock()
+
 # Hermès Agent Dashboard API base URL (override with HERMES_API_URL env var)
 HERMES_API_BASE = os.environ.get("HERMES_API_URL", "http://127.0.0.1:9119")
 
@@ -607,15 +612,8 @@ async def broadcast_task_update(task_id: str):
 # WebSocket Terminal Endpoint
 # ============================================================================
 
-@app.websocket("/ws/terminal")
-async def terminal_websocket(websocket: WebSocket):
-    """WebSocket endpoint for terminal emulation using PTY.
-
-    Provides a full pseudo-terminal (PTY) experience — identical to a real
-    local terminal. All interactive TTY programs work: hermes, vim, top, etc.
-
-    Uses loop.add_reader() so PTY I/O is fully event-loop-driven (no threads).
-    """
+async def _create_pty_session(session_id: str):
+    """Create a new PTY session and store it. Caller must hold _pty_lock."""
     import pty
     import select as _select
     import fcntl
@@ -623,23 +621,105 @@ async def terminal_websocket(websocket: WebSocket):
     import termios
     import signal
 
-    await websocket.accept()
-    print(f"[TERMINAL] PTY WebSocket accepted", flush=True)
-
-    # pty.fork() creates both master and slave, makes slave the controlling
-    # terminal of the child, returns (pid, master_fd) to the parent.
     pid, master_fd = pty.fork()
     print(f"[TERMINAL] pty.fork() -> pid={pid}, master_fd={master_fd}", flush=True)
 
     if pid == 0:
-        # Child: exec bash. --noprofile --norc avoids slow shell config.
-        # -i makes it interactive so prompt/tab-completion work.
+        # Child: exec bash
         os.execvp("bash", ["bash", "--noprofile", "--norc", "-i"])
-        os._exit(1)  # never reached
+        os._exit(1)
 
-    # ---- Event-loop-driven PTY reading (no threads) ----
-    # Use loop.add_reader() to register master_fd with the asyncio event loop.
-    # When master_fd is readable, the callback fires — zero polling, zero threads.
+    session = {
+        "pid": pid,
+        "master_fd": master_fd,
+        "alive": True,
+        "is_attached": False,
+        "lock": asyncio.Lock(),
+    }
+    _terminal_sessions[session_id] = session
+    return session
+
+
+def _close_pty_session(session: dict):
+    """Close PTY files and kill process. Called without lock."""
+    import signal
+    pid = session["pid"]
+    master_fd = session["master_fd"]
+    try:
+        import os as _os
+        _os.close(master_fd)
+    except Exception:
+        pass
+    try:
+        _os.kill(pid, signal.SIGTERM)
+        _os.waitpid(pid, 0)
+    except Exception:
+        pass
+
+
+async def _expire_session(session_id: str):
+    """Remove a session after it has been dead and detached. Runs async."""
+    await asyncio.sleep(30)
+    async with _pty_lock:
+        session = _terminal_sessions.get(session_id)
+        if session and not session["alive"] and not session["is_attached"]:
+            _close_pty_session(session)
+            del _terminal_sessions[session_id]
+            print(f"[TERMINAL] Session {session_id} expired and cleaned up", flush=True)
+
+
+@app.websocket("/ws/terminal")
+async def terminal_websocket(
+    websocket: WebSocket,
+    session_id: str | None = None,
+):
+    """WebSocket endpoint for terminal emulation using PTY.
+
+    Session routing:
+    - No session_id -> create new session (random UUID)
+    - Existing alive session -> reuse same PTY, send "✓ 会话已恢复"
+    - Existing dead session -> create new PTY (old one pending cleanup)
+
+    Disconnect does NOT kill PTY — session persists for reconnects.
+    EOF marks session as dead, PTY kept for 30s for potential reconnect.
+    """
+    import select as _select
+    import fcntl
+    import struct
+    import termios
+    import signal
+
+    await websocket.accept()
+
+    # Resolve or create session_id
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        print(f"[TERMINAL] No session_id, created: {session_id}", flush=True)
+    else:
+        print(f"[TERMINAL] Connecting with session_id: {session_id}", flush=True)
+
+    async with _pty_lock:
+        existing = _terminal_sessions.get(session_id)
+
+        if existing and existing["alive"]:
+            # Reuse existing PTY
+            session = existing
+            session["is_attached"] = True
+            session["attach_count"] = session.get("attach_count", 0) + 1
+            print(f"[TERMINAL] Reusing session {session_id}, pid={session['pid']}, "
+                  f"attach_count={session['attach_count']}", flush=True)
+            await websocket.send_text(f"[Session: {session_id}]\r\n")
+            await websocket.send_text("✓ 会话已恢复\r\n")
+        else:
+            # Create new session
+            session = await _create_pty_session(session_id)
+            session["is_attached"] = True
+            session["attach_count"] = 1
+            print(f"[TERMINAL] New session {session_id}, pid={session['pid']}", flush=True)
+            await websocket.send_text(f"[Session: {session_id}]\r\n")
+
+    master_fd = session["master_fd"]
+    pid = session["pid"]
     loop = asyncio.get_running_loop()
     pending_tasks: list = []
 
@@ -654,15 +734,22 @@ async def terminal_websocket(websocket: WebSocket):
         try:
             data = os.read(master_fd, 4096)
         except OSError:
+            # master_fd was closed (e.g. process died) — unregister ourselves
+            try:
+                loop.remove_reader(master_fd)
+            except Exception:
+                pass
             return
         if not data:
             # EOF — bash exited
+            async with _pty_lock:
+                session["alive"] = False
+                session["is_attached"] = False
             try:
                 await websocket.send_text("\r\n\x1b[33m[进程已退出]\x1b[0m\r\n")
             except Exception:
                 pass
-            # Schedule cleanup
-            asyncio.get_event_loop().call_soon(_cleanup)
+            asyncio.ensure_future(_expire_session(session_id))
             return
         try:
             text = data.decode("utf-8", errors="replace")
@@ -680,22 +767,20 @@ async def terminal_websocket(websocket: WebSocket):
         if t in pending_tasks:
             pending_tasks.remove(t)
 
-    def _cleanup():
-        """Run cleanup in event loop to avoid race with pending tasks."""
+    async def _detach():
+        """Detach client from session without killing PTY."""
         try:
             loop.remove_reader(master_fd)
         except Exception:
             pass
-        try:
-            os.close(master_fd)
-        except Exception:
-            pass
-        try:
-            os.kill(pid, signal.SIGTERM)
-            os.waitpid(pid, os.WNOHANG)
-        except Exception:
-            pass
-        print("[TERMINAL] PTY session cleaned up", flush=True)
+        async with _pty_lock:
+            session["is_attached"] = False
+            session["attach_count"] = max(0, session.get("attach_count", 1) - 1)
+            alive = session["alive"]
+        if not alive:
+            asyncio.ensure_future(_expire_session(session_id))
+        print(f"[TERMINAL] Client detached from session {session_id}, "
+              f"alive={alive}, attach_count={session.get('attach_count', 0)}", flush=True)
 
     # Register master_fd with the asyncio event loop
     loop.add_reader(master_fd, _on_master_readable)
@@ -709,9 +794,8 @@ async def terminal_websocket(websocket: WebSocket):
 
             # Handle window resize: JSON {"type":"resize","cols":80,"rows":24}
             if data.startswith("{"):
-                import json as _json
                 try:
-                    msg = _json.loads(data)
+                    msg = json.loads(data)
                     if msg.get("type") == "resize":
                         cols = msg.get("cols", 80)
                         rows = msg.get("rows", 24)
@@ -735,7 +819,7 @@ async def terminal_websocket(websocket: WebSocket):
     except Exception as e:
         print(f"[TERMINAL] error: {e}", flush=True)
     finally:
-        _cleanup()
+        await _detach()
 
 
 # ============================================================================

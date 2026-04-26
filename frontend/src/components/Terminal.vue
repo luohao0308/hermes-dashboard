@@ -21,7 +21,21 @@ let term: XTerm | null = null
 let fitAddon: FitAddon | null = null
 let ws: WebSocket | null = null
 
-const WS_URL = `ws://localhost:8000/ws/terminal`
+const SESSION_KEY = 'hermes_terminal_session_id'
+const BASE_WS_URL = `ws://localhost:8000/ws/terminal`
+
+function getSessionId(): string {
+  let sid = localStorage.getItem(SESSION_KEY)
+  if (!sid) {
+    sid = Math.random().toString(36).substring(2, 10)
+    localStorage.setItem(SESSION_KEY, sid)
+  }
+  return sid
+}
+
+function buildWsUrl(sid: string): string {
+  return `${BASE_WS_URL}?session_id=${sid}`
+}
 
 function initTerminal() {
   if (!terminalRef.value) return
@@ -48,17 +62,20 @@ function initTerminal() {
   term.writeln('\x1b[36mHermès Terminal\x1b[0m - 连接到终端...')
   connectWebSocket()
 
-  // Handle window resize
   window.addEventListener('resize', handleResize)
 }
 
 function connectWebSocket() {
   if (ws) {
     ws.close()
+    ws = null
   }
 
+  const sid = getSessionId()
+  const url = buildWsUrl(sid)
+
   try {
-    ws = new WebSocket(WS_URL)
+    ws = new WebSocket(url)
 
     ws.onopen = () => {
       term?.writeln('\x1b[32m✓\x1b[0m 已连接到终端')
@@ -66,7 +83,24 @@ function connectWebSocket() {
     }
 
     ws.onmessage = (event) => {
-      term?.write(event.data)
+      const data: string = event.data
+
+      // Server announces session id: [Session: abc123]
+      if (data.startsWith('[Session:')) {
+        const newSid = data.match(/\[Session: (\S+)\]/)?.[1]
+        if (newSid && newSid !== sid) {
+          localStorage.setItem(SESSION_KEY, newSid)
+        }
+        return // don't display the session announcement
+      }
+
+      // Reconnect confirmation message — display but don't treat as terminal output
+      if (data.includes('✓ 会话已恢复')) {
+        term?.writeln('\x1b[32m✓ 会话已恢复\x1b[0m')
+        return
+      }
+
+      term?.write(data)
     }
 
     ws.onclose = () => {
@@ -78,11 +112,10 @@ function connectWebSocket() {
       term?.writeln('\x1b[31m✗ WebSocket 连接错误\x1b[0m')
     }
 
-    // Send user input to server — raw mode: forward raw keystrokes.
-    // Cooked echo is done by the PTY (bash), not locally.
+    // Send user input to server — raw mode, PTY handles echo.
+    // Cooked mode \r\n from xterm.js Enter → send only \r to PTY.
     term?.onData((data) => {
       if (ws?.readyState !== WebSocket.OPEN) return
-      // xterm.js sends \r\n on Enter in cooked mode; PTY needs only \r
       const payload = data === '\r\n' ? '\r' : data
       ws.send(payload)
     })
@@ -100,14 +133,15 @@ function clearTerminal() {
 }
 
 onMounted(() => {
-  // Small delay to ensure DOM is ready
   setTimeout(initTerminal, 100)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
-  ws?.close()
+  // Don't close WebSocket — let session persist for reconnects
+  ws = null
   term?.dispose()
+  term = null
 })
 </script>
 

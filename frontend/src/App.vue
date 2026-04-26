@@ -14,7 +14,7 @@
       />
 
       <!-- 页面内容 -->
-      <main class="main-content">
+      <main class="main-content" :class="{ 'chat-active': currentNav === 'chat' }">
         <!-- Dashboard 概览页面 -->
         <template v-if="currentNav === 'dashboard'">
           <div class="overview-grid">
@@ -544,6 +544,8 @@ onUnmounted(() => {
   margin-left: var(--sidebar-width);
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .main-content {
@@ -552,6 +554,13 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  overflow: hidden;
+}
+
+/* When chat is active, remove padding/gap so agent-chat fills the space */
+.main-content.chat-active {
+  padding: 0;
+  gap: 0;
 }
 
 /* 概览网格 */

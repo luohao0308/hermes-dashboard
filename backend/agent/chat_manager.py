@@ -28,6 +28,23 @@ class ChatSession:
         self.lock = asyncio.Lock()
         self.created_at = datetime.now()
         self.is_running = False
+        self._run_task: Optional[asyncio.Task] = None
+
+    def set_task(self, task: asyncio.Task) -> None:
+        self._run_task = task
+
+    async def stop(self) -> bool:
+        """Cancel the running agent task and emit a stop event."""
+        if self._run_task and not self._run_task.done():
+            self._run_task.cancel()
+            try:
+                await self._run_task
+            except asyncio.CancelledError:
+                pass
+            self.is_running = False
+            self._run_task = None
+            return True
+        return False
 
 
 class ChatManager:
@@ -50,6 +67,20 @@ class ChatManager:
             del self._sessions[session_id]
             return True
         return False
+
+    def update_session_agent(self, session_id: str, agent_id: str) -> bool:
+        session = self._sessions.get(session_id)
+        if not session:
+            return False
+        session.agent_id = agent_id
+        return True
+
+    async def stop_session(self, session_id: str) -> bool:
+        """Stop a running session by cancelling its agent task."""
+        session = self._sessions.get(session_id)
+        if not session:
+            return False
+        return await session.stop()
 
     def list_sessions(self) -> list[dict]:
         return [

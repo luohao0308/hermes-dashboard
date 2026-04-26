@@ -232,7 +232,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "DELETE", "PATCH"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -1039,7 +1039,8 @@ async def send_chat_message(session_id: str, body: ChatMessageRequest):
     ))
 
     # Run agent in background and stream output to session queue
-    asyncio.create_task(_run_chat_agent(session, body.message))
+    task = asyncio.create_task(_run_chat_agent(session, body.message))
+    session.set_task(task)
 
     return {"ok": True, "session_id": session_id}
 
@@ -1050,11 +1051,11 @@ async def _run_chat_agent(session, message: str):
     from agents.stream_events import StreamEvent
 
     try:
-        # Get the configured main agent
-        cfg = load_config()
-        main_key = cfg.get("main_agent", "dispatcher")
+        # Get agent from session (may have been switched via PATCH)
         agents = _agent_registry.get_all_agents()
-        agent = agents.get(main_key, agents.get("dispatcher"))
+        # Case-insensitive lookup: registry keys are lowercase (developer, dispatcher, etc.)
+        print(f"[DEBUG] _run_chat_agent: session.agent_id={session.agent_id!r}, looking up {session.agent_id.lower()!r}")
+        agent = agents.get(session.agent_id.lower(), agents.get("dispatcher"))
 
         result = Runner.run_streamed(agent, message)
         current_agent_name = agent.name
@@ -1182,6 +1183,39 @@ async def delete_chat_session(session_id: str):
     if not chat_manager.close_session(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
     return {"ok": True}
+
+
+@app.patch("/api/agent/chat/{session_id}")
+async def patch_chat_session(session_id: str, body: dict | None = None):
+    """Update session agent_id."""
+    if body is None:
+        raise HTTPException(status_code=400, detail="body required")
+    agent_id = body.get("agent_id")
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="agent_id required")
+    ok = chat_manager.update_session_agent(session_id, agent_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"ok": True, "agent_id": agent_id}
+
+
+@app.post("/api/agent/chat/{session_id}/stop")
+async def stop_chat_session(session_id: str):
+    """Stop a running agent in a chat session."""
+    session = chat_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.is_running:
+        raise HTTPException(status_code=409, detail="No agent running in this session")
+    await session.queue.put(ServerSentEvent(
+        event="agent_stopped",
+        data=json.dumps({"message": "Agent stopped by user"}),
+    ))
+    stopped = await chat_manager.stop_session(session_id)
+    if not stopped:
+        raise HTTPException(status_code=500, detail="Failed to stop agent")
+    return {"ok": True}
+
 
 
 # ============================================================================

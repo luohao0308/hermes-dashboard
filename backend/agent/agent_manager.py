@@ -8,12 +8,13 @@ from .client import get_model
 from .config_loader import load_config, save_config, get_default_config
 
 
-def _build_agent(key: str, cfg: dict) -> Agent:
+def _build_agent(key: str, cfg: dict, handoffs: list[Agent] | None = None) -> Agent:
     """Build a single Agent from config dict."""
     return Agent(
         name=cfg.get("name", key),
         model=get_model(),
         instructions=cfg.get("instructions", f"You are {cfg.get('name', key)}."),
+        handoffs=handoffs or [],
     )
 
 
@@ -25,11 +26,17 @@ class _AgentRegistry:
     _loaded: bool = False
 
     def load(self) -> None:
-        """Load all agents from config YAML."""
+        """Load all agents from config YAML.
+
+        Two-pass build:
+        1. Create all agent instances (no handoffs yet — need all names first).
+        2. Wire up handoffs by reading each agent's `handoffs` config list.
+        """
         cfg = load_config()
         self._main_key = cfg.get("main_agent", "dispatcher")
         self._agents = {}
 
+        # Pass 1: create bare agents
         for key, agent_cfg in cfg.get("agents", {}).items():
             if agent_cfg.get("enabled", True):
                 self._agents[key] = _build_agent(key, agent_cfg)
@@ -40,7 +47,62 @@ class _AgentRegistry:
                     custom["name"], custom
                 )
 
+        # Pass 2: wire up handoffs using agent names
+        self._wire_handoffs(cfg)
+
         self._loaded = True
+
+    def _wire_handoffs(self, cfg) -> None:
+        """Resolve `handoffs` name lists to actual Agent objects."""
+        for key, agent_cfg in cfg.get("agents", {}).items():
+            if not agent_cfg.get("enabled", True):
+                continue
+            handoff_names = agent_cfg.get("handoffs", [])
+            if not handoff_names:
+                continue
+            agent = self._agents.get(key)
+            if not agent:
+                continue
+
+            wired = []
+            for name in handoff_names:
+                # Find target agent by name (not key)
+                target = self._find_agent_by_name(name)
+                if target:
+                    wired.append(handoff(target))
+                # else: name not in config — skip silently (custom agents etc.)
+
+            # Replace the bare agent with a new one that has handoffs
+            self._agents[key] = _build_agent(
+                key,
+                agent_cfg,
+                handoffs=wired,
+            )
+
+        # Also wire custom agents
+        for custom in cfg.get("custom_agents", []):
+            if not custom.get("enabled", True):
+                continue
+            handoff_names = custom.get("handoffs", [])
+            if not handoff_names:
+                continue
+            key = f"custom_{custom['name']}"
+            agent = self._agents.get(key)
+            if not agent:
+                continue
+            wired = []
+            for name in handoff_names:
+                target = self._find_agent_by_name(name)
+                if target:
+                    wired.append(handoff(target))
+            self._agents[key] = _build_agent(key, custom, handoffs=wired)
+
+    def _find_agent_by_name(self, name: str) -> Agent | None:
+        """Find an agent by its `name` field (not its config key)."""
+        for agent in self._agents.values():
+            if agent.name == name:
+                return agent
+        return None
 
     def get_main_agent(self) -> Agent:
         if not self._loaded:

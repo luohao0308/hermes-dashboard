@@ -39,8 +39,16 @@
       <template v-else>
         <!-- Chat header -->
         <div class="chat-header">
-          <div class="header-agent">
-            <span class="agent-badge">{{ currentAgentName }}</span>
+          <div class="header-left">
+            <select
+              v-if="availableAgents.length > 0"
+              class="agent-select"
+              :value="currentAgentName"
+              @change="switchAgent(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="agent in availableAgents" :key="agent" :value="agent">{{ AGENT_NAMES_CN[agent] || agent }}</option>
+            </select>
+            <span v-else class="agent-badge">{{ currentAgentName }}</span>
           </div>
           <div class="header-actions">
             <button class="btn-clear" @click="clearSession" title="清空对话">清空</button>
@@ -89,11 +97,20 @@
             @input="autoResize"
           ></textarea>
           <button
+            v-if="isThinking"
+            class="btn-stop"
+            @click="stopAgent"
+            title="停止"
+          >
+            ■
+          </button>
+          <button
+            v-else
             class="btn-send"
-            :disabled="!inputText.trim() || isThinking"
+            :disabled="!inputText.trim()"
             @click="sendMessage"
           >
-            {{ isThinking ? '...' : '发送' }}
+            发送
           </button>
         </div>
       </template>
@@ -122,6 +139,23 @@ interface ChatMessage {
   agent_name?: string
 }
 
+// Chinese display names for agents (used in UI)
+const AGENT_NAMES_CN: Record<string, string> = {
+  'Developer': '开发者',
+  'DevOps': '运维',
+  'Dispatcher': '调度员',
+  'Researcher': '研究员',
+  'Reviewer': '审查员',
+  'Tester': '测试员',
+}
+// Reverse map: CN -> EN (for switchAgent)
+const AGENT_NAMES_EN: Record<string, string> = Object.fromEntries(
+  Object.entries(AGENT_NAMES_CN).map(([en, cn]) => [cn, en])
+)
+
+// Ordered list of CN names
+const AGENT_ORDER_CN = ['调度员', '开发者', '运维', '研究员', '审查员', '测试员']
+
 // State
 const sessions = ref<ChatSession[]>([])
 const currentSessionId = ref<string | null>(null)
@@ -129,7 +163,8 @@ const messages = ref<ChatMessage[]>([])
 const inputText = ref('')
 const isThinking = ref(false)
 const messagesRef = ref<HTMLElement | null>(null)
-const currentAgentName = ref('Agent')
+const currentAgentName = ref('Dispatcher')
+const availableAgents = ref<string[]>([])
 let eventSource: EventSource | null = null
 
 // Computed
@@ -185,11 +220,59 @@ async function selectSession(sessionId: string) {
 
   const session = sessions.value.find(s => s.session_id === sessionId)
   if (session) {
-    currentAgentName.value = session.agent_id === 'main' ? 'Agent' : session.agent_id
+    currentAgentName.value = session.agent_id === 'main' ? 'Dispatcher' : session.agent_id
   }
 
   // Fetch history + open SSE stream
   await fetchHistoryAndStream(sessionId)
+  // Load available agents
+  fetchAgents()
+}
+
+async function fetchAgents() {
+  try {
+    const res = await fetch(`${API_BASE}/api/agents`)
+    const data = await res.json()
+    // Show Chinese names in sorted order
+    availableAgents.value = (data.agents || [])
+      .map((a: any) => a.name)
+      .filter((name: string) => AGENT_NAMES_CN[name])
+      .sort((a: string, b: string) => {
+        return AGENT_ORDER_CN.indexOf(AGENT_NAMES_CN[a]) - AGENT_ORDER_CN.indexOf(AGENT_NAMES_CN[b])
+      })
+  } catch (e) {
+    console.error('Failed to fetch agents:', e)
+  }
+}
+
+async function switchAgent(agentNameCN: string) {
+  if (!currentSessionId.value) return
+  // Translate CN name to EN for API
+  const agentNameEN = AGENT_NAMES_EN[agentNameCN] || agentNameCN
+  try {
+    // Stop any running agent first (PATCH fails with 409 if session is busy)
+    if (isThinking.value) {
+      await fetch(`${API_BASE}/api/agent/chat/${currentSessionId.value}/stop`, { method: 'POST' })
+      isThinking.value = false
+    }
+    const res = await fetch(`${API_BASE}/api/agent/chat/${currentSessionId.value}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: agentNameEN }),
+    })
+    if (res.ok) {
+      currentAgentName.value = agentNameEN
+      // Update local sessions list so selectSession uses the correct agent
+      const session = sessions.value.find(s => s.session_id === currentSessionId.value)
+      if (session) {
+        session.agent_id = agentNameEN
+      }
+    } else {
+      console.error('Switch agent failed:', res.status, await res.text())
+    }
+  } catch (e) {
+    console.error('Failed to switch agent:', e)
+  }
 }
 
 async function fetchHistoryAndStream(sessionId: string) {
@@ -303,6 +386,18 @@ async function fetchHistoryAndStream(sessionId: string) {
     }
   })
 
+  eventSource.addEventListener('agent_stopped', (e) => {
+    isThinking.value = false
+    try {
+      const data = JSON.parse(e.data)
+      messages.value.push({
+        role: 'system',
+        content: `⏹ 已停止${data.message ? ': ' + data.message : ''}`,
+      })
+      scrollToBottom()
+    } catch {}
+  })
+
   eventSource.onerror = () => {
     // SSE disconnected — will auto-reconnect by browser if needed
     // Only show error if we have no session
@@ -335,6 +430,17 @@ async function sendMessage() {
   } catch (e) {
     messages.value.push({ role: 'system', content: `❌ 网络错误` })
     scrollToBottom()
+  }
+}
+
+async function stopAgent() {
+  if (!isThinking.value || !currentSessionId.value) return
+  try {
+    await fetch(`${API_BASE}/api/agent/chat/${currentSessionId.value}/stop`, {
+      method: 'POST',
+    })
+  } catch (e) {
+    console.error('Failed to stop agent:', e)
   }
 }
 
@@ -549,6 +655,24 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 500;
 }
+.agent-select {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  outline: none;
+  min-width: 120px;
+}
+.agent-select:hover {
+  border-color: #d1d5db;
+}
+.agent-select:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
+}
 .btn-clear {
   background: none;
   border: 1px solid #e5e7eb;
@@ -704,5 +828,21 @@ onUnmounted(() => {
 .btn-send:disabled {
   background: #9ca3af;
   cursor: not-allowed;
+}
+
+.btn-stop {
+  padding: 10px 20px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.btn-stop:hover {
+  background: #dc2626;
 }
 </style>

@@ -21,6 +21,11 @@ import httpx
 from sse_manager import sse_manager
 from config import settings
 from agent import AgentOrchestrator
+from agent.chat_manager import chat_manager, ChatMessage
+from agent.agent_manager import _AgentRegistry
+from agents.stream_events import StreamEvent
+
+_agent_registry = _AgentRegistry()
 
 # Global agent orchestrator (started via lifespan)
 _agent_orchestrator: AgentOrchestrator | None = None
@@ -923,6 +928,259 @@ async def delete_custom_agent(agent_key: str):
         raise HTTPException(status_code=404, detail=f"Custom agent '{agent_key}' not found")
     save_config(cfg)
     reload_agents()
+    return {"ok": True}
+
+
+# ============================================================================
+# Agent Chat API
+# ============================================================================
+
+from pydantic import BaseModel
+
+
+class ChatCreateRequest(BaseModel):
+    agent_id: str = "main"
+
+
+class ChatMessageRequest(BaseModel):
+    message: str
+
+
+@app.post("/api/agent/chat")
+async def create_chat_session(body: ChatCreateRequest):
+    """Create a new chat session."""
+    session = chat_manager.create_session(agent_id=body.agent_id)
+    return {
+        "session_id": session.session_id,
+        "agent_id": session.agent_id,
+        "created_at": session.created_at.isoformat(),
+    }
+
+
+@app.get("/api/agent/chat/{session_id}/stream")
+async def chat_session_stream(session_id: str, request: Request):
+    """SSE stream for a specific chat session."""
+
+    session = chat_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    async def event_generator():
+        # Send chat history as initial events
+        for msg in session.messages:
+            yield ServerSentEvent(
+                event="history",
+                data=json.dumps({
+                    "role": msg.role,
+                    "content": msg.content,
+                    "timestamp": msg.timestamp,
+                    "agent_name": msg.agent_name,
+                })
+            )
+
+        # Stream events from the session queue
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                event = await asyncio.wait_for(
+                    session.queue.get(),
+                    timeout=settings.heartbeat_interval,
+                )
+                if event is None:
+                    break
+                yield event
+            except asyncio.TimeoutError:
+                yield ServerSentEvent(
+                    event="heartbeat",
+                    data=json.dumps({"status": "alive"}),
+                )
+
+    return EventSourceResponse(event_generator())
+
+
+@app.post("/api/agent/chat/{session_id}/message")
+async def send_chat_message(session_id: str, body: ChatMessageRequest):
+    """Send a message to a chat session and run the agent."""
+    session = chat_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if session.is_running:
+        raise HTTPException(status_code=409, detail="Agent is already running in this session")
+
+    if not body.message.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    # Append user message
+    session.messages.append(ChatMessage(
+        role="user",
+        content=body.message,
+    ))
+
+    # Emit user message to stream
+    await session.queue.put(ServerSentEvent(
+        event="user_message",
+        data=json.dumps({
+            "content": body.message,
+            "timestamp": datetime.now().isoformat(),
+        })
+    ))
+
+    session.is_running = True
+
+    # Emit thinking status
+    await session.queue.put(ServerSentEvent(
+        event="agent_status",
+        data=json.dumps({
+            "status": "running",
+            "message": "正在思考...",
+        })
+    ))
+
+    # Run agent in background and stream output to session queue
+    asyncio.create_task(_run_chat_agent(session, body.message))
+
+    return {"ok": True, "session_id": session_id}
+
+
+async def _run_chat_agent(session, message: str):
+    """Run the agent for a chat session and stream results."""
+    from agents import Runner
+    from agents.stream_events import StreamEvent
+
+    try:
+        # Get the configured main agent
+        cfg = load_config()
+        main_key = cfg.get("main_agent", "dispatcher")
+        agents = _agent_registry.get_all_agents()
+        agent = agents.get(main_key, agents.get("dispatcher"))
+
+        result = Runner.run_streamed(agent, message)
+        current_agent_name = agent.name
+        all_output = []
+
+        async for event in result.stream_events():
+            ev_type, payload = _classify_chat_event(event, current_agent_name)
+
+            if ev_type == "agent_handoff":
+                current_agent_name = payload.get("to_agent", current_agent_name)
+
+            if ev_type == "agent_output":
+                all_output.append(payload.get("delta", ""))
+
+            if ev_type and payload:
+                await session.queue.put(ServerSentEvent(
+                    event=ev_type,
+                    data=json.dumps(payload),
+                ))
+
+        final_text = "".join(all_output)
+        await session.queue.put(ServerSentEvent(
+            event="agent_complete",
+            data=json.dumps({
+                "content": final_text,
+                "agent_name": current_agent_name,
+            }),
+        ))
+
+        # Append assistant message to history
+        session.messages.append(ChatMessage(
+            role="assistant",
+            content=final_text,
+            agent_name=current_agent_name,
+        ))
+
+    except Exception as exc:
+        await session.queue.put(ServerSentEvent(
+            event="agent_error",
+            data=json.dumps({"error": str(exc)}),
+        ))
+    finally:
+        session.is_running = False
+
+
+def _classify_chat_event(event: StreamEvent, current_agent_name: str):
+    """Convert openai-agents stream event to SSE payload dict (for chat)."""
+    if hasattr(event, "type"):
+        if event.type == "raw_response_event":
+            try:
+                chunk = event.data
+                if hasattr(chunk, "delta") and chunk.delta:
+                    delta = chunk.delta
+                    if isinstance(delta, str):
+                        text = delta
+                    elif hasattr(delta, "text"):
+                        text = delta.text
+                    else:
+                        text = str(delta)
+                    if text:
+                        return "agent_output", {
+                            "agent_name": current_agent_name,
+                            "delta": text,
+                        }
+            except Exception:
+                pass
+            return None, None
+
+        elif event.type == "run_item_stream_event":
+            name = getattr(event, "name", None)
+            item = getattr(event, "item", None)
+
+            if name == "message_output_created" and item:
+                try:
+                    content = item.content
+                    if hasattr(content, "first_text"):
+                        text = content.first_text or ""
+                    elif hasattr(content, "parts"):
+                        text = "".join(
+                            p.text for p in content.parts if hasattr(p, "text")
+                        )
+                    else:
+                        text = str(content)
+                    return "agent_output", {
+                        "agent_name": current_agent_name,
+                        "delta": text,
+                    }
+                except Exception:
+                    return None, None
+
+            elif name in ("tool_called", "tool_output"):
+                return "agent_output", {
+                    "agent_name": current_agent_name,
+                    "delta": f"[{name}]",
+                }
+
+            elif name in ("handoff_requested", "handoff_occurs"):
+                return "agent_handoff", {
+                    "from_agent": current_agent_name,
+                    "to_agent": current_agent_name,
+                    "message": f"Handoff from {current_agent_name}",
+                }
+
+        elif event.type == "agent_updated_stream_event":
+            new_agent = getattr(event, "new_agent", None)
+            new_name = new_agent.name if new_agent else current_agent_name
+            return "agent_handoff", {
+                "from_agent": current_agent_name,
+                "to_agent": new_name,
+                "message": f"Handoff to {new_name}",
+            }
+
+    return None, None
+
+
+@app.get("/api/agent/chat")
+async def list_chat_sessions():
+    """List all chat sessions."""
+    return {"sessions": chat_manager.list_sessions()}
+
+
+@app.delete("/api/agent/chat/{session_id}")
+async def delete_chat_session(session_id: str):
+    """Delete a chat session."""
+    if not chat_manager.close_session(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
     return {"ok": True}
 
 

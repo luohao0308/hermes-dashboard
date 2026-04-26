@@ -118,6 +118,11 @@
         <template v-else-if="currentNav === 'agents'">
           <AgentPanel />
         </template>
+
+        <!-- Agent 聊天页面 -->
+        <template v-else-if="currentNav === 'chat'">
+          <AgentChat />
+        </template>
       </main>
     </div>
 
@@ -141,6 +146,7 @@ import LogStream from './components/LogStream.vue'
 import HistoryList from './components/HistoryList.vue'
 import Terminal from './components/Terminal.vue'
 import AgentPanel from './components/AgentPanel.vue'
+import AgentChat from './components/AgentChat.vue'
 
 const API_BASE = 'http://localhost:8000'
 
@@ -152,7 +158,8 @@ const navTitleMap: Record<string, string> = {
   tasks: '任务',
   logs: '日志',
   history: '历史',
-  agents: 'Agent'
+  chat: '聊天',
+  agents: '配置'
 }
 
 function handleNavChange(navId: string) {

@@ -52,7 +52,8 @@ const navItems: NavItem[] = [
   { id: 'tasks', label: '任务', icon: '◎' },
   { id: 'logs', label: '日志', icon: '☰' },
   { id: 'history', label: '历史', icon: '◷' },
-  { id: 'agents', label: 'Agent', icon: '🤖' },
+  { id: 'chat', label: '聊天', icon: '💬' },
+  { id: 'agents', label: '配置', icon: '🤖' },
 ]
 
 const activeNav = ref('dashboard')

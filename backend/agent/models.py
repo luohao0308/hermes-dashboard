@@ -7,10 +7,16 @@ from pydantic import BaseModel, Field
 
 
 class AgentRole(str, Enum):
-    TRIAGE = "triage"
+    DISPATCHER = "dispatcher"
+    RESEARCHER = "researcher"
+    DEVELOPER = "developer"
+    REVIEWER = "reviewer"
+    TESTER = "tester"
+    DEVOPS = "devops"
     MONITOR = "monitor"
     ANALYST = "analyst"
     EXECUTOR = "executor"
+    TRIAGE = "triage"
 
 
 class AgentStatus(str, Enum):

@@ -26,6 +26,7 @@ class AgentOrchestrator:
         self._agents: dict[str, AgentInfo] = {}
         self._broadcast = sse_broadcaster
         self._running_tasks: dict[str, asyncio.Task] = {}
+        self._broadcast_task: Optional[asyncio.Task] = None
         self._monitor_task: Optional[asyncio.Task] = None
         self._started = False
         # Queue decouples SSE broadcast from Runner.run_streamed async-for loop
@@ -57,6 +58,8 @@ class AgentOrchestrator:
 
         # Start SSE event broadcaster (consumes _event_queue in the background)
         self._broadcast_task = asyncio.create_task(self._run_broadcaster())
+        # Start background monitor loop (polls Hermès every 30s) alongside broadcaster
+        self._monitor_task = asyncio.create_task(self._monitor_loop())
 
     async def _run_broadcaster(self):
         """Background task: drain the event queue and broadcast to SSE."""
@@ -72,11 +75,14 @@ class AgentOrchestrator:
             except Exception as e:
                 print(f"[Broadcaster] Error: {e}")
 
-        # Start background monitor loop (polls Hermès every 30s)
-        self._monitor_task = asyncio.create_task(self._monitor_loop())
-
     async def stop(self):
         """Stop all agent tasks."""
+        if self._broadcast_task:
+            self._broadcast_task.cancel()
+            try:
+                await self._broadcast_task
+            except asyncio.CancelledError:
+                pass
         if self._monitor_task:
             self._monitor_task.cancel()
             try:
@@ -85,6 +91,10 @@ class AgentOrchestrator:
                 pass
         for task in self._running_tasks.values():
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         self._started = False
 
     # -------------------------------------------------------------------------

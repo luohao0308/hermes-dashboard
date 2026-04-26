@@ -129,9 +129,18 @@ async function fetchConfig() {
       enabled: cfg.enabled,
       is_custom: false,
     }))
+    // Include custom agents too
+    const customArray = (data.custom_agents || []).map((ca: any) => ({
+      id: ca.name.toLowerCase().replace(/ /g, '_'),
+      name: ca.name,
+      description: ca.description,
+      instructions: ca.instructions,
+      enabled: ca.enabled,
+      is_custom: true,
+    }))
     config.value = {
       main_agent: data.main_agent || 'dispatcher',
-      agents: agentsArray,
+      agents: [...agentsArray, ...customArray],
     }
   } catch (e) {
     console.error('Failed to fetch agent config:', e)
@@ -147,11 +156,20 @@ async function saveConfig() {
   saveError.value = ''
   try {
     // Save main agent
-    await fetch(`${API_BASE}/api/agent/config/main`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ main_agent: config.value.main_agent }),
-    })
+    await Promise.all([
+      fetch(`${API_BASE}/api/agent/config/main`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ main_agent: config.value.main_agent }),
+      }),
+      ...config.value.agents.map(agent =>
+        fetch(`${API_BASE}/api/agent/config/enabled?name=${agent.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: agent.enabled }),
+        })
+      ),
+    ])
     lastSaved.value = true
     setTimeout(() => { lastSaved.value = false }, 2000)
   } catch (e) {

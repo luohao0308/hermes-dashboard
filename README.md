@@ -86,8 +86,8 @@ main (保护分支)
 ├── fix/terminal-persistence (Phase 5)
 ├── feature/phase-6-ci-cd-security (Phase 6)
 ├── bugfix/agent-sse-push (Phase 7)
-└── feature/phase8-agent-config (Phase 8)
-```
+├── feature/phase8-agent-config (Phase 8)
+└── feature/phase9-agent-chat (Phase 9)
 
 ### 工作流程 (每步骤)
 
@@ -298,6 +298,43 @@ main (保护分支)
 - Critical: `_broadcast_task` 未在 `__init__` 声明，stop() 无法取消 → 声明为 `Optional[asyncio.Task]`
 - Bug: `saveConfig()` 只发 main_agent，toggle 状态被丢弃 → 添加 `Promise.all` 并发发所有请求
 - Bug: `custom_agents` 未在 UI 显示 → `fetchConfig` 中加入 `...customAgents.map(...)`
+
+## Phase 9: Agent Chat UI + 多Agent协作 + 中文界面 ✅ (2026-04-27)
+
+- **分支**: `feature/phase9-agent-chat` (已合并，PR #18)
+- **PR**: https://github.com/luohao0308/hermes-dashboard/pull/18
+
+#### Task 9.1: Agent Chat 前端界面 ✅
+- `frontend/src/components/AgentChat.vue`: 纯白 ChatGPT 风格聊天界面
+  - 左侧会话列表（session 持久化到 localStorage）
+  - Markdown 渲染 + 代码高亮（highlight.js）
+  - Typewriter 流式输出
+  - Agent 切换下拉框（中文名：调度员/开发者/运维/研究员/审查员/测试员）
+  - 停止按钮 + agent_stopped 事件处理
+  - 时间戳 + 空状态引导页
+
+#### Task 9.2: 后端 Chat Session 管理 ✅
+- `backend/agent/chat_manager.py`: `ChatSession`（含 `_run_task` / `stop()`）+ `ChatManager`（含 `update_session_agent` / `stop_session`）
+- `backend/main.py`: `POST /api/agent/chat`（创建session）、`GET /api/agent/chat`（列表）、`DELETE /api/agent/chat/{session_id}`、`PATCH /api/agent/chat/{session_id}`（切换agent）、`POST /api/agent/chat/{session_id}/stop`（停止）
+- SSE 流：`agent_status` / `agent_output` / `agent_handoff` / `agent_complete` / `agent_stopped` / `agent_error` 事件
+
+#### Task 9.3: 多Agent Handoffs 支持 ✅
+- `backend/agent/agent_manager.py`: 两阶段构造（Phase 1 创建 bare agents，Phase 2 绑定 handoffs）
+- `backend/agent/agents.yaml`: 每个 Agent 的 `handoffs: [AgentNames]` 列表
+- `backend/agent/orchestrator.py`: `_monitor_loop` 处理 `agent_handoff` 事件
+- 前端渲染交接提示：`🔄 交接给 {agent}（来自 {from_agent}）`
+
+#### Task 9.4: 测试覆盖 ✅
+- `frontend/tests/test_agent_switch.spec.ts`: Vitest 11 tests（agent名映射、session agent_id 更新、PATCH 请求、dropdown options、`currentAgentName` 边界情况）
+- `frontend/e2e/agent_chat.spec.ts`: Playwright E2E 4 tests（页面加载、新建session、agent切换、backend agent切换）
+- `backend/tests/test_agent_switch.py`: pytest 12 tests（ChatSession 字段、ChatManager CRUD、agent switch逻辑、agents.yaml验证、stop session）
+
+#### Bug Fix ✅
+- Critical: `agents.get('Developer')` 返回 None — registry keys 是小写（`developer`），修复为 `.lower()` 查找
+- Critical: 前端 agent switch 后 URL 导航丢失 — `App.vue` 添加 `case 'chat': this.currentNav = 'chat'; break;`
+- Bug: `dispatchEvent('change')` 在 Playwright 中不触发 Vue 3 `@change`（`addEventListener` 绑定 `{ passive: false }`）
+- Bug: CORS preflight PATCH 失败 — `allow_methods` 添加 `"PATCH"` + `body: dict | None = None`
+- Bug: 切换 agent 时 409 conflict — `switchAgent` 先调用 `stopAgent()` 再 PATCH
 
 ## GitHub 操作指南
 

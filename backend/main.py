@@ -633,11 +633,7 @@ async def _create_pty_session(session_id: str):
     env['COLORTERM'] = 'truecolor'  # true color (24-bit)
     env['LSCOLORS'] = 'ExGxBxDxCxEgEdxbxgxcxd'  # macOS ls colors
     # Use zsh as login shell to match local terminal
-    import sys as _sys
     pid, master_fd = pty.fork()
-    # Only parent process prints; child hits execvp and never reaches here
-    print(f"[TERMINAL] pty.fork() -> pid={pid}, master_fd={master_fd}",
-          flush=True, file=_sys.stderr)
 
     if pid == 0:
         # Child: exec zsh as login shell (sources /etc/zprofile, ~/.zshrc)
@@ -708,9 +704,7 @@ async def terminal_websocket(
     # Resolve or create session_id
     if not session_id:
         session_id = str(uuid.uuid4())
-        print(f"[TERMINAL] No session_id, created: {session_id}", flush=True)
-    else:
-        print(f"[TERMINAL] Connecting with session_id: {session_id}", flush=True)
+    # (no debug print — keep PTY clean)
 
     async with _pty_lock:
         existing = _terminal_sessions.get(session_id)
@@ -720,14 +714,11 @@ async def terminal_websocket(
             session = existing
             session["is_attached"] = True
             session["attach_count"] = session.get("attach_count", 0) + 1
-            print(f"[TERMINAL] Reusing session {session_id}, pid={session['pid']}, "
-                  f"attach_count={session['attach_count']}", flush=True)
         else:
             # Create new session
             session = await _create_pty_session(session_id)
             session["is_attached"] = True
             session["attach_count"] = 1
-            print(f"[TERMINAL] New session {session_id}, pid={session['pid']}", flush=True)
 
     master_fd = session["master_fd"]
     pid = session["pid"]
@@ -790,10 +781,6 @@ async def terminal_websocket(
             alive = session["alive"]
         if not alive:
             asyncio.ensure_future(_expire_session(session_id))
-        print(f"[TERMINAL] Client detached from session {session_id}, "
-              f"alive={alive}, attach_count={session.get('attach_count', 0)}", flush=True)
-
-    # Register master_fd with the asyncio event loop
     loop.add_reader(master_fd, _on_master_readable)
 
     try:
@@ -812,7 +799,6 @@ async def terminal_websocket(
                         rows = msg.get("rows", 24)
                         winsize = struct.pack("HHHH", rows, cols, 0, 0)
                         fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
-                        print(f"[TERMINAL] Resize to {cols}x{rows}", flush=True)
                         continue
                 except Exception:
                     pass

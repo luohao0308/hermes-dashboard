@@ -81,6 +81,7 @@
               <Terminal
                 v-if="activeTerminalId"
                 :key="activeTerminalId"
+                :session-id="terminalTabs.find(t => t.id === activeTerminalId)?.sessionId || ''"
                 @connected="onTerminalConnected"
               />
             </KeepAlive>
@@ -199,16 +200,35 @@ let toastId = 0
 interface TerminalTab {
   id: string
   name: string
+  sessionId: string  // unique per tab, passed to Terminal via prop
 }
-const terminalTabs = ref<TerminalTab[]>([{ id: 'terminal-1', name: 'Terminal 1' }])
+
+const SESSION_KEY = 'hermes_terminal_session_id'
+
+function createTerminalSession(): string {
+  const sid = Math.random().toString(36).substring(2, 10)
+  return sid
+}
+
+const terminalTabs = ref<TerminalTab[]>([{
+  id: 'terminal-1',
+  name: 'Terminal 1',
+  sessionId: localStorage.getItem(SESSION_KEY) || createTerminalSession(),
+}])
 const activeTerminalId = ref<string>('terminal-1')
 let terminalCounter = 1
 
+// Persist the first tab's session so page refresh reconnects to the same PTY
+if (!localStorage.getItem(SESSION_KEY)) {
+  localStorage.setItem(SESSION_KEY, terminalTabs.value[0].sessionId)
+}
+
 function addTerminal() {
   terminalCounter++
-  const newId = `terminal-${terminalCounter}`
-  terminalTabs.value.push({ id: newId, name: `Terminal ${terminalCounter}` })
-  activeTerminalId.value = newId
+  const tabId = `terminal-${terminalCounter}`
+  const sessionId = createTerminalSession()
+  terminalTabs.value.push({ id: tabId, name: `Terminal ${terminalCounter}`, sessionId })
+  activeTerminalId.value = tabId
 }
 
 function switchTerminal(id: string) {
@@ -554,7 +574,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 /* When chat is active, remove padding/gap so agent-chat fills the space */

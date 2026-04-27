@@ -14,6 +14,10 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 
+const props = defineProps<{
+  sessionId?: string  // session ID from parent (App.vue tab management)
+}>()
+
 const containerRef = ref<HTMLElement | null>(null)
 const terminalRef = ref<HTMLElement | null>(null)
 
@@ -21,17 +25,7 @@ let term: XTerm | null = null
 let fitAddon: FitAddon | null = null
 let ws: WebSocket | null = null
 
-const SESSION_KEY = 'hermes_terminal_session_id'
 const BASE_WS_URL = `ws://localhost:8000/ws/terminal`
-
-function getSessionId(): string {
-  let sid = localStorage.getItem(SESSION_KEY)
-  if (!sid) {
-    sid = Math.random().toString(36).substring(2, 10)
-    localStorage.setItem(SESSION_KEY, sid)
-  }
-  return sid
-}
 
 function buildWsUrl(sid: string): string {
   return `${BASE_WS_URL}?session_id=${sid}`
@@ -71,7 +65,9 @@ function connectWebSocket() {
     ws = null
   }
 
-  const sid = getSessionId()
+  // Use sessionId from parent prop (App.vue tab management)
+  // Fall back to random if not provided (e.g., direct mount without prop)
+  const sid = props.sessionId || Math.random().toString(36).substring(2, 10)
   const url = buildWsUrl(sid)
 
   try {
@@ -84,22 +80,6 @@ function connectWebSocket() {
 
     ws.onmessage = (event) => {
       const data: string = event.data
-
-      // Server announces session id: [Session: abc123]
-      if (data.startsWith('[Session:')) {
-        const newSid = data.match(/\[Session: (\S+)\]/)?.[1]
-        if (newSid && newSid !== sid) {
-          localStorage.setItem(SESSION_KEY, newSid)
-        }
-        return // don't display the session announcement
-      }
-
-      // Reconnect confirmation message — display but don't treat as terminal output
-      if (data.includes('✓ 会话已恢复')) {
-        term?.writeln('\x1b[32m✓ 会话已恢复\x1b[0m')
-        return
-      }
-
       term?.write(data)
     }
 

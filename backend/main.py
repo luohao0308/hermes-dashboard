@@ -355,9 +355,12 @@ async def get_connection(client_id: str):
 
 @app.get("/api/status")
 async def proxy_status():
-    """Proxy to Hermès /api/status - Gateway status overview"""
+    """Proxy to Hermès /api/status + inject dashboard-level metrics"""
     try:
-        return await hermes_get("/api/status")
+        hermes_data = await hermes_get("/api/status")
+        # Inject dashboard-specific metrics
+        hermes_data["active_connections"] = sse_manager.get_connection_count()
+        return hermes_data
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
     except Exception as e:

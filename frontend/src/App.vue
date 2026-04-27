@@ -435,7 +435,7 @@ function handleSSEMessage(event: MessageEvent) {
           ...hermesStatus.value,
           status: data.status,
           gateway_running: data.gateway_running,
-          active_sessions: data.active_sessions,
+          active_connections: data.active_connections,
           version: data.version
         }
         break

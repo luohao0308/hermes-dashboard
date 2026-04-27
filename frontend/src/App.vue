@@ -165,6 +165,16 @@ const navTitleMap: Record<string, string> = {
 
 function handleNavChange(navId: string) {
   currentNav.value = navId
+  const navToHash: Record<string, string> = {
+    dashboard: '#/',
+    terminal: '#/terminal',
+    tasks: '#/tasks',
+    logs: '#/logs',
+    history: '#/history',
+    chat: '#/chat',
+    agents: '#/agents',
+  }
+  if (navToHash[navId]) window.location.hash = navToHash[navId]
 }
 
 // Connection state
@@ -530,6 +540,24 @@ onMounted(async () => {
   await refreshAll()
   statusPollInterval = window.setInterval(fetchHermesStatus, 30000)
   connectSSE()
+
+  // Sync hash route to currentNav so browser back/forward and direct URL work
+  const hashToNav: Record<string, string> = {
+    '#/terminal': 'terminal',
+    '#/tasks': 'tasks',
+    '#/logs': 'logs',
+    '#/history': 'history',
+    '#/chat': 'chat',
+    '#/agents': 'agents',
+    '#/': 'dashboard',
+    '': 'dashboard',
+  }
+  const handleHashChange = () => {
+    const nav = hashToNav[window.location.hash]
+    if (nav && currentNav.value !== nav) currentNav.value = nav
+  }
+  window.addEventListener('hashchange', handleHashChange)
+  handleHashChange() // init from current hash
 
   // Core Web Vitals monitoring
   const reportWebVital = ({ name, value, id }: { name: string; value: number; id: string }) => {

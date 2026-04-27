@@ -436,6 +436,7 @@ function handleSSEMessage(event: MessageEvent) {
           status: data.status,
           gateway_running: data.gateway_running,
           active_connections: data.active_connections,
+          active_terminal_sessions: data.active_terminal_sessions,
           version: data.version
         }
         break

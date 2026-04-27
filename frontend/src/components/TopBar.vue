@@ -11,7 +11,7 @@
           <span>Gateway {{ hermesStatus.gateway_running ? '运行中' : '已停止' }}</span>
         </div>
         <div class="badge">
-          <span>{{ hermesStatus.active_connections || 0 }} 个活跃连接</span>
+          <span>{{ hermesStatus.active_terminal_sessions || 0 }} 个活跃会话</span>
         </div>
         <div class="badge">
           <span>v{{ hermesStatus.version || 'N/A' }}</span>

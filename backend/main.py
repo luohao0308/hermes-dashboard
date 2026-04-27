@@ -121,7 +121,8 @@ async def generate_events():
                     "message": "Hermès Agent 未运行或 Dashboard 未启动",
                     "timestamp": datetime.now().isoformat(),
                     "error": str(e),
-                    "active_connections": sse_manager.get_connection_count()
+                    "active_connections": sse_manager.get_connection_count(),
+                    "active_terminal_sessions": len(_terminal_sessions),
                 }
                 await sse_manager.broadcast(event_type, data)
                 continue
@@ -138,7 +139,8 @@ async def generate_events():
                     "active_sessions": status.get("active_sessions"),
                     "gateway_platforms": status.get("gateway_platforms"),
                     "timestamp": datetime.now().isoformat(),
-                    "active_connections": sse_manager.get_connection_count()
+                    "active_connections": sse_manager.get_connection_count(),
+                    "active_terminal_sessions": len(_terminal_sessions),
                 }
                 await sse_manager.broadcast(event_type, data)
 
@@ -360,6 +362,7 @@ async def proxy_status():
         hermes_data = await hermes_get("/api/status")
         # Inject dashboard-specific metrics
         hermes_data["active_connections"] = sse_manager.get_connection_count()
+        hermes_data["active_terminal_sessions"] = len(_terminal_sessions)
         return hermes_data
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")

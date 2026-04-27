@@ -167,10 +167,12 @@ function scrollToTop() {
 
 <style scoped>
 .panel {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
   display: flex;
   flex-direction: column;
   max-height: 500px;
@@ -180,8 +182,8 @@ function scrollToTop() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .panel-header h2 {
@@ -189,6 +191,7 @@ function scrollToTop() {
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
+  letter-spacing: -0.01em;
 }
 
 .log-controls {
@@ -199,11 +202,12 @@ function scrollToTop() {
 .level-select {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
-  padding: 4px 8px;
+  padding: 8px 12px;
   font-size: 12px;
   outline: none;
+  transition: all 0.2s ease;
 }
 
 .level-select:focus {
@@ -213,16 +217,17 @@ function scrollToTop() {
 .clear-btn {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
-  padding: 4px 8px;
+  padding: 8px 12px;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .clear-btn:hover {
-  background: #fef2f2;
+  background: var(--error-soft);
   border-color: var(--error-color);
   color: var(--error-color);
 }
@@ -230,9 +235,9 @@ function scrollToTop() {
 .log-stats {
   display: flex;
   gap: 16px;
-  padding: 12px 20px;
+  padding: 14px 24px;
   background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
   font-size: 12px;
 }
 
@@ -244,14 +249,23 @@ function scrollToTop() {
 }
 
 .stat-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
 }
 
-.stat-dot.info { background: var(--accent-color); }
-.stat-dot.warning { background: var(--warning-color); }
-.stat-dot.error { background: var(--error-color); }
+.stat-dot.info { 
+  background: var(--accent-color);
+  box-shadow: 0 0 8px var(--accent-color);
+}
+.stat-dot.warning { 
+  background: var(--warning-color);
+  box-shadow: 0 0 8px var(--warning-color);
+}
+.stat-dot.error { 
+  background: var(--error-color);
+  box-shadow: 0 0 8px var(--error-color);
+}
 
 .log-list {
   flex: 1;
@@ -263,10 +277,10 @@ function scrollToTop() {
 }
 
 .log-item {
-  padding: 8px 20px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .log-item:hover {
@@ -306,29 +320,29 @@ function scrollToTop() {
 .log-item.info .log-message { color: var(--text-secondary); }
 
 .log-item.warning {
-  background: #fef3c720;
+  background: var(--warning-soft);
 }
 
 .log-item.warning .log-message { color: var(--warning-color); }
 
 .log-item.error {
-  background: #fef2f220;
+  background: var(--error-soft);
 }
 
 .log-item.error .log-message { color: var(--error-color); }
 
 .log-details {
-  margin-top: 8px;
-  padding: 8px 12px;
+  margin-top: 12px;
+  padding: 12px 16px;
   background: var(--bg-primary);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-size: 11px;
 }
 
 .detail-row {
   display: flex;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .detail-row:last-child {
@@ -348,8 +362,8 @@ function scrollToTop() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border-color);
+  padding: 14px 24px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .log-count {
@@ -360,12 +374,13 @@ function scrollToTop() {
 .scroll-top-btn {
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
-  padding: 4px 8px;
+  padding: 6px 12px;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .scroll-top-btn:hover {
@@ -378,9 +393,9 @@ function scrollToTop() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 48px 16px;
+  padding: 48px 24px;
   color: var(--text-muted);
-  gap: 8px;
+  gap: 12px;
   font-size: 13px;
 }
 
@@ -392,19 +407,21 @@ function scrollToTop() {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 8px 16px;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .refresh-btn:hover:not(:disabled) {
-  background: var(--border-color);
-  color: var(--text-primary);
+  background: var(--accent-soft);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
 }
 
 .refresh-btn:disabled {
@@ -416,7 +433,7 @@ function scrollToTop() {
   width: 10px;
   height: 10px;
   border: 2px solid var(--border-color);
-  border-top-color: var(--text-secondary);
+  border-top-color: var(--accent-color);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -430,8 +447,8 @@ function scrollToTop() {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .skeleton-line {

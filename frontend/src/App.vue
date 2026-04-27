@@ -17,29 +17,44 @@
       <main class="main-content" :class="{ 'chat-active': currentNav === 'chat' }">
         <!-- Dashboard 概览页面 -->
         <template v-if="currentNav === 'dashboard'">
-          <div class="overview-grid">
-            <div class="overview-card">
-              <div class="overview-label">活跃会话</div>
-              <div class="overview-value">{{ hermesStatus?.active_sessions || 0 }}</div>
+          <!-- 系统状态栏 -->
+          <div class="status-bar">
+            <div class="status-item">
+              <span class="status-dot" :class="hermesStatus?.gateway_running ? 'success' : 'error'"></span>
+              <span>Gateway {{ hermesStatus?.gateway_running ? '运行中' : '已停止' }}</span>
+>>>>>>> Stashed changes
             </div>
-            <div class="overview-card">
-              <div class="overview-label">Gateway 状态</div>
-              <div class="overview-value">
-                <span class="status-dot" :class="hermesStatus?.gateway_running ? 'success' : 'error'"></span>
-                {{ hermesStatus?.gateway_running ? '运行中' : '已停止' }}
-              </div>
+            <div class="status-item">
+              <span class="status-dot" :class="isConnected ? 'success' : 'error'"></span>
+              <span>实时推送 {{ isConnected ? '已连接' : '未连接' }}</span>
             </div>
-            <div class="overview-card">
-              <div class="overview-label">版本</div>
-              <div class="overview-value">{{ hermesStatus?.version || 'N/A' }}</div>
+            <div class="status-item version">
+              <span>v{{ hermesStatus?.version || 'N/A' }}</span>
             </div>
-            <div class="overview-card">
-              <div class="overview-label">连接状态</div>
-              <div class="overview-value">
-                <span class="status-dot" :class="isConnected ? 'success' : 'error'"></span>
-                {{ isConnected ? '已连接' : '未连接' }}
-              </div>
-            </div>
+          </div>
+
+          <!-- 快捷入口 -->
+          <div class="quick-actions">
+            <button class="quick-action" @click="handleNavChange('terminal')">
+              <span class="action-icon">◎</span>
+              <span class="action-label">终端</span>
+              <span class="action-desc">打开终端</span>
+            </button>
+            <button class="quick-action" @click="handleNavChange('chat')">
+              <span class="action-icon">🤖</span>
+              <span class="action-label">Agent 聊天</span>
+              <span class="action-desc">与 Agent 对话</span>
+            </button>
+            <button class="quick-action" @click="handleNavChange('tasks')">
+              <span class="action-icon">☰</span>
+              <span class="action-label">任务列表</span>
+              <span class="action-desc">{{ tasks.length }} 个任务</span>
+            </button>
+            <button class="quick-action" @click="handleNavChange('logs')">
+              <span class="action-icon">◷</span>
+              <span class="action-label">日志</span>
+              <span class="action-desc">查看运行日志</span>
+            </button>
           </div>
 
           <!-- 功能面板 -->
@@ -582,7 +597,7 @@ onUnmounted(() => {
 .app-layout {
   display: flex;
   min-height: 100vh;
-  background: var(--bg-secondary);
+  background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
 }
 
 .main-wrapper {
@@ -609,36 +624,77 @@ onUnmounted(() => {
   gap: 0;
 }
 
-/* 概览网格 */
-.overview-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+/* 系统状态栏 */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 24px;
 }
 
-.overview-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 20px;
-  box-shadow: var(--shadow-sm);
-}
-
-.overview-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.overview-value {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--text-primary);
+.status-item {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.status-item.version {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* 快捷入口 */
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.quick-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 20px 24px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  box-shadow: var(--glass-shadow);
+}
+
+.quick-action:hover {
+  border-color: var(--accent-color);
+  box-shadow: var(--shadow-glow), var(--glass-shadow);
+  transform: translateY(-2px);
+}
+
+.action-icon {
+  font-size: 22px;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.action-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.action-desc {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 /* 功能面板网格 */
@@ -663,15 +719,20 @@ onUnmounted(() => {
 .terminal-tabs {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 140px);
+  flex: 1;
+  min-height: 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid #3c3c3c;
 }
 
 .terminal-tab-bar {
   display: flex;
   gap: 2px;
   padding: 8px 8px 0;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
+  background: #252525;
+  border-bottom: none;
+  flex-shrink: 0;
 }
 
 .terminal-tab {
@@ -679,60 +740,64 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  background: #2d2d2d;
+  border: 1px solid #3c3c3c;
   border-bottom: none;
   border-radius: 6px 6px 0 0;
   font-size: 12px;
-  color: var(--text-muted);
+  color: #888888;
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .terminal-tab.active {
   background: #1e1e1e;
-  color: var(--text-primary);
+  color: #cccccc;
   border-color: #3c3c3c;
 }
 
 .terminal-tab-close {
   margin-left: 4px;
-  padding: 0 2px;
+  padding: 0 4px;
   font-size: 14px;
-  color: var(--text-muted);
+  color: #666666;
   border-radius: 2px;
 }
 
 .terminal-tab-close:hover {
-  background: var(--error-color);
+  background: #ff5555;
   color: white;
 }
 
 .terminal-tab-add {
   padding: 6px 12px;
   background: transparent;
-  border: 1px dashed var(--border-color);
+  border: 1px dashed #3c3c3c;
   border-bottom: none;
   border-radius: 6px 6px 0 0;
   font-size: 12px;
-  color: var(--text-muted);
+  color: #666666;
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .terminal-tab-add:hover {
-  background: var(--bg-primary);
-  color: var(--accent-color);
-  border-color: var(--accent-color);
+  background: #2d2d2d;
+  color: #50fa7b;
+  border-color: #50fa7b;
 }
 
 .toast {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
+  padding: 14px 18px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
   font-size: 13px;
   color: var(--text-primary);
   min-width: 280px;
@@ -749,8 +814,9 @@ onUnmounted(() => {
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 18px;
   padding: 0;
+  transition: color 0.2s ease;
 }
 
 .toast-close:hover {
@@ -771,7 +837,7 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1200px) {
-  .overview-grid {
+  .quick-actions {
     grid-template-columns: repeat(2, 1fr);
   }
 }
@@ -780,8 +846,8 @@ onUnmounted(() => {
   .main-wrapper {
     margin-left: 0;
   }
-  .overview-grid {
-    grid-template-columns: 1fr;
+  .quick-actions {
+    grid-template-columns: repeat(2, 1fr);
   }
   .panels-grid {
     grid-template-columns: 1fr;

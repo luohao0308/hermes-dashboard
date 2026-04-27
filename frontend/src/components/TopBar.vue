@@ -11,9 +11,6 @@
           <span>Gateway {{ hermesStatus.gateway_running ? '运行中' : '已停止' }}</span>
         </div>
         <div class="badge">
-          <span>{{ hermesStatus.active_sessions || 0 }} 个会话</span>
-        </div>
-        <div class="badge">
           <span>v{{ hermesStatus.version || 'N/A' }}</span>
         </div>
       </div>
@@ -41,12 +38,14 @@ defineEmits<{
 <style scoped>
 .topbar {
   height: var(--topbar-height);
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-color);
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 32px;
 }
 
 .topbar-left {
@@ -55,9 +54,10 @@ defineEmits<{
 }
 
 .page-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
+  letter-spacing: -0.02em;
 }
 
 .topbar-right {
@@ -75,12 +75,13 @@ defineEmits<{
 .badge {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
   color: var(--text-secondary);
-  padding: 4px 10px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  font-weight: 500;
 }
 
 .btn.spinning {

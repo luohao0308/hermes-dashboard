@@ -192,10 +192,12 @@ function reRunTask(item: HistoryItem) {
 
 <style scoped>
 .panel {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
   overflow: hidden;
 }
 
@@ -203,8 +205,8 @@ function reRunTask(item: HistoryItem) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .panel-header h2 {
@@ -212,6 +214,7 @@ function reRunTask(item: HistoryItem) {
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
+  letter-spacing: -0.01em;
 }
 
 .header-right {
@@ -228,22 +231,26 @@ function reRunTask(item: HistoryItem) {
 .history-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  padding: 16px 20px;
+  gap: 16px;
+  padding: 20px 24px;
   background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .stat-card {
   text-align: center;
+  padding: 16px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
 }
 
 .stat-value {
   display: block;
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 700;
   color: var(--text-primary);
-  font-family: monospace;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  letter-spacing: -0.02em;
 }
 
 .stat-label {
@@ -251,25 +258,27 @@ function reRunTask(item: HistoryItem) {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  margin-top: 4px;
 }
 
 .filter-row {
   display: flex;
   gap: 12px;
-  padding: 12px 20px;
+  padding: 16px 24px;
   background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .search-input {
   flex: 1;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
   font-size: 13px;
   color: var(--text-primary);
   outline: none;
+  transition: all 0.2s ease;
 }
 
 .search-input::placeholder {
@@ -278,16 +287,18 @@ function reRunTask(item: HistoryItem) {
 
 .search-input:focus {
   border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .sort-select {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
   font-size: 13px;
   color: var(--text-secondary);
   outline: none;
+  transition: all 0.2s ease;
 }
 
 .sort-select:focus {
@@ -305,9 +316,9 @@ function reRunTask(item: HistoryItem) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--border-color);
-  transition: background 0.15s ease;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: all 0.2s ease;
 }
 
 .history-item:hover {
@@ -328,17 +339,17 @@ function reRunTask(item: HistoryItem) {
 .item-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .item-status {
-  font-size: 18px;
+  font-size: 20px;
 }
 
 .item-details {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .item-name {
@@ -350,20 +361,20 @@ function reRunTask(item: HistoryItem) {
 .item-id {
   font-size: 11px;
   color: var(--text-muted);
-  font-family: monospace;
+  font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
 .item-meta {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
+  gap: 4px;
 }
 
 .item-duration {
   font-size: 13px;
   color: var(--text-secondary);
-  font-family: monospace;
+  font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
 .item-date {
@@ -373,18 +384,18 @@ function reRunTask(item: HistoryItem) {
 
 .item-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   margin-left: 16px;
 }
 
 .action-btn {
   background: transparent;
   border: none;
-  padding: 4px 8px;
+  padding: 6px 10px;
   cursor: pointer;
   font-size: 14px;
   opacity: 0.5;
-  transition: opacity 0.15s ease;
+  transition: all 0.2s ease;
   border-radius: var(--radius-sm);
 }
 
@@ -398,9 +409,9 @@ function reRunTask(item: HistoryItem) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 48px 16px;
+  padding: 48px 24px;
   color: var(--text-muted);
-  gap: 8px;
+  gap: 12px;
   font-size: 13px;
 }
 
@@ -412,19 +423,21 @@ function reRunTask(item: HistoryItem) {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 8px 16px;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .refresh-btn:hover:not(:disabled) {
-  background: var(--border-color);
-  color: var(--text-primary);
+  background: var(--accent-soft);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
 }
 
 .refresh-btn:disabled {
@@ -436,7 +449,7 @@ function reRunTask(item: HistoryItem) {
   width: 10px;
   height: 10px;
   border: 2px solid var(--border-color);
-  border-top-color: var(--text-secondary);
+  border-top-color: var(--accent-color);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -450,8 +463,8 @@ function reRunTask(item: HistoryItem) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .skeleton-left {

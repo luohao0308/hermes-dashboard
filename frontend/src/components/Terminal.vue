@@ -1,15 +1,5 @@
 <template>
   <div class="terminal-container" ref="containerRef">
-    <div class="terminal-header">
-      <span class="terminal-title">Terminal</span>
-      <div class="terminal-status">
-        <span v-if="connState === 'connecting'" class="status-dot connecting"></span>
-        <span v-else-if="connState === 'connected'" class="status-dot connected"></span>
-        <span v-else-if="connState === 'error'" class="status-dot error"></span>
-        <span v-else class="status-dot"></span>
-      </div>
-      <button class="terminal-btn" @click="clearTerminal">清空</button>
-    </div>
     <div class="terminal-body" ref="terminalRef">
       <!-- xterm renders into terminalRef, overlay sits on top when loading -->
       <div v-if="connState === 'connecting'" class="terminal-loading">
@@ -215,10 +205,6 @@ function handleResize() {
   }
 }
 
-function clearTerminal() {
-  term?.clear()
-}
-
 onMounted(() => {
   // Small delay to ensure parent has laid out the container
   setTimeout(initTerminal, 100)
@@ -239,34 +225,28 @@ onUnmounted(() => {
 .terminal-container {
   display: flex;
   flex-direction: column;
-  background: #000000;
-  border: 1px solid #3c3c3c;
-  border-radius: 6px;
+  height: 100%;
+  background: #1e1e1e;
   overflow: hidden;
-  height: calc(100vh - 140px);
 }
 
 .terminal-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 12px;
   padding: 8px 12px;
-  background: #1e1e1e;
+  background: #252525;
   border-bottom: 1px solid #3c3c3c;
-  flex-shrink: 0;
 }
 
 .terminal-title {
   font-size: 12px;
-  color: #cccccc;
   font-weight: 500;
+  color: #cccccc;
 }
 
 .terminal-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 auto;
+  margin-left: auto;
 }
 
 .status-dot {
@@ -279,30 +259,33 @@ onUnmounted(() => {
 
 .status-dot.connecting {
   background: #e5a50a;
-  animation: pulse 1s ease-in-out infinite;
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 .status-dot.connected {
   background: #50fa7b;
+  box-shadow: 0 0 8px #50fa7b;
 }
 
 .status-dot.error {
   background: #ff5555;
+  box-shadow: 0 0 8px #ff5555;
 }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  50% { opacity: 0.5; }
 }
 
 .terminal-btn {
-  padding: 2px 8px;
+  padding: 4px 10px;
   font-size: 11px;
   background: #3c3c3c;
   color: #cccccc;
   border: none;
   border-radius: 3px;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .terminal-btn:hover {
@@ -336,7 +319,7 @@ onUnmounted(() => {
   contain: strict;
 }
 
-/* Loading overlay — sits on top of xterm canvas */
+/* Loading overlay */
 .terminal-loading {
   position: absolute;
   top: 0;
@@ -354,7 +337,7 @@ onUnmounted(() => {
 .loading-text {
   color: #555555;
   font-size: 13px;
-  font-family: Menlo, Monaco, "Courier New", monospace;
+  font-family: 'SF Mono', 'Fira Code', monospace;
   letter-spacing: 0.02em;
 }
 </style>

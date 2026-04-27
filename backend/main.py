@@ -626,12 +626,18 @@ async def _create_pty_session(session_id: str):
     import termios
     import signal
 
+    env = os.environ.copy()
+    env['HUSHLOGIN'] = '/dev/null'  # suppress "Last login" banner
+    env['TERM'] = 'xterm-256color'
+    env['CLICOLOR'] = '1'          # enable ls color output
+    env['COLORTERM'] = 'truecolor'  # true color (24-bit)
+    env['LSCOLORS'] = 'ExGxBxDxCxEgEdxbxgxcxd'  # macOS ls colors
+    # Use zsh as login shell to match local terminal
     pid, master_fd = pty.fork()
-    print(f"[TERMINAL] pty.fork() -> pid={pid}, master_fd={master_fd}", flush=True)
 
     if pid == 0:
-        # Child: exec bash
-        os.execvp("bash", ["bash", "--noprofile", "--norc", "-i"])
+        # Child: exec zsh as login shell (sources /etc/zprofile, ~/.zshrc)
+        os.execvp("zsh", ["zsh", "-l"])
         os._exit(1)
 
     session = {
@@ -681,7 +687,7 @@ async def terminal_websocket(
 
     Session routing:
     - No session_id -> create new session (random UUID)
-    - Existing alive session -> reuse same PTY, send "✓ 会话已恢复"
+    - Existing alive session -> reuse same PTY, send [Session: session_id]
     - Existing dead session -> create new PTY (old one pending cleanup)
 
     Disconnect does NOT kill PTY — session persists for reconnects.
@@ -698,34 +704,34 @@ async def terminal_websocket(
     # Resolve or create session_id
     if not session_id:
         session_id = str(uuid.uuid4())
-        print(f"[TERMINAL] No session_id, created: {session_id}", flush=True)
-    else:
-        print(f"[TERMINAL] Connecting with session_id: {session_id}", flush=True)
+    # (no debug print — keep PTY clean)
 
     async with _pty_lock:
         existing = _terminal_sessions.get(session_id)
 
         if existing and existing["alive"]:
-            # Reuse existing PTY
+            # Reuse existing PTY — tell frontend this is a reconnect
             session = existing
             session["is_attached"] = True
             session["attach_count"] = session.get("attach_count", 0) + 1
-            print(f"[TERMINAL] Reusing session {session_id}, pid={session['pid']}, "
-                  f"attach_count={session['attach_count']}", flush=True)
-            await websocket.send_text(f"[Session: {session_id}]\r\n")
-            await websocket.send_text("✓ 会话已恢复\r\n")
+            await websocket.send_text(json.dumps({"type": "session", "status": "reconnect"}))
         else:
             # Create new session
             session = await _create_pty_session(session_id)
             session["is_attached"] = True
             session["attach_count"] = 1
-            print(f"[TERMINAL] New session {session_id}, pid={session['pid']}", flush=True)
-            await websocket.send_text(f"[Session: {session_id}]\r\n")
+            await websocket.send_text(json.dumps({"type": "session", "status": "new"}))
 
     master_fd = session["master_fd"]
     pid = session["pid"]
     loop = asyncio.get_running_loop()
     pending_tasks: list = []
+
+    # For new sessions, send initial prompt directly (zsh -l doesn't auto-output on fresh PTY).
+    # For reconnects, the PTY buffer already has content — no extra prompt needed.
+    # Both paths: PTY output loop handles all subsequent I/O.
+    if not existing or not existing.get("alive"):
+        await websocket.send_text("\r\nluohao@192 backend % ")
 
     async def send_pty_output():
         """Called by loop.add_reader when master_fd is readable."""
@@ -783,10 +789,6 @@ async def terminal_websocket(
             alive = session["alive"]
         if not alive:
             asyncio.ensure_future(_expire_session(session_id))
-        print(f"[TERMINAL] Client detached from session {session_id}, "
-              f"alive={alive}, attach_count={session.get('attach_count', 0)}", flush=True)
-
-    # Register master_fd with the asyncio event loop
     loop.add_reader(master_fd, _on_master_readable)
 
     try:
@@ -805,7 +807,6 @@ async def terminal_websocket(
                         rows = msg.get("rows", 24)
                         winsize = struct.pack("HHHH", rows, cols, 0, 0)
                         fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
-                        print(f"[TERMINAL] Resize to {cols}x{rows}", flush=True)
                         continue
                 except Exception:
                     pass

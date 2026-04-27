@@ -31,7 +31,8 @@ _agent_registry = _AgentRegistry()
 _agent_orchestrator: AgentOrchestrator | None = None
 
 # Terminal session store: session_id -> session dict
-# session dict: {pid, master_fd, alive, is_attached, pending_messages, lock, attach_count}
+# session dict: {pid, master_fd, alive, is_attached, buffer, attach_count}
+#   buffer: deque of str — accumulated PTY output for replay on reconnect
 _terminal_sessions: dict[str, dict] = {}
 _pty_lock = asyncio.Lock()
 
@@ -640,11 +641,16 @@ async def _create_pty_session(session_id: str):
         os.execvp("zsh", ["zsh", "-l"])
         os._exit(1)
 
+    import collections
+    # Buffer starts with the initial prompt (zsh -l doesn't auto-output on fresh PTY)
+    _prompt = "\r\nluohao@192 backend % "
     session = {
         "pid": pid,
         "master_fd": master_fd,
         "alive": True,
         "is_attached": False,
+        "buffer": collections.deque([_prompt]),  # accumulated PTY output for reconnect replay
+        "attach_count": 0,
     }
     _terminal_sessions[session_id] = session
     return session
@@ -715,6 +721,9 @@ async def terminal_websocket(
             session["is_attached"] = True
             session["attach_count"] = session.get("attach_count", 0) + 1
             await websocket.send_text(json.dumps({"type": "session", "status": "reconnect"}))
+            # Replay accumulated PTY buffer so reconnecting client sees the same content
+            for chunk in session["buffer"]:
+                await websocket.send_text(chunk)
         else:
             # Create new session
             session = await _create_pty_session(session_id)
@@ -727,11 +736,9 @@ async def terminal_websocket(
     loop = asyncio.get_running_loop()
     pending_tasks: list = []
 
-    # For new sessions, send initial prompt directly (zsh -l doesn't auto-output on fresh PTY).
-    # For reconnects, the PTY buffer already has content — no extra prompt needed.
-    # Both paths: PTY output loop handles all subsequent I/O.
-    if not existing or not existing.get("alive"):
-        await websocket.send_text("\r\nluohao@192 backend % ")
+    # New session: buffer now contains the initial prompt (set in _create_pty_session).
+    # Reconnect: buffer is replayed above in the "if existing" branch.
+    # In both cases the prompt appears exactly once, from the buffer.
 
     async def send_pty_output():
         """Called by loop.add_reader when master_fd is readable."""
@@ -763,9 +770,16 @@ async def terminal_websocket(
             return
         try:
             text = data.decode("utf-8", errors="replace")
+            session["buffer"].append(text)
             await websocket.send_text(text)
         except Exception:
             pass
+
+    # Send initial prompt for new sessions. The prompt is already in the buffer
+    # (set by _create_pty_session) but needs to be sent explicitly.
+    # For reconnects, the buffer is replayed in the "if existing" branch above.
+    if not existing or not existing.get("alive"):
+        await websocket.send_text(session["buffer"][-1])
 
     def _on_master_readable():
         """Synchronous callback from loop.add_reader — schedule async task."""

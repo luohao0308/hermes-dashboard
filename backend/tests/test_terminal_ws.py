@@ -5,7 +5,7 @@ Covers:
 1. New session has prompt visible (not blank)
 2. Session type JSON messages are consumed silently (not shown as text)
 3. No artificial reconnect message on reconnect
-4. Reconnect to existing session shows PTY state
+4. Reconnect to existing session replays full PTY buffer
 5. No auto-reconnect on disconnect (component handles reconnection)
 """
 
@@ -60,30 +60,28 @@ class TestNewSessionPrompt:
     @pytest.mark.asyncio
     async def test_new_session_shows_prompt(self):
         """Backend must send initial prompt for new session (zsh -l doesn't auto-output)."""
-        sid = f"test-new-{uuid.uuid4().hex[:8]}"
-        uri = f"{BACKEND_URL}?session_id={sid}"
+        sid = "test-new-{}".format(uuid.uuid4().hex[:8])
+        uri = "{}?session_id={}".format(BACKEND_URL, sid)
 
         output = await wait_for_pty_output(uri, "luohao@192 backend %", timeout=5.0)
 
         # Should contain the prompt
         assert "luohao@192 backend %" in output, (
-            f"Expected prompt 'luohao@192 backend %' in output, got: {output!r}"
+            "Expected prompt 'luohao@192 backend %' in output, got: {!r}".format(output)
         )
 
         # Should NOT contain JSON session type message as raw text
-        # (it's consumed by frontend via JSON.parse)
-        # Backend should send the prompt as raw text, not as JSON
         lines = output.strip().split("\n")
         raw_lines = [l for l in lines if not l.startswith("{")]
         assert any("luohao@192" in l for l in raw_lines), (
-            f"Prompt not found as raw text in {raw_lines!r}"
+            "Prompt not found as raw text in {!r}".format(raw_lines)
         )
 
     @pytest.mark.asyncio
     async def test_new_session_no_json_in_output(self):
         """JSON session-type messages must NOT appear as visible text in terminal."""
-        sid = f"test-json-{uuid.uuid4().hex[:8]}"
-        uri = f"{BACKEND_URL}?session_id={sid}"
+        sid = "test-json-{}".format(uuid.uuid4().hex[:8])
+        uri = "{}?session_id={}".format(BACKEND_URL, sid)
 
         output = await wait_for_pty_output(uri, "luohao@192 backend %", timeout=5.0)
 
@@ -91,53 +89,50 @@ class TestNewSessionPrompt:
         for line in output.split("\n"):
             try:
                 json.loads(line)
-                # If it parses as JSON, it must be a session-type message
-                # that frontend consumes silently
                 parsed = json.loads(line)
                 assert parsed.get("type") == "session", (
-                    f"Unexpected JSON in terminal output: {line!r}"
+                    "Unexpected JSON in terminal output: {!r}".format(line)
                 )
             except (json.JSONDecodeError, ValueError):
                 pass  # Normal terminal output — fine
 
 
 class TestSessionTypeMessage:
-    """Backend sends {\"type\": \"session\", \"status\": \"new\"|\"reconnect\"} on connect."""
+    """Backend sends {"type": "session", "status": "new"|"reconnect"} on connect."""
 
     @pytest.mark.asyncio
     async def test_new_session_sends_session_type_json(self):
         """Backend sends exactly one session-type JSON on new session connect."""
-        sid = f"test-type-{uuid.uuid4().hex[:8]}"
-        uri = f"{BACKEND_URL}?session_id={sid}"
+        sid = "test-type-{}".format(uuid.uuid4().hex[:8])
+        uri = "{}?session_id={}".format(BACKEND_URL, sid)
 
         all_output = []
         async with websockets.connect(uri, ping_interval=None) as ws:
-            # Read messages until we get the prompt or timeout
             start = time.monotonic()
             while time.monotonic() - start < 5.0:
                 try:
                     msg = await asyncio.wait_for(ws.recv(), timeout=2.0)
                     all_output.append(msg)
-                    # Once we see the prompt, we have enough
                     if "luohao@192" in msg:
                         break
                 except asyncio.TimeoutError:
                     break
 
-        assert len(all_output) >= 2, f"Expected >=2 messages, got {len(all_output)}: {all_output!r}"
+        assert len(all_output) >= 2, (
+            "Expected >=2 messages, got {}: {!r}".format(len(all_output), all_output)
+        )
 
-        # First message should be JSON session type
         first_line = all_output[0]
         parsed = json.loads(first_line)
-        assert parsed.get("type") == "session", f"Expected session type, got: {first_line!r}"
-        assert parsed.get("status") == "new", f"Expected status='new', got: {parsed}"
+        assert parsed.get("type") == "session", "Expected session type, got: {!r}".format(first_line)
+        assert parsed.get("status") == "new", "Expected status='new', got: {}".format(parsed)
 
     @pytest.mark.asyncio
     async def test_reconnect_sends_reconnect_status(self):
         """Reconnect sends status='reconnect', not 'new'."""
-        sid = f"test-recon-{uuid.uuid4().hex[:8]}"
-        uri1 = f"{BACKEND_URL}?session_id={sid}"
-        uri2 = f"{BACKEND_URL}?session_id={sid}"
+        sid = "test-recon-{}".format(uuid.uuid4().hex[:8])
+        uri1 = "{}?session_id={}".format(BACKEND_URL, sid)
+        uri2 = "{}?session_id={}".format(BACKEND_URL, sid)
 
         # First connection: creates session
         async with websockets.connect(uri1, ping_interval=None) as ws1:
@@ -153,41 +148,80 @@ class TestSessionTypeMessage:
             msg2 = await asyncio.wait_for(ws2.recv(), timeout=3.0)
             parsed2 = json.loads(msg2)
             assert parsed2.get("status") == "reconnect", (
-                f"Expected status='reconnect' on 2nd connection, got: {parsed2}"
+                "Expected status='reconnect' on 2nd connection, got: {}".format(parsed2)
             )
 
 
 class TestReconnectBuffer:
-    """Reconnect to alive session should see existing PTY state."""
+    """Reconnect to alive session should replay full PTY buffer."""
+
+    @pytest.mark.asyncio
+    async def test_reconnect_replays_full_buffer(self):
+        """Reconnect must replay ALL accumulated PTY output, including user commands."""
+        sid = "test-replay-{}".format(uuid.uuid4().hex[:8])
+        uri = "{}?session_id={}".format(BACKEND_URL, sid)
+
+        # C1: create session, type a command
+        async with websockets.connect(uri, ping_interval=None) as ws1:
+            await ws1.recv()  # status: new
+            await ws1.recv()  # initial prompt
+
+            cmd = "echo REPLAY_TEST\r"
+            await ws1.send(cmd)
+            await asyncio.sleep(0.5)
+
+            # Collect PTY echo + command output + new prompt
+            collected = []
+            for _ in range(5):
+                try:
+                    m = await asyncio.wait_for(ws1.recv(), timeout=0.5)
+                    collected.append(m)
+                except asyncio.TimeoutError:
+                    break
+
+            has_echo = any("REPLAY_TEST" in m for m in collected)
+            assert has_echo, "Expected REPLAY_TEST in C1 output: {}".format(collected)
+
+        # C2: reconnect - must replay the entire buffer
+        await asyncio.sleep(0.2)
+        async with websockets.connect(uri, ping_interval=None) as ws2:
+            msgs2 = []
+            for _ in range(20):
+                try:
+                    m = await asyncio.wait_for(ws2.recv(), timeout=0.5)
+                    msgs2.append(m)
+                except asyncio.TimeoutError:
+                    break
+
+            has_recon = any("reconnect" in m for m in msgs2)
+            has_echo = any("REPLAY_TEST" in m for m in msgs2)
+            assert has_recon, "Expected reconnect status in C2: {}".format(msgs2)
+            assert has_echo, "Expected REPLAY_TEST echo in C2 buffer: {}".format(msgs2)
 
     @pytest.mark.asyncio
     async def test_reconnect_shows_same_session(self):
         """Two WS connections with same session_id share the same PTY."""
-        sid = f"test-share-{uuid.uuid4().hex[:8]}"
-        uri1 = f"{BACKEND_URL}?session_id={sid}"
-        uri2 = f"{BACKEND_URL}?session_id={sid}"
+        sid = "test-share-{}".format(uuid.uuid4().hex[:8])
+        uri1 = "{}?session_id={}".format(BACKEND_URL, sid)
+        uri2 = "{}?session_id={}".format(BACKEND_URL, sid)
 
         # Connection 1: send a command
         async with websockets.connect(uri1, ping_interval=None) as ws1:
-            # Get initial messages
             init1 = await asyncio.wait_for(ws1.recv(), timeout=3.0)
             assert json.loads(init1).get("type") == "session"
 
-            # Wait for prompt
             await asyncio.wait_for(ws1.recv(), timeout=3.0)
 
-            # Send a command that produces output
             await ws1.send("echo HELLO_TERMINAL_TEST\r")
             await asyncio.sleep(0.5)
 
         # Connection 2: reconnect to same session
         await asyncio.sleep(0.2)
         async with websockets.connect(uri2, ping_interval=None) as ws2:
-            # Should get reconnect status, not new
             status_msg = await asyncio.wait_for(ws2.recv(), timeout=3.0)
             parsed = json.loads(status_msg)
             assert parsed.get("status") == "reconnect", (
-                f"Expected reconnect, got: {parsed}"
+                "Expected reconnect, got: {}".format(parsed)
             )
 
 
@@ -197,8 +231,8 @@ class TestNoAutoReconnect:
     @pytest.mark.asyncio
     async def test_disconnect_does_not_auto_send(self):
         """After client disconnects, backend must NOT auto-reconnect or send reconnect msg."""
-        sid = f"test-norecon-{uuid.uuid4().hex[:8]}"
-        uri = f"{BACKEND_URL}?session_id={sid}"
+        sid = "test-norecon-{}".format(uuid.uuid4().hex[:8])
+        uri = "{}?session_id={}".format(BACKEND_URL, sid)
 
         # Connect and immediately disconnect
         async with websockets.connect(uri, ping_interval=None) as ws:
@@ -207,54 +241,45 @@ class TestNoAutoReconnect:
             assert parsed.get("type") == "session"
 
         # Backend should NOT send anything after client disconnects
-        # Give it 1 second to potentially send something
         await asyncio.sleep(1.0)
-
-        # The session should still be registered
-        # (This test just verifies the session exists — no auto-msg sent)
 
     @pytest.mark.asyncio
     async def test_frontend_no_double_connection(self):
-        """If frontend accidentally calls connectWebSocket twice, second ws should close old one."""
-        # This is a frontend contract test — verify the URL pattern
+        """Backend should handle multiple WS connections for same session gracefully."""
         sid = "test-double"
-        uri = f"{BACKEND_URL}?session_id={sid}"
-        # Backend should handle multiple WS connections for same session gracefully
-        # by incrementing attach_count
+        uri = "{}?session_id={}".format(BACKEND_URL, sid)
         async with websockets.connect(uri, ping_interval=None) as ws1:
             async with websockets.connect(uri, ping_interval=None) as ws2:
-                # Both should get valid responses
                 msg1 = await asyncio.wait_for(ws1.recv(), timeout=3.0)
                 msg2 = await asyncio.wait_for(ws2.recv(), timeout=3.0)
-                # Both should be session JSON messages
                 assert json.loads(msg1).get("type") == "session"
                 assert json.loads(msg2).get("type") == "session"
 
 
 class TestNoArtificialMessages:
-    """No artificial [Session: xxx] or ✓ 会话已恢复 messages."""
+    """No artificial [Session: xxx] or checkmark messages."""
 
     @pytest.mark.asyncio
     async def test_no_session_announcement(self):
         """Backend must NOT send [Session: xxx] artificial announcement."""
-        sid = f"test-noann-{uuid.uuid4().hex[:8]}"
-        uri = f"{BACKEND_URL}?session_id={sid}"
+        sid = "test-noann-{}".format(uuid.uuid4().hex[:8])
+        uri = "{}?session_id={}".format(BACKEND_URL, sid)
 
         output = await wait_for_pty_output(uri, "luohao@192 backend %", timeout=5.0)
 
-        assert "[Session:" not in output, f"Unexpected [Session:] in output: {output!r}"
-        assert "✓" not in output, f"Unexpected checkmark in output: {output!r}"
-        assert "会话已恢复" not in output, f"Unexpected reconnect message in output: {output!r}"
+        assert "[Session:" not in output, "Unexpected [Session:] in output: {!r}".format(output)
+        assert "\u2713" not in output, "Unexpected checkmark in output: {!r}".format(output)
+        assert "\u4f1a\u8bdd\u5df2\u6062\u590d" not in output, "Unexpected reconnect message in output"
 
     @pytest.mark.asyncio
     async def test_no_login_banner(self):
         """No 'Last login' banner should appear (HUSHLOGIN=/dev/null set in backend)."""
-        sid = f"test-nologin-{uuid.uuid4().hex[:8]}"
-        uri = f"{BACKEND_URL}?session_id={sid}"
+        sid = "test-nologin-{}".format(uuid.uuid4().hex[:8])
+        uri = "{}?session_id={}".format(BACKEND_URL, sid)
 
         output = await wait_for_pty_output(uri, "luohao@192 backend %", timeout=5.0)
 
-        assert "Last login:" not in output, f"Unexpected login banner in output: {output!r}"
+        assert "Last login:" not in output, "Unexpected login banner in output: {!r}".format(output)
 
 
 class TestBackendStartup:
@@ -268,4 +293,4 @@ class TestBackendStartup:
             with urllib.request.urlopen(BACKEND_HTTP + "/health", timeout=2.0) as r:
                 assert r.status == 200
         except Exception as e:
-            pytest.skip(f"Backend not running: {e}")
+            pytest.skip("Backend not running: {}".format(e))

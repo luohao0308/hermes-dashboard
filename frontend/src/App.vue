@@ -20,7 +20,7 @@
           <div class="overview-grid">
             <div class="overview-card">
               <div class="overview-label">活跃会话</div>
-              <div class="overview-value">{{ hermesStatus?.active_sessions || 0 }}</div>
+              <div class="overview-value">{{ hermesStatus?.active_connections || 0 }}</div>
             </div>
             <div class="overview-card">
               <div class="overview-label">Gateway 状态</div>
@@ -442,7 +442,7 @@ function handleSSEMessage(event: MessageEvent) {
           ...hermesStatus.value,
           status: data.status,
           gateway_running: data.gateway_running,
-          active_sessions: data.active_sessions,
+          active_connections: data.active_connections,
           version: data.version
         }
         break

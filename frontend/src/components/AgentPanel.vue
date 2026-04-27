@@ -398,15 +398,18 @@ onMounted(() => {
   padding: 8px 16px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 13px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
 }
 
 .btn-secondary:hover {
-  background: var(--bg-primary);
+  background: var(--accent-soft);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
 }
 
 .btn-secondary:disabled {
@@ -416,24 +419,28 @@ onMounted(() => {
 
 .btn-primary {
   padding: 10px 20px;
-  background: var(--color-accent, #6366f1);
+  background: var(--gradient-prism);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   color: white;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: all 0.2s ease;
   align-self: flex-start;
+  box-shadow: var(--shadow-glow);
 }
 
 .btn-primary:hover {
-  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-glow), 0 4px 12px rgba(124, 92, 191, 0.2);
 }
 
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .status-bar {

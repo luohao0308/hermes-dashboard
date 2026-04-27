@@ -138,10 +138,12 @@ const emptyMessage = computed(() => {
 
 <style scoped>
 .panel {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
   overflow: hidden;
 }
 
@@ -149,8 +151,8 @@ const emptyMessage = computed(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .panel-header h2 {
@@ -158,6 +160,7 @@ const emptyMessage = computed(() => {
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
+  letter-spacing: -0.01em;
 }
 
 .header-actions {
@@ -170,19 +173,21 @@ const emptyMessage = computed(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 8px 16px;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .refresh-btn:hover:not(:disabled) {
-  background: var(--border-color);
-  color: var(--text-primary);
+  background: var(--accent-soft);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
 }
 
 .refresh-btn:disabled {
@@ -194,7 +199,7 @@ const emptyMessage = computed(() => {
   width: 12px;
   height: 12px;
   border: 2px solid var(--border-color);
-  border-top-color: var(--text-secondary);
+  border-top-color: var(--accent-color);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -205,20 +210,21 @@ const emptyMessage = computed(() => {
 
 .filter-bar {
   display: flex;
-  gap: 4px;
-  padding: 12px 20px;
+  gap: 6px;
+  padding: 16px 24px;
   background: var(--bg-secondary);
 }
 
 .filter-btn {
-  padding: 6px 12px;
+  padding: 8px 16px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   color: var(--text-secondary);
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .filter-btn:hover {
@@ -227,10 +233,9 @@ const emptyMessage = computed(() => {
 }
 
 .filter-btn.active {
-  background: var(--bg-primary);
-  border-color: var(--border-color);
-  color: var(--text-primary);
-  font-weight: 500;
+  background: var(--accent-soft);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
 }
 
 .task-count {
@@ -247,9 +252,9 @@ const emptyMessage = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
-  transition: background 0.15s ease;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: all 0.2s ease;
 }
 
 .task-item:last-child {
@@ -281,28 +286,28 @@ const emptyMessage = computed(() => {
 .task-id {
   font-size: 11px;
   color: var(--text-muted);
-  font-family: monospace;
+  font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
 .task-status-badge {
-  padding: 2px 8px;
-  border-radius: 10px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .task-status-badge.running {
-  background: #e6f0ff;
+  background: var(--accent-soft);
   color: var(--accent-color);
 }
 
 .task-status-badge.pending {
-  background: #fef3c7;
+  background: var(--warning-soft);
   color: var(--warning-color);
 }
 
 .task-status-badge.completed {
-  background: #f0fdf4;
+  background: var(--success-soft);
   color: var(--success-color);
 }
 
@@ -314,20 +319,20 @@ const emptyMessage = computed(() => {
 
 .progress-bar {
   flex: 1;
-  height: 4px;
+  height: 6px;
   background: var(--bg-tertiary);
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  border-radius: 2px;
+  border-radius: 3px;
   transition: width 0.3s ease;
 }
 
 .progress-fill.running {
-  background: var(--accent-color);
+  background: var(--gradient-prism);
 }
 
 .progress-fill.pending {
@@ -346,7 +351,7 @@ const emptyMessage = computed(() => {
 
 .progress-text {
   color: var(--text-muted);
-  font-family: monospace;
+  font-family: 'SF Mono', 'Fira Code', monospace;
   min-width: 36px;
   text-align: right;
 }
@@ -355,45 +360,48 @@ const emptyMessage = computed(() => {
   display: flex;
   gap: 8px;
   padding-top: 12px;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .action-btn {
   flex: 1;
-  padding: 8px 12px;
+  padding: 10px 16px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .action-btn.pause {
-  background: #e6f0ff;
+  background: var(--accent-soft);
   color: var(--accent-color);
 }
 
 .action-btn.pause:hover {
-  background: #dbeafe;
+  background: var(--accent-color);
+  color: white;
 }
 
 .action-btn.cancel {
-  background: #fef2f2;
+  background: var(--error-soft);
   color: var(--error-color);
 }
 
 .action-btn.cancel:hover {
-  background: #fee2e2;
+  background: var(--error-color);
+  color: white;
 }
 
 .empty-state {
   color: var(--text-muted);
   text-align: center;
-  padding: 40px 20px;
+  padding: 48px 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   font-size: 13px;
 }
 
@@ -403,8 +411,8 @@ const emptyMessage = computed(() => {
 
 /* Skeleton Loading */
 .skeleton .skeleton-item {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -422,10 +430,10 @@ const emptyMessage = computed(() => {
 .skeleton-line.w-40 { width: 40%; }
 
 .skeleton-progress {
-  height: 4px;
+  height: 6px;
   background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%);
   background-size: 200% 100%;
-  border-radius: 2px;
+  border-radius: 3px;
   animation: shimmer 1.5s infinite;
 }
 

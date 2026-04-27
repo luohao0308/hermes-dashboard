@@ -22,7 +22,6 @@
             <div class="status-item">
               <span class="status-dot" :class="hermesStatus?.gateway_running ? 'success' : 'error'"></span>
               <span>Gateway {{ hermesStatus?.gateway_running ? '运行中' : '已停止' }}</span>
->>>>>>> Stashed changes
             </div>
             <div class="status-item">
               <span class="status-dot" :class="isConnected ? 'success' : 'error'"></span>

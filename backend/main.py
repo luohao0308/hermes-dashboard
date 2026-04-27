@@ -628,12 +628,17 @@ async def _create_pty_session(session_id: str):
 
     env = os.environ.copy()
     env['HUSHLOGIN'] = '/dev/null'  # suppress "Last login" banner
+    env['TERM'] = 'xterm-256color'
+    env['CLICOLOR'] = '1'          # enable ls color output
+    env['COLORTERM'] = 'truecolor'  # true color (24-bit)
+    env['LSCOLORS'] = 'ExGxBxDxCxEgEdxbxgxcxd'  # macOS ls colors
+    # Use zsh as login shell to match local terminal
     pid, master_fd = pty.fork()
     print(f"[TERMINAL] pty.fork() -> pid={pid}, master_fd={master_fd}", flush=True)
 
     if pid == 0:
-        # Child: exec bash
-        os.execvp("bash", ["bash", "--noprofile", "--norc", "-i"])
+        # Child: exec zsh as login shell (sources /etc/zprofile, ~/.zshrc)
+        os.execvp("zsh", ["zsh", "-l"])
         os._exit(1)
 
     session = {
@@ -714,14 +719,12 @@ async def terminal_websocket(
             session["attach_count"] = session.get("attach_count", 0) + 1
             print(f"[TERMINAL] Reusing session {session_id}, pid={session['pid']}, "
                   f"attach_count={session['attach_count']}", flush=True)
-            await websocket.send_text(f"[Session: {session_id}]\r\n")
         else:
             # Create new session
             session = await _create_pty_session(session_id)
             session["is_attached"] = True
             session["attach_count"] = 1
             print(f"[TERMINAL] New session {session_id}, pid={session['pid']}", flush=True)
-            await websocket.send_text(f"[Session: {session_id}]\r\n")
 
     master_fd = session["master_fd"]
     pid = session["pid"]

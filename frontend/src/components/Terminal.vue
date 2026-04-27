@@ -38,12 +38,12 @@ function initTerminal() {
     cursorBlink: true,
     fontSize: 13,
     fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-    allowTransparency: true,
     theme: {
-      background: '#1e1e1e',
-      foreground: '#d4d4d4',
-      cursor: '#d4d4d4',
-      selectionBackground: '#264f78'
+      background: '#ffffff',
+      foreground: '#333333',
+      cursor: '#333333',
+      cursorAccent: '#ffffff',
+      selectionBackground: '#add6ff'
     },
     rows: 24
   })
@@ -53,7 +53,7 @@ function initTerminal() {
   term.open(terminalRef.value)
   fitAddon.fit()
 
-  term.writeln('\x1b[36mHermès Terminal\x1b[0m - 连接到终端...')
+  term.writeln('Hermès Terminal - 连接到终端...')
   connectWebSocket()
 
   window.addEventListener('resize', handleResize)
@@ -74,8 +74,7 @@ function connectWebSocket() {
     ws = new WebSocket(url)
 
     ws.onopen = () => {
-      term?.writeln('\x1b[32m✓\x1b[0m 已连接到终端')
-      term?.writeln('')
+      // No artificial messages — let PTY output speak for itself
     }
 
     ws.onmessage = (event) => {
@@ -141,34 +140,34 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: #252526;
-  border-bottom: 1px solid #3c3c3c;
+  background: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
 }
 
 .terminal-title {
   font-size: 12px;
-  color: #cccccc;
+  color: #666666;
   font-weight: 500;
 }
 
 .terminal-btn {
   padding: 2px 8px;
   font-size: 11px;
-  background: #3c3c3c;
-  color: #cccccc;
+  background: #e0e0e0;
+  color: #666666;
   border: none;
   border-radius: 3px;
   cursor: pointer;
 }
 
 .terminal-btn:hover {
-  background: #4a4a4a;
+  background: #d0d0d0;
 }
 
 .terminal-body {
   flex: 1;
-  padding: 8px;
-  background: #1e1e1e;
+  padding: 0;
+  background: #ffffff;
   overflow: hidden;
 }
 

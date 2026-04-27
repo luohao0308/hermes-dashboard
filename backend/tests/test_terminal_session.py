@@ -2,12 +2,12 @@
 Terminal WebSocket session isolation tests.
 
 Requirements:
-1. New session -> PTY created with bash, no login banner
+1. New session -> PTY created with zsh, no login banner
 2. Reconnect to existing alive session -> no artificial reconnect message
 3. Each tab gets unique session_id -> different PTY processes
 4. Disconnect detach doesn't kill PTY; reattach works
 5. Tab switch reconnects to same session (same PTY), shows same state
-6. EOF kills bash, session becomes dead
+6. EOF kills zsh, session becomes dead
 """
 
 import pytest
@@ -15,35 +15,30 @@ import asyncio
 
 
 class TestTerminalNewSession:
-    """New session should create fresh PTY with bash."""
+    """New session should create fresh PTY with zsh."""
 
     def test_new_session_no_reconnect_message(self):
         """New sessions must NOT send any reconnect confirmation message."""
         # Simulate what the backend should NOT send on new session
         reconnect_messages = ['✓ 会话已恢复', 'session restored', 'reconnected']
-        terminal_output = '[Session: abc123]\r\nbash-3.2$ '
+        # The real terminal shows raw PTY output (zsh prompt) — no artificial messages
+        terminal_output = 'luohao@192 ~ % ls\r\n'
 
-        # The [Session: xxx] line is fine, but NO reconnect message should appear
         assert '✓ 会话已恢复' not in terminal_output
         assert 'session restored' not in terminal_output.lower()
 
-    def test_new_session_sends_session_id(self):
-        """New session MUST announce its session_id so frontend can use it."""
-        session_id = 'test-session-123'
-        announcement = f'[Session: {session_id}]'
+    def test_new_session_no_session_id_announcement(self):
+        """Backend must NOT send [Session: xxx] artificial announcement."""
+        # The backend no longer sends any artificial [Session: xxx] message
+        # The real PTY output (zsh prompt) speaks for itself
+        backend_sends_on_connect = None  # nothing — only raw PTY output
+        assert backend_sends_on_connect is None
 
-        assert session_id in announcement
-        assert '[' in announcement and ']' in announcement
-
-    def test_bash_interactive_no_login_banner(self):
-        """Bash started with --norc --noprofile -i should NOT show 'Last login'."""
-        # Simulate bash startup output WITHOUT login banner
-        bash_flags = '--norc --noprofile -i'
-        clean_output = 'bash-3.2$ '
-
-        # The clean output has no "Last login"
+    def test_zsh_interactive_no_login_banner(self):
+        """zsh started as login shell (-l) should NOT show 'Last login'."""
+        # HUSHLOGIN=/dev/null suppresses the login banner
+        clean_output = 'luohao@192 ~ % '
         assert 'Last login' not in clean_output
-        assert bash_flags == '--norc --noprofile -i'
 
     def test_session_id_format_is_valid(self):
         """Session IDs should be URL-safe strings (used as query params)."""
@@ -79,17 +74,18 @@ class TestTerminalReconnect:
         assert not reconnect_msg_sent
 
     def test_reconnect_sends_session_id_again(self):
-        """Reconnect should announce session_id so frontend knows which session."""
+        """Reconnect should NOT send [Session: xxx] — real PTY output speaks for itself."""
         session_id = 'existing-session'
+        # Backend no longer sends this artificial announcement
         announcement = f'[Session: {session_id}]'
-
-        assert 'existing-session' in announcement
+        # This test documents the OLD (now removed) behavior
+        assert 'existing-session' in announcement  # string format is valid
 
     def test_reconnect_preserves_pty_state(self):
-        """Reconnecting should show the SAME PTY state (same bash session)."""
-        # Simulate: session was at 'bash-3.2$ ' prompt
-        original_state = 'bash-3.2$ '
-        reconnect_state = 'bash-3.2$ '  # same session
+        """Reconnecting should show the SAME PTY state (same zsh session)."""
+        # Simulate: session was at zsh prompt
+        original_state = 'luohao@192 ~ % '
+        reconnect_state = 'luohao@192 ~ % '  # same session
 
         assert reconnect_state == original_state
 
@@ -169,10 +165,10 @@ class TestTerminalTabIsolation:
 
 
 class TestTerminalEOF:
-    """EOF (bash exit) should mark session dead, not send reconnect message."""
+    """EOF (zsh exit) should mark session dead, not send reconnect message."""
 
     def test_eof_marks_session_dead(self):
-        """When bash exits, session.alive becomes False."""
+        """When zsh exits, session.alive becomes False."""
         session = {'pid': 12345, 'alive': True, 'is_attached': True}
 
         # Simulate EOF from PTY

@@ -211,8 +211,6 @@ interface TerminalTab {
   sessionId: string  // unique per tab, passed to Terminal via prop
 }
 
-const SESSION_KEY = 'hermes_terminal_session_id'
-
 function createTerminalSession(): string {
   const sid = Math.random().toString(36).substring(2, 10)
   return sid
@@ -221,15 +219,10 @@ function createTerminalSession(): string {
 const terminalTabs = ref<TerminalTab[]>([{
   id: 'terminal-1',
   name: 'Terminal 1',
-  sessionId: localStorage.getItem(SESSION_KEY) || createTerminalSession(),
+  sessionId: createTerminalSession(),
 }])
 const activeTerminalId = ref<string>('terminal-1')
 let terminalCounter = 1
-
-// Persist the first tab's session so page refresh reconnects to the same PTY
-if (!localStorage.getItem(SESSION_KEY)) {
-  localStorage.setItem(SESSION_KEY, terminalTabs.value[0].sessionId)
-}
 
 function addTerminal() {
   terminalCounter++

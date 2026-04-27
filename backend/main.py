@@ -633,8 +633,11 @@ async def _create_pty_session(session_id: str):
     env['COLORTERM'] = 'truecolor'  # true color (24-bit)
     env['LSCOLORS'] = 'ExGxBxDxCxEgEdxbxgxcxd'  # macOS ls colors
     # Use zsh as login shell to match local terminal
+    import sys as _sys
     pid, master_fd = pty.fork()
-    print(f"[TERMINAL] pty.fork() -> pid={pid}, master_fd={master_fd}", flush=True)
+    # Only parent process prints; child hits execvp and never reaches here
+    print(f"[TERMINAL] pty.fork() -> pid={pid}, master_fd={master_fd}",
+          flush=True, file=_sys.stderr)
 
     if pid == 0:
         # Child: exec zsh as login shell (sources /etc/zprofile, ~/.zshrc)

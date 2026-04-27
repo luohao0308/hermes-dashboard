@@ -39,11 +39,10 @@ function initTerminal() {
     fontSize: 13,
     fontFamily: 'Menlo, Monaco, "Courier New", monospace',
     theme: {
-      background: '#ffffff',
-      foreground: '#333333',
-      cursor: '#333333',
-      cursorAccent: '#ffffff',
-      selectionBackground: '#add6ff'
+      background: '#1e1e1e',
+      foreground: '#d4d4d4',
+      cursor: '#d4d4d4',
+      selectionBackground: '#264f78'
     },
     rows: 24
   })
@@ -52,8 +51,6 @@ function initTerminal() {
   term.loadAddon(fitAddon)
   term.open(terminalRef.value)
   fitAddon.fit()
-
-  term.writeln('Hermès Terminal - 连接到终端...')
   connectWebSocket()
 
   window.addEventListener('resize', handleResize)

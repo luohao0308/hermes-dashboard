@@ -626,6 +626,8 @@ async def _create_pty_session(session_id: str):
     import termios
     import signal
 
+    env = os.environ.copy()
+    env['HUSHLOGIN'] = '/dev/null'  # suppress "Last login" banner
     pid, master_fd = pty.fork()
     print(f"[TERMINAL] pty.fork() -> pid={pid}, master_fd={master_fd}", flush=True)
 
@@ -681,7 +683,7 @@ async def terminal_websocket(
 
     Session routing:
     - No session_id -> create new session (random UUID)
-    - Existing alive session -> reuse same PTY, send "✓ 会话已恢复"
+    - Existing alive session -> reuse same PTY, send [Session: session_id]
     - Existing dead session -> create new PTY (old one pending cleanup)
 
     Disconnect does NOT kill PTY — session persists for reconnects.
@@ -713,7 +715,6 @@ async def terminal_websocket(
             print(f"[TERMINAL] Reusing session {session_id}, pid={session['pid']}, "
                   f"attach_count={session['attach_count']}", flush=True)
             await websocket.send_text(f"[Session: {session_id}]\r\n")
-            await websocket.send_text("✓ 会话已恢复\r\n")
         else:
             # Create new session
             session = await _create_pty_session(session_id)

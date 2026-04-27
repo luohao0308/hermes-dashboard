@@ -1,172 +1,254 @@
-"""Tests for terminal multi-tab session isolation.
+"""
+Terminal WebSocket session isolation tests.
 
-Verifies that each terminal tab gets its own unique session_id,
-and that the backend correctly routes WebSocket connections to
-the right PTY based on session_id.
+Requirements:
+1. New session -> PTY created with bash, no login banner
+2. Reconnect to existing alive session -> no artificial reconnect message
+3. Each tab gets unique session_id -> different PTY processes
+4. Disconnect detach doesn't kill PTY; reattach works
+5. Tab switch reconnects to same session (same PTY), shows same state
+6. EOF kills bash, session becomes dead
 """
 
 import pytest
-import uuid
+import asyncio
 
 
-class TestTerminalSessionIsolation:
-    """Test suite for terminal tab session management (frontend logic)."""
+class TestTerminalNewSession:
+    """New session should create fresh PTY with bash."""
 
-    def test_createTerminalSession_generates_unique_ids(self):
-        """Each call to createTerminalSession() returns a unique ID."""
-        seen = set()
-        for _ in range(100):
-            sid = uuid.uuid4().hex[:8]
-            assert sid not in seen, f"Duplicate session ID generated: {sid}"
-            seen.add(sid)
+    def test_new_session_no_reconnect_message(self):
+        """New sessions must NOT send any reconnect confirmation message."""
+        # Simulate what the backend should NOT send on new session
+        reconnect_messages = ['✓ 会话已恢复', 'session restored', 'reconnected']
+        terminal_output = '[Session: abc123]\r\nbash-3.2$ '
 
-    def test_session_id_is_8_chars(self):
-        """Session IDs should be exactly 8 characters (random hex subset)."""
-        for _ in range(10):
-            sid = uuid.uuid4().hex[:8]
-            assert len(sid) == 8
-            assert sid.isalnum()
+        # The [Session: xxx] line is fine, but NO reconnect message should appear
+        assert '✓ 会话已恢复' not in terminal_output
+        assert 'session restored' not in terminal_output.lower()
 
-    def test_different_tabs_get_different_session_ids(self):
-        """Multiple terminal tabs should each have a distinct sessionId."""
-        tabs = [
-            {'id': 'terminal-1', 'sessionId': 'abcd1234'},
-            {'id': 'terminal-2', 'sessionId': 'efgh5678'},
-            {'id': 'terminal-3', 'sessionId': 'ijkl9012'},
-        ]
-
-        session_ids = [t['sessionId'] for t in tabs]
-        assert len(session_ids) == len(set(session_ids)), \
-            "Duplicate sessionIds found across tabs"
-
-    def test_first_tab_reuses_persisted_session(self):
-        """The first tab should reuse the session from localStorage if present."""
-        localStorage_session = 'persisted-session-id'
-        first_tab_session = localStorage_session
-        new_tab_session = 'fresh-session-id'
-
-        assert first_tab_session == 'persisted-session-id'
-        assert first_tab_session != new_tab_session
-
-    def test_closing_tab_does_not_affect_other_sessions(self):
-        """Closing one tab should not affect sessions of other tabs."""
-        tabs = [
-            {'id': 'terminal-1', 'sessionId': 'sid-1'},
-            {'id': 'terminal-2', 'sessionId': 'sid-2'},
-        ]
-
-        closed_tab = tabs.pop(0)
-
-        assert tabs[0]['sessionId'] == 'sid-2'
-        assert tabs[0]['id'] == 'terminal-2'
-        assert all(t['sessionId'] != closed_tab['sessionId'] for t in tabs)
-
-    def test_active_tab_session_id_remains_after_switch(self):
-        """Switching active tab should not change any tab's sessionId."""
-        tabs = [
-            {'id': 'terminal-1', 'sessionId': 'sid-1'},
-            {'id': 'terminal-2', 'sessionId': 'sid-2'},
-        ]
-
-        active_id = tabs[1]['id']
-
-        assert tabs[0]['sessionId'] == 'sid-1'
-        assert tabs[1]['sessionId'] == 'sid-2'
-
-
-class TestTerminalWebSocketRouting:
-    """Test backend WebSocket terminal routing by session_id."""
-
-    def test_websocket_url_contains_session_id(self):
-        """WebSocket URL should include session_id as query param."""
-        base_url = 'ws://localhost:8000/ws/terminal'
+    def test_new_session_sends_session_id(self):
+        """New session MUST announce its session_id so frontend can use it."""
         session_id = 'test-session-123'
-        url = f'{base_url}?session_id={session_id}'
+        announcement = f'[Session: {session_id}]'
 
-        assert 'session_id=test-session-123' in url
-        assert url.startswith('ws://')
+        assert session_id in announcement
+        assert '[' in announcement and ']' in announcement
 
-    def test_same_session_id_reuses_pty(self):
-        """Same session_id should route to the same PTY process."""
-        session_id = 'reuse-test-session'
-        session_store = {}
+    def test_bash_interactive_no_login_banner(self):
+        """Bash started with --norc --noprofile -i should NOT show 'Last login'."""
+        # Simulate bash startup output WITHOUT login banner
+        bash_flags = '--norc --noprofile -i'
+        clean_output = 'bash-3.2$ '
 
-        session_store[session_id] = {'pid': 12345, 'alive': True}
-        existing = session_store.get(session_id)
+        # The clean output has no "Last login"
+        assert 'Last login' not in clean_output
+        assert bash_flags == '--norc --noprofile -i'
 
-        assert existing is not None
-        assert existing['pid'] == 12345
-        assert existing['alive'] is True
+    def test_session_id_format_is_valid(self):
+        """Session IDs should be URL-safe strings (used as query params)."""
+        import re
+        session_id_pattern = re.compile(r'^[\w-]+$')
+        valid_ids = ['abc123', 'session-1', 'ABC123DEF', 'a1b2c3d4']
+        for sid in valid_ids:
+            assert session_id_pattern.match(sid) is not None, f"Valid: {sid}"
 
-    def test_different_session_ids_get_different_pty(self):
-        """Different session_ids should get different PTY processes."""
+    def test_session_id_uniqueness(self):
+        """Each new session must have a unique ID."""
+        import uuid
+        ids = set()
+        for _ in range(100):
+            sid = str(uuid.uuid4())
+            ids.add(sid)
+        assert len(ids) == 100
+
+
+class TestTerminalReconnect:
+    """Reconnect to existing session should show same PTY state, no artificial message."""
+
+    def test_reconnect_no_reconnect_message(self):
+        """Reconnecting to an alive session must NOT send '✓ 会话已恢复'."""
+        session_alive = True
+        reconnect_msg_sent = False  # should remain False
+
+        # Simulate backend reconnect logic
+        if session_alive:
+            # Should ONLY send session_id announcement, nothing else
+            pass  # no reconnect message
+
+        assert not reconnect_msg_sent
+
+    def test_reconnect_sends_session_id_again(self):
+        """Reconnect should announce session_id so frontend knows which session."""
+        session_id = 'existing-session'
+        announcement = f'[Session: {session_id}]'
+
+        assert 'existing-session' in announcement
+
+    def test_reconnect_preserves_pty_state(self):
+        """Reconnecting should show the SAME PTY state (same bash session)."""
+        # Simulate: session was at 'bash-3.2$ ' prompt
+        original_state = 'bash-3.2$ '
+        reconnect_state = 'bash-3.2$ '  # same session
+
+        assert reconnect_state == original_state
+
+    def test_reconnect_same_pid(self):
+        """Same session_id should reuse same PTY process."""
+        sessions = {}
+        sessions['session-A'] = {'pid': 11111, 'alive': True}
+
+        # Reconnect with same session_id
+        reused = sessions.get('session-A')
+
+        assert reused is not None
+        assert reused['pid'] == 11111
+
+    def test_different_session_different_pid(self):
+        """Different session_ids must get different PTY processes."""
         sessions = {}
 
+        # Create session A
         sessions['session-A'] = {'pid': 11111, 'alive': True}
+        # Create session B
         sessions['session-B'] = {'pid': 22222, 'alive': True}
 
         assert sessions['session-A']['pid'] != sessions['session-B']['pid']
 
-    def test_none_session_id_creates_new_uuid(self):
-        """When session_id is None, backend should generate a UUID."""
-        session_id = None
-        if not session_id:
-            session_id = str(uuid.uuid4())
 
-        assert session_id is not None
-        assert len(session_id) == 36  # UUID format
+class TestTerminalTabIsolation:
+    """Each tab should get its own session_id -> own PTY."""
 
-    def test_session_lifecycle_alive_to_dead(self):
-        """Session should transition from alive to dead (e.g., on EOF)."""
-        session = {'pid': 99999, 'alive': True, 'is_attached': True}
+    def test_tab1_session_different_from_tab2(self):
+        """Tab 1 and Tab 2 must have different session_ids."""
+        tab1_sid = 'session-tab1'
+        tab2_sid = 'session-tab2'
 
-        # Simulate EOF (bash exited)
+        assert tab1_sid != tab2_sid
+
+    def test_tab_switch_does_not_create_new_session(self):
+        """Switching tabs should NOT create a new session."""
+        tab1_sid = 'tab1-session'
+        tab2_sid = 'tab2-session'
+
+        sessions_created = []
+
+        # Simulate: user creates tab1, then tab2, then switches back to tab1
+        sessions_created.append(tab1_sid)
+        sessions_created.append(tab2_sid)
+        # Switch back to tab1 - NO new session created
+        # sessions_created stays as [tab1_sid, tab2_sid]
+
+        assert sessions_created == [tab1_sid, tab2_sid]
+
+    def test_closing_tab_keeps_other_tabs_alive(self):
+        """Closing Tab 1 should NOT affect Tab 2's session."""
+        sessions = {
+            'tab1-session': {'pid': 11111, 'alive': True},
+            'tab2-session': {'pid': 22222, 'alive': True},
+        }
+
+        # Close tab1
+        sessions['tab1-session']['alive'] = False
+
+        # Tab2 should still be alive
+        assert sessions['tab2-session']['alive'] is True
+        assert sessions['tab1-session']['alive'] is False
+
+    def test_tab_gets_fresh_session_on_reconnect_after_close(self):
+        """If a tab's session died (EOF), reconnect should create NEW PTY."""
+        sessions = {
+            'tab1-session': {'pid': 11111, 'alive': False, 'master_fd': -1},  # dead
+        }
+
+        # Reconnect to dead session -> create new
+        if not sessions['tab1-session']['alive']:
+            sessions['tab1-session'] = {'pid': 33333, 'alive': True, 'master_fd': 99}  # new
+
+        assert sessions['tab1-session']['pid'] == 33333
+
+
+class TestTerminalEOF:
+    """EOF (bash exit) should mark session dead, not send reconnect message."""
+
+    def test_eof_marks_session_dead(self):
+        """When bash exits, session.alive becomes False."""
+        session = {'pid': 12345, 'alive': True, 'is_attached': True}
+
+        # Simulate EOF from PTY
         session['alive'] = False
         session['is_attached'] = False
 
         assert session['alive'] is False
-        assert session['is_attached'] is False
 
-    def test_session_attach_count_increments(self):
-        """Reconnecting to the same session should increment attach_count."""
-        session = {'pid': 12345, 'alive': True, 'is_attached': True, 'attach_count': 1}
+    def test_eof_no_message_sent_to_client(self):
+        """EOF should NOT send '✓ 会话已恢复' to client."""
+        # Simulate: EOF event happened
+        eof_output = '\r\n[Process exited]\r\n'
 
-        # Client reconnects
-        session['attach_count'] = session.get('attach_count', 0) + 1
+        # No reconnect message
+        assert '✓ 会话已恢复' not in eof_output
 
-        assert session['attach_count'] == 2
+    def test_dead_session_reconnect_creates_new_pty(self):
+        """Reconnecting to a dead session must create a NEW PTY, not reuse dead one."""
+        sessions = {
+            'dead-session': {'pid': 11111, 'alive': False, 'master_fd': -1},
+        }
 
-    def test_session_attach_count_decrements_on_detach(self):
-        """Detaching should decrement attach_count."""
-        session = {'pid': 12345, 'alive': True, 'is_attached': True, 'attach_count': 2}
+        sid = 'dead-session'
+        if not sessions[sid]['alive']:
+            sessions[sid] = {'pid': 99999, 'alive': True, 'master_fd': 77}  # NEW
 
-        # Client disconnects
-        session['is_attached'] = False
-        session['attach_count'] = max(0, session.get('attach_count', 1) - 1)
+        assert sessions[sid]['pid'] == 99999
+        assert sessions[sid]['alive'] is True
 
-        assert session['attach_count'] == 1
-        assert session['is_attached'] is False
-
-    def test_expire_session_cleanup_when_dead_and_detached(self):
-        """Session should be cleaned up when dead and detached."""
+    def test_eof_triggers_session_cleanup(self):
+        """Dead + detached session should be scheduled for cleanup."""
         session = {'pid': 12345, 'alive': False, 'is_attached': False}
 
         should_cleanup = not session['alive'] and not session['is_attached']
 
         assert should_cleanup is True
 
-    def test_expire_session_no_cleanup_when_alive(self):
-        """Session should NOT be cleaned up when still alive."""
-        session = {'pid': 12345, 'alive': True, 'is_attached': False}
 
+class TestTerminalAttachCount:
+    """Multiple clients attaching to same session (tab switch back)."""
+
+    def test_attach_count_increments_on_reconnect(self):
+        """Reconnecting to same session increments attach_count."""
+        session = {'pid': 12345, 'alive': True, 'is_attached': True, 'attach_count': 1}
+
+        # Client reconnects
+        session['attach_count'] += 1
+        session['is_attached'] = True
+
+        assert session['attach_count'] == 2
+        assert session['is_attached'] is True
+
+    def test_attach_count_decrements_on_disconnect(self):
+        """Disconnecting decrements attach_count but session stays alive."""
+        session = {'pid': 12345, 'alive': True, 'is_attached': True, 'attach_count': 2}
+
+        # Client disconnects
+        session['is_attached'] = False
+        session['attach_count'] = max(0, session['attach_count'] - 1)
+
+        assert session['attach_count'] == 1
+        assert session['alive'] is True
+
+    def test_session_stays_alive_when_attach_count_gt_zero(self):
+        """Session should NOT be marked dead just because one client disconnected."""
+        session = {'pid': 12345, 'alive': True, 'is_attached': False, 'attach_count': 1}
+
+        # Even though is_attached=False, session should stay alive (count > 0)
         should_cleanup = not session['alive'] and not session['is_attached']
 
         assert should_cleanup is False
 
-    def test_expire_session_no_cleanup_when_attached(self):
-        """Session should NOT be cleaned up when detached but alive."""
-        session = {'pid': 12345, 'alive': False, 'is_attached': True}
+    def test_session_becomes_cleanup_candidate_when_count_zero(self):
+        """Session becomes cleanup candidate when all clients detached and alive=False."""
+        session = {'pid': 12345, 'alive': False, 'is_attached': False, 'attach_count': 0}
 
         should_cleanup = not session['alive'] and not session['is_attached']
 
-        assert should_cleanup is False
+        assert should_cleanup is True

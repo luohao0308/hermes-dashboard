@@ -77,14 +77,12 @@
               </button>
               <button class="terminal-tab-add" @click="addTerminal">+ 新终端</button>
             </div>
-            <KeepAlive>
-              <Terminal
-                v-if="activeTerminalId"
-                :key="activeTerminalId"
-                :session-id="terminalTabs.find(t => t.id === activeTerminalId)?.sessionId || ''"
-                @connected="onTerminalConnected"
-              />
-            </KeepAlive>
+            <Terminal
+              v-if="activeTerminalId"
+              :key="activeTerminalId"
+              :session-id="terminalTabs.find(t => t.id === activeTerminalId)?.sessionId || ''"
+              @connected="onTerminalConnected"
+            />
           </div>
         </template>
 

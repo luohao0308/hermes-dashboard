@@ -710,20 +710,28 @@ async def terminal_websocket(
         existing = _terminal_sessions.get(session_id)
 
         if existing and existing["alive"]:
-            # Reuse existing PTY
+            # Reuse existing PTY — tell frontend this is a reconnect
             session = existing
             session["is_attached"] = True
             session["attach_count"] = session.get("attach_count", 0) + 1
+            await websocket.send_text(json.dumps({"type": "session", "status": "reconnect"}))
         else:
             # Create new session
             session = await _create_pty_session(session_id)
             session["is_attached"] = True
             session["attach_count"] = 1
+            await websocket.send_text(json.dumps({"type": "session", "status": "new"}))
 
     master_fd = session["master_fd"]
     pid = session["pid"]
     loop = asyncio.get_running_loop()
     pending_tasks: list = []
+
+    # For new sessions, send initial prompt directly (zsh -l doesn't auto-output on fresh PTY).
+    # For reconnects, the PTY buffer already has content — no extra prompt needed.
+    # Both paths: PTY output loop handles all subsequent I/O.
+    if not existing or not existing.get("alive"):
+        await websocket.send_text("\r\nluohao@192 backend % ")
 
     async def send_pty_output():
         """Called by loop.add_reader when master_fd is readable."""

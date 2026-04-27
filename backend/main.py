@@ -356,7 +356,15 @@ async def get_connection(client_id: str):
 async def proxy_status():
     """Proxy to Hermès /api/status - Gateway status overview"""
     try:
-        return await hermes_get("/api/status")
+        response = await hermes_get("/api/status")
+        # Inject dashboard-specific active_connections (SSE browser tab count)
+        if isinstance(response, dict):
+            response["active_connections"] = sse_manager.get_connection_count()
+        elif isinstance(response, list) and len(response) > 0:
+            # Some endpoints return a list; inject into first item
+            if isinstance(response[0], dict):
+                response[0]["active_connections"] = sse_manager.get_connection_count()
+        return response
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
     except Exception as e:

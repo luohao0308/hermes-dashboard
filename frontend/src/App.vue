@@ -183,6 +183,11 @@
           <SystemConfigPanel />
         </template>
 
+        <!-- 事故知识库页面 -->
+        <template v-else-if="currentNav === 'knowledge'">
+          <KnowledgeSearch />
+        </template>
+
         <!-- Agent 聊天页面 -->
         <template v-else-if="currentNav === 'chat'">
           <AgentChat />
@@ -215,6 +220,7 @@ import AgentOpsOverview from './components/AgentOpsOverview.vue'
 import SessionDetail from './components/SessionDetail.vue'
 import AlertsPanel from './components/AlertsPanel.vue'
 import SystemConfigPanel from './components/SystemConfigPanel.vue'
+import KnowledgeSearch from './components/KnowledgeSearch.vue'
 import { API_BASE } from './config'
 
 // Navigation state
@@ -226,6 +232,7 @@ const navTitleMap: Record<string, string> = {
   logs: '日志',
   history: '历史',
   'session-detail': '复盘',
+  knowledge: '知识库',
   chat: '聊天',
   agents: '配置',
   system: '系统'
@@ -239,6 +246,7 @@ function handleNavChange(navId: string) {
     tasks: '#/tasks',
     logs: '#/logs',
     history: '#/history',
+    knowledge: '#/knowledge',
     chat: '#/chat',
     agents: '#/agents',
     system: '#/system',
@@ -1033,6 +1041,7 @@ onMounted(async () => {
     '#/tasks': 'tasks',
     '#/logs': 'logs',
     '#/history': 'history',
+    '#/knowledge': 'knowledge',
     '#/chat': 'chat',
     '#/agents': 'agents',
     '#/system': 'system',

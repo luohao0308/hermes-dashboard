@@ -13,7 +13,12 @@
           :class="{ active: session.session_id === currentSessionId }"
           @click="selectSession(session.session_id)"
         >
-          <span class="session-name">{{ sessionTitle(session) }}</span>
+          <span class="session-main">
+            <span class="session-name">{{ sessionTitle(session) }}</span>
+            <span v-if="session.linked_session_id" class="session-context">
+              关联 #{{ session.linked_session_id.slice(0, 8) }}
+            </span>
+          </span>
           <button
             class="session-delete"
             @click.stop="deleteSession(session.session_id)"
@@ -120,8 +125,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick, onUnmounted } from 'vue'
-
-const API_BASE = 'http://localhost:8000'
+import { API_BASE } from '../config'
 
 // Session types
 interface ChatSession {
@@ -130,6 +134,9 @@ interface ChatSession {
   message_count: number
   created_at: string
   is_running: boolean
+  title?: string | null
+  linked_session_id?: string | null
+  terminal_session_id?: string | null
 }
 
 interface ChatMessage {
@@ -169,6 +176,7 @@ let eventSource: EventSource | null = null
 
 // Computed
 function sessionTitle(session: ChatSession): string {
+  if (session.title) return session.title
   const d = new Date(session.created_at)
   const date = d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
   const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -197,6 +205,9 @@ async function createSession() {
     sessions.value.unshift({
       session_id: data.session_id,
       agent_id: data.agent_id,
+      title: data.title,
+      linked_session_id: data.linked_session_id,
+      terminal_session_id: data.terminal_session_id,
       message_count: 0,
       created_at: data.created_at,
       is_running: false,
@@ -584,7 +595,20 @@ onUnmounted(() => {
   font-weight: 500;
 }
 .session-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-main {
   flex: 1;
+  min-width: 0;
+}
+.session-context {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

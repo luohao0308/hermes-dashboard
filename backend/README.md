@@ -13,6 +13,10 @@ FastAPI + SSE 后端服务，用于 Hermès 监控平台。
 
 ## 快速开始
 
+### 环境要求
+
+- Python 3.10+（推荐 3.11，与 Dockerfile 保持一致）
+
 ### 安装依赖
 
 ```bash

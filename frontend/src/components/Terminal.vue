@@ -14,6 +14,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
+import { WS_BASE } from '../config'
 
 const props = defineProps<{
   sessionId?: string
@@ -34,7 +35,7 @@ let resizeObserver: ResizeObserver | null = null
 const msgBuffer: string[] = []
 let xtermReady = false
 
-const BASE_WS_URL = `ws://localhost:8000/ws/terminal`
+const BASE_WS_URL = `${WS_BASE}/ws/terminal`
 
 function buildWsUrl(sid: string): string {
   return `${BASE_WS_URL}?session_id=${sid}`

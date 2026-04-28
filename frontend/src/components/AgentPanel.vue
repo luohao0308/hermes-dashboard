@@ -86,8 +86,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-
-const API_BASE = 'http://localhost:8000'
+import { API_BASE } from '../config'
 
 interface AgentConfig {
   id: string

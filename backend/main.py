@@ -21,7 +21,7 @@ import httpx
 from sse_manager import sse_manager
 from config import settings
 from agent import AgentOrchestrator
-from agent.chat_manager import chat_manager, ChatMessage
+from agent.chat_manager import chat_manager
 from agent.agent_manager import _AgentRegistry
 from agents.stream_events import StreamEvent
 
@@ -502,6 +502,144 @@ async def proxy_plugins():
         raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
 
 
+@app.get("/api/alerts")
+async def get_alerts(limit: int = Query(10, ge=1, le=50)):
+    """Build actionable alerts from Hermès status, sessions, and logs."""
+    alerts: list[dict[str, Any]] = []
+    now = datetime.now()
+
+    try:
+        status = await hermes_get("/api/status")
+        if not status.get("gateway_running"):
+            alerts.append(_make_alert(
+                severity="critical",
+                title="Gateway 未运行",
+                message="Hermès Gateway 当前未运行，任务状态和日志可能不是实时数据。",
+                source="status",
+                action_label="查看日志",
+                action_nav="logs",
+            ))
+    except Exception:
+        alerts.append(_make_alert(
+            severity="critical",
+            title="Hermès API 不可达",
+            message="Bridge 无法访问 Hermès Dashboard API，请确认 9119 端口服务是否启动。",
+            source="status",
+            action_label="打开终端",
+            action_nav="terminal",
+        ))
+
+    try:
+        sessions = await hermes_get("/api/sessions", {"limit": 50, "offset": 0})
+        for session in sessions.get("sessions", []):
+            if not session.get("is_active"):
+                continue
+            idle_seconds = _age_seconds(session.get("last_active"), now)
+            if idle_seconds >= 300:
+                session_id = session.get("id", "")
+                alerts.append(_make_alert(
+                    severity="warning",
+                    title="活跃 Session 长时间无更新",
+                    message=f"{session.get('title') or session_id[:8]} 已约 {idle_seconds // 60} 分钟没有活跃信号。",
+                    source="session",
+                    session_id=session_id,
+                    action_label="查看复盘",
+                    action_nav=f"sessions/{session_id}",
+                ))
+    except Exception:
+        pass
+
+    try:
+        log_data = await hermes_get("/api/logs", {"lines": 100, "level": "INFO"})
+        for log in _normalize_log_entries(log_data):
+            message = log.get("message", "")
+            level = str(log.get("level") or log.get("type") or "").lower()
+            lower = message.lower()
+            if "error" in level or "error" in lower or "exception" in lower or "traceback" in lower:
+                alerts.append(_make_alert(
+                    severity="critical",
+                    title="最近日志包含错误",
+                    message=message[:220],
+                    source="logs",
+                    action_label="查看日志",
+                    action_nav="logs",
+                ))
+            elif "warn" in level or "warn" in lower:
+                alerts.append(_make_alert(
+                    severity="warning",
+                    title="最近日志包含警告",
+                    message=message[:220],
+                    source="logs",
+                    action_label="查看日志",
+                    action_nav="logs",
+                ))
+            if len(alerts) >= limit:
+                break
+    except Exception:
+        pass
+
+    if not alerts:
+        alerts.append(_make_alert(
+            severity="info",
+            title="暂无需要介入的告警",
+            message="当前状态、活跃 session 和最近日志没有触发规则型告警。",
+            source="monitor",
+            action_label="刷新",
+            action_nav="dashboard",
+        ))
+
+    severity_rank = {"critical": 0, "warning": 1, "info": 2}
+    alerts.sort(key=lambda item: severity_rank.get(item["severity"], 3))
+    return {
+        "alerts": alerts[:limit],
+        "generated_at": now.isoformat(),
+        "total": len(alerts[:limit]),
+    }
+
+
+def _make_alert(
+    severity: str,
+    title: str,
+    message: str,
+    source: str,
+    action_label: str,
+    action_nav: str,
+    session_id: Optional[str] = None,
+) -> dict[str, Any]:
+    alert_id = uuid.uuid5(uuid.NAMESPACE_URL, f"{severity}:{source}:{session_id or title}:{message[:80]}")
+    return {
+        "id": str(alert_id),
+        "severity": severity,
+        "title": title,
+        "message": message,
+        "source": source,
+        "session_id": session_id,
+        "action_label": action_label,
+        "action_nav": action_nav,
+        "created_at": datetime.now().isoformat(),
+    }
+
+
+def _age_seconds(value: Any, now: datetime) -> int:
+    if not value:
+        return 0
+    try:
+        timestamp = float(value)
+        if timestamp > 10_000_000_000:
+            timestamp = timestamp / 1000
+        return max(0, int((now - datetime.fromtimestamp(timestamp)).total_seconds()))
+    except Exception:
+        return 0
+
+
+def _normalize_log_entries(log_data: dict[str, Any]) -> list[dict[str, Any]]:
+    if isinstance(log_data.get("logs"), list):
+        return [entry if isinstance(entry, dict) else {"message": str(entry)} for entry in log_data["logs"]]
+    if isinstance(log_data.get("lines"), list):
+        return [{"message": str(line)} for line in log_data["lines"]]
+    return []
+
+
 # ============================================================================
 # Legacy Endpoints (for backward compatibility with frontend)
 # ============================================================================
@@ -549,6 +687,14 @@ async def get_task(task_id: str):
             "status": "running" if session.get("is_active") else "completed",
             "progress": 100 if not session.get("is_active") else 50,
             "messages": messages.get("messages", []),
+            "message_count": session.get("message_count", 0),
+            "model": session.get("model"),
+            "started_at": datetime.fromtimestamp(session.get("started_at", 0)/1000).isoformat() if session.get("started_at") else None,
+            "completed_at": datetime.fromtimestamp(session.get("ended_at", session.get("last_active", 0))/1000).isoformat() if session.get("ended_at") or session.get("last_active") else None,
+            "duration": (session.get("ended_at", 0) - session.get("started_at", 0)) // 1000 if session.get("ended_at") and session.get("started_at") else 0,
+            "input_tokens": session.get("input_tokens", 0),
+            "output_tokens": session.get("output_tokens", 0),
+            "end_reason": session.get("end_reason") or session.get("reason"),
         }
     except HTTPException:
         raise
@@ -645,6 +791,8 @@ async def _create_pty_session(session_id: str):
         "master_fd": master_fd,
         "alive": True,
         "is_attached": False,
+        "input_buffer": "",
+        "pending_dangerous_command": None,
     }
     _terminal_sessions[session_id] = session
     return session
@@ -676,6 +824,65 @@ async def _expire_session(session_id: str):
             _close_pty_session(session)
             del _terminal_sessions[session_id]
             print(f"[TERMINAL] Session {session_id} expired and cleaned up", flush=True)
+
+
+@app.get("/api/terminal/sessions")
+async def list_terminal_sessions():
+    """List browser terminal sessions."""
+    async with _pty_lock:
+        sessions = [
+            {
+                "session_id": session_id,
+                "pid": session.get("pid"),
+                "alive": session.get("alive", False),
+                "is_attached": session.get("is_attached", False),
+                "attach_count": session.get("attach_count", 0),
+                "pending_dangerous_command": session.get("pending_dangerous_command"),
+            }
+            for session_id, session in _terminal_sessions.items()
+        ]
+    return {"sessions": sessions, "total": len(sessions)}
+
+
+@app.delete("/api/terminal/sessions/{session_id}")
+async def close_terminal_session(session_id: str):
+    """Close a terminal session and terminate its PTY process."""
+    async with _pty_lock:
+        session = _terminal_sessions.pop(session_id, None)
+    if not session:
+        raise HTTPException(status_code=404, detail="Terminal session not found")
+    _close_pty_session(session)
+    return {"ok": True, "session_id": session_id}
+
+
+def _is_dangerous_command(command: str) -> bool:
+    normalized = " ".join(command.strip().split()).lower()
+    if not normalized:
+        return False
+    dangerous_patterns = [
+        "rm -rf /",
+        "rm -fr /",
+        "sudo rm -rf",
+        "sudo rm -fr",
+        "git reset --hard",
+        "git clean -fd",
+        "mkfs",
+        ":(){",
+    ]
+    return any(pattern in normalized for pattern in dangerous_patterns)
+
+
+def _update_terminal_input_buffer(session: dict, data: str) -> None:
+    buffer = session.get("input_buffer", "")
+    if data in ("\x7f", "\b"):
+        session["input_buffer"] = buffer[:-1]
+        return
+    if data == "\x15":
+        session["input_buffer"] = ""
+        return
+    if data.startswith("\x1b"):
+        return
+    session["input_buffer"] = buffer + data.replace("\r", "").replace("\n", "")
 
 
 @app.websocket("/ws/terminal")
@@ -811,10 +1018,33 @@ async def terminal_websocket(
                 except Exception:
                     pass
 
-            # Forward keystrokes to PTY master
-            cmd = data.encode("utf-8", errors="replace")
             try:
-                os.write(master_fd, cmd)
+                if data in ("\r", "\n"):
+                    command = session.get("input_buffer", "").strip()
+                    confirmed = command.startswith("confirm ")
+                    command_to_run = command[len("confirm "):].strip() if confirmed else command
+
+                    if _is_dangerous_command(command_to_run):
+                        os.write(master_fd, b"\x15")
+                        session["input_buffer"] = ""
+                        if confirmed:
+                            session["pending_dangerous_command"] = None
+                            os.write(master_fd, (command_to_run + "\r").encode("utf-8", errors="replace"))
+                        else:
+                            session["pending_dangerous_command"] = command_to_run
+                            await websocket.send_text(
+                                "\r\n\x1b[33m[安全确认]\x1b[0m 检测到高风险命令，已阻止执行。"
+                                "如确认需要执行，请输入: confirm "
+                                f"{command_to_run}\r\n"
+                            )
+                        continue
+
+                    session["input_buffer"] = ""
+                    os.write(master_fd, data.encode("utf-8", errors="replace"))
+                    continue
+
+                _update_terminal_input_buffer(session, data)
+                os.write(master_fd, data.encode("utf-8", errors="replace"))
             except OSError as e:
                 print(f"[TERMINAL] write error: {e}", flush=True)
                 break
@@ -941,6 +1171,9 @@ from pydantic import BaseModel
 
 class ChatCreateRequest(BaseModel):
     agent_id: str = "main"
+    title: Optional[str] = None
+    linked_session_id: Optional[str] = None
+    terminal_session_id: Optional[str] = None
 
 
 class ChatMessageRequest(BaseModel):
@@ -950,10 +1183,18 @@ class ChatMessageRequest(BaseModel):
 @app.post("/api/agent/chat")
 async def create_chat_session(body: ChatCreateRequest):
     """Create a new chat session."""
-    session = chat_manager.create_session(agent_id=body.agent_id)
+    session = chat_manager.create_session(
+        agent_id=body.agent_id,
+        title=body.title,
+        linked_session_id=body.linked_session_id,
+        terminal_session_id=body.terminal_session_id,
+    )
     return {
         "session_id": session.session_id,
         "agent_id": session.agent_id,
+        "title": session.title,
+        "linked_session_id": session.linked_session_id,
+        "terminal_session_id": session.terminal_session_id,
         "created_at": session.created_at.isoformat(),
     }
 
@@ -1014,17 +1255,18 @@ async def send_chat_message(session_id: str, body: ChatMessageRequest):
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     # Append user message
-    session.messages.append(ChatMessage(
+    user_msg = chat_manager.append_message(
+        session.session_id,
         role="user",
         content=body.message,
-    ))
+    )
 
     # Emit user message to stream
     await session.queue.put(ServerSentEvent(
         event="user_message",
         data=json.dumps({
             "content": body.message,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": user_msg.timestamp if user_msg else datetime.now().isoformat(),
         })
     ))
 
@@ -1055,7 +1297,6 @@ async def _run_chat_agent(session, message: str):
         # Get agent from session (may have been switched via PATCH)
         agents = _agent_registry.get_all_agents()
         # Case-insensitive lookup: registry keys are lowercase (developer, dispatcher, etc.)
-        print(f"[DEBUG] _run_chat_agent: session.agent_id={session.agent_id!r}, looking up {session.agent_id.lower()!r}")
         agent = agents.get(session.agent_id.lower(), agents.get("dispatcher"))
 
         result = Runner.run_streamed(agent, message)
@@ -1087,13 +1328,19 @@ async def _run_chat_agent(session, message: str):
         ))
 
         # Append assistant message to history
-        session.messages.append(ChatMessage(
+        chat_manager.append_message(
+            session.session_id,
             role="assistant",
             content=final_text,
             agent_name=current_agent_name,
-        ))
+        )
 
     except Exception as exc:
+        chat_manager.append_message(
+            session.session_id,
+            role="system",
+            content=f"Agent error: {exc}",
+        )
         await session.queue.put(ServerSentEvent(
             event="agent_error",
             data=json.dumps({"error": str(exc)}),
@@ -1197,6 +1444,12 @@ async def patch_chat_session(session_id: str, body: dict | None = None):
     ok = chat_manager.update_session_agent(session_id, agent_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Session not found")
+    chat_manager.update_session_context(
+        session_id,
+        title=body.get("title"),
+        linked_session_id=body.get("linked_session_id"),
+        terminal_session_id=body.get("terminal_session_id"),
+    )
     return {"ok": True, "agent_id": agent_id}
 
 
@@ -1212,6 +1465,11 @@ async def stop_chat_session(session_id: str):
         event="agent_stopped",
         data=json.dumps({"message": "Agent stopped by user"}),
     ))
+    chat_manager.append_message(
+        session_id,
+        role="system",
+        content="Agent stopped by user",
+    )
     stopped = await chat_manager.stop_session(session_id)
     if not stopped:
         raise HTTPException(status_code=500, detail="Failed to stop agent")

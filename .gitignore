@@ -1,1 +1,25 @@
 __pycache__/
+.DS_Store
+.obsidian/workspace.json
+.omx/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Frontend artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Python artifacts
+.pytest_cache/
+*.pyc
+
+# Local runtime data
+backend/data/*.sqlite
+backend/data/*.sqlite3
+backend/data/*.db
+.backend.pid
+.frontend.pid

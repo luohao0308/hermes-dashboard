@@ -12,6 +12,22 @@
 
 ## 技术方案
 
+### 环境要求
+
+- Node.js 20+（Vite 构建需要现代 Web Crypto 支持）
+- Python 3.10+（推荐 3.11，与后端 Dockerfile 保持一致）
+
+### 当前能力
+
+- AgentOps 首页概览：健康度、活跃任务、错误日志、Token、模型和能力摘要
+- Session 复盘：历史任务详情、消息时间线、关联日志和失败初判
+- Agent Chat 持久化：SQLite 保存会话和消息，支持重启恢复
+- 告警与建议：规则型告警、建议动作和 Dashboard 告警面板
+- 终端安全：终端 session 管理和高风险命令确认
+- 系统配置中心：模型、Hermès 配置、Skills、Plugins、Cron Jobs
+
+更多运行与发布说明见 `docs/OPERATIONS.md` 和 `docs/RELEASE_NOTES.md`。
+
 ### 系统架构图
 
 ![Architecture Diagram](docs/architecture-diagram.html)
@@ -516,6 +532,6 @@ npm run build
 ## Notion 集成
 
 - **Notion 项目页面**: https://www.notion.so/Herm-s-Dashboard-34d1ed0778ad81da88a4c7c3e6c89598
-- **Notion API Token**: 已配置在 `~/.hermes/.env` 文件中（ntn_...）
+- **Notion API Token**: 仅保存在本地环境变量或 `.env`，不要写入仓库文档
 - **Obsidian Vault**: `~/Documents/Obsidian Vault/`
 - **同步机制**: 每次 Phase 完成时同步更新 Notion 和 Obsidian 文档

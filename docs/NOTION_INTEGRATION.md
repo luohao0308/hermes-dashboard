@@ -1,9 +1,7 @@
 # Notion Integration
 
 ## Notion API Token
-```
-NOTION_API_KEY=ntn_M82716571334KsXRK3YlRfpgLVk3A6yDLyKNjh8if2Zbu3
-```
+真实 Token 不应写入仓库。请在本地 `.env` 中配置 `NOTION_API_KEY`，并确保泄露过的 Token 已在 Notion 后台轮换。
 
 ## Hermès Dashboard 项目页面
 - 项目概览: https://www.notion.so/Herm-s-Dashboard-34d1ed0778ad81da88a4c7c3e6c89598

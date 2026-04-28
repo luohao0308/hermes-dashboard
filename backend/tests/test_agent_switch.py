@@ -71,6 +71,28 @@ class TestChatManagerAPI:
         assert result is True
         assert mgr.get_session(sid) is None
 
+    def test_persisted_sessions_restore_messages(self, tmp_path):
+        from agent.chat_manager import ChatManager
+
+        db_path = tmp_path / "chat.sqlite3"
+        mgr = ChatManager(db_path=str(db_path))
+        session = mgr.create_session(
+            'Developer',
+            title='Persisted chat',
+            linked_session_id='hermes-session-1',
+        )
+        mgr.append_message(session.session_id, 'user', 'hello')
+        mgr.append_message(session.session_id, 'assistant', 'world', agent_name='Developer')
+
+        restored = ChatManager(db_path=str(db_path))
+        restored_session = restored.get_session(session.session_id)
+
+        assert restored_session is not None
+        assert restored_session.agent_id == 'Developer'
+        assert restored_session.title == 'Persisted chat'
+        assert restored_session.linked_session_id == 'hermes-session-1'
+        assert [m.content for m in restored_session.messages] == ['hello', 'world']
+
 
 class TestRunChatAgentLogic:
     """Test _run_chat_agent uses session.agent_id."""

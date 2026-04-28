@@ -10,7 +10,7 @@
         :title="navTitleMap[currentNav] || '概览'"
         :hermesStatus="hermesStatus"
         :loading="isRefreshing"
-        @refresh="refreshAll"
+        @refresh="handleTopRefresh"
       />
 
       <!-- 页面内容 -->
@@ -22,7 +22,6 @@
             <div class="status-item">
               <span class="status-dot" :class="hermesStatus?.gateway_running ? 'success' : 'error'"></span>
               <span>Gateway {{ hermesStatus?.gateway_running ? '运行中' : '已停止' }}</span>
->>>>>>> Stashed changes
             </div>
             <div class="status-item">
               <span class="status-dot" :class="isConnected ? 'success' : 'error'"></span>
@@ -32,6 +31,24 @@
               <span>v{{ hermesStatus?.version || 'N/A' }}</span>
             </div>
           </div>
+
+          <AgentOpsOverview
+            :status="hermesStatus"
+            :is-connected="isConnected"
+            :tasks="tasks"
+            :logs="logs"
+            :history="history"
+            :snapshot="overviewSnapshot"
+            :loading="loadingOverview"
+            @refresh="fetchOverviewSnapshot"
+          />
+
+          <AlertsPanel
+            :alerts="alerts"
+            :loading="loadingAlerts"
+            @refresh="fetchAlerts"
+            @action="handleAlertAction"
+          />
 
           <!-- 快捷入口 -->
           <div class="quick-actions">
@@ -128,9 +145,28 @@
           />
         </template>
 
+        <!-- Session 复盘详情页面 -->
+        <template v-else-if="currentNav === 'session-detail'">
+          <SessionDetail
+            :task-id="selectedSessionId"
+            :item="selectedHistoryItem"
+            :detail="selectedSessionDetail"
+            :logs="logs"
+            :loading="loadingSessionDetail"
+            :error="sessionDetailError"
+            @back="backToHistory"
+            @refresh="refreshSessionDetail"
+          />
+        </template>
+
         <!-- Agent 多智能体协作页面 -->
         <template v-else-if="currentNav === 'agents'">
           <AgentPanel />
+        </template>
+
+        <!-- 系统配置中心页面 -->
+        <template v-else-if="currentNav === 'system'">
+          <SystemConfigPanel />
         </template>
 
         <!-- Agent 聊天页面 -->
@@ -161,8 +197,11 @@ import HistoryList from './components/HistoryList.vue'
 import Terminal from './components/Terminal.vue'
 import AgentPanel from './components/AgentPanel.vue'
 import AgentChat from './components/AgentChat.vue'
-
-const API_BASE = 'http://localhost:8000'
+import AgentOpsOverview from './components/AgentOpsOverview.vue'
+import SessionDetail from './components/SessionDetail.vue'
+import AlertsPanel from './components/AlertsPanel.vue'
+import SystemConfigPanel from './components/SystemConfigPanel.vue'
+import { API_BASE } from './config'
 
 // Navigation state
 const currentNav = ref('dashboard')
@@ -172,8 +211,10 @@ const navTitleMap: Record<string, string> = {
   tasks: '任务',
   logs: '日志',
   history: '历史',
+  'session-detail': '复盘',
   chat: '聊天',
-  agents: '配置'
+  agents: '配置',
+  system: '系统'
 }
 
 function handleNavChange(navId: string) {
@@ -186,6 +227,7 @@ function handleNavChange(navId: string) {
     history: '#/history',
     chat: '#/chat',
     agents: '#/agents',
+    system: '#/system',
   }
   if (navToHash[navId]) window.location.hash = navToHash[navId]
 }
@@ -204,11 +246,20 @@ const hermesStatus = ref<Record<string, any> | null>(null)
 const tasks = ref<Task[]>([])
 const logs = ref<Log[]>([])
 const history = ref<HistoryItem[]>([])
+const overviewSnapshot = ref<OverviewSnapshot>({})
+const alerts = ref<AlertItem[]>([])
+const selectedHistoryItem = ref<HistoryItem | null>(null)
+const selectedSessionDetail = ref<SessionDetailData | null>(null)
+const selectedSessionId = ref('')
+const sessionDetailError = ref<string | null>(null)
 
 // Loading states
 const loadingTasks = ref(false)
 const loadingLogs = ref(false)
 const loadingHistory = ref(false)
+const loadingOverview = ref(false)
+const loadingAlerts = ref(false)
+const loadingSessionDetail = ref(false)
 
 // Toast notifications
 interface Toast {
@@ -258,9 +309,16 @@ function switchTerminal(id: string) {
   activeTerminalId.value = id
 }
 
-function closeTerminal(idx: number) {
+async function closeTerminal(idx: number) {
   if (terminalTabs.value.length === 1) return // Keep at least one
   const tab = terminalTabs.value[idx]
+  try {
+    await fetch(`${API_BASE}/api/terminal/sessions/${encodeURIComponent(tab.sessionId)}`, {
+      method: 'DELETE',
+    })
+  } catch (e) {
+    addToast('warning', `终端会话关闭请求失败，本地标签已移除`)
+  }
   terminalTabs.value.splice(idx, 1)
   if (activeTerminalId.value === tab.id) {
     activeTerminalId.value = terminalTabs.value[Math.max(0, idx - 1)].id
@@ -316,6 +374,52 @@ interface HistoryItem {
   output_tokens?: number
 }
 
+interface SessionMessage {
+  role?: string
+  content?: string
+  text?: string
+  message?: string
+  timestamp?: string
+  created_at?: string
+}
+
+interface SessionDetailData {
+  task_id?: string
+  name?: string
+  status?: string
+  messages?: SessionMessage[]
+  message_count?: number
+  model?: string
+  started_at?: string
+  completed_at?: string
+  duration?: number
+  input_tokens?: number
+  output_tokens?: number
+  end_reason?: string
+}
+
+interface OverviewSnapshot {
+  health?: Record<string, any> | null
+  analytics?: Record<string, any> | null
+  modelInfo?: Record<string, any> | null
+  config?: Record<string, any> | null
+  skills?: Record<string, any> | any[] | null
+  cronJobs?: Record<string, any> | any[] | null
+  plugins?: Record<string, any> | any[] | null
+}
+
+interface AlertItem {
+  id: string
+  severity: 'critical' | 'warning' | 'info'
+  title: string
+  message: string
+  source: string
+  session_id?: string | null
+  action_label: string
+  action_nav: string
+  created_at: string
+}
+
 // Actions
 function handlePause(taskId: string) {
   addToast('info', `暂停任务: ${taskId.slice(0, 8)}`)
@@ -326,7 +430,7 @@ function handleCancel(taskId: string) {
 }
 
 function handleViewDetails(item: HistoryItem) {
-  addToast('info', `查看任务详情: ${item.name}`)
+  openSessionDetail(item.task_id, item)
 }
 
 function handleReRunTask(item: HistoryItem) {
@@ -417,9 +521,117 @@ async function fetchHistory() {
   }
 }
 
+async function fetchOptional<T>(url: string): Promise<T | null> {
+  try {
+    return await fetchJSON<T>(url)
+  } catch (e) {
+    return null
+  }
+}
+
+async function fetchOverviewSnapshot() {
+  loadingOverview.value = true
+  const [
+    health,
+    analytics,
+    modelInfo,
+    config,
+    skills,
+    cronJobs,
+    plugins,
+  ] = await Promise.all([
+    fetchOptional<Record<string, any>>(`${API_BASE}/health`),
+    fetchOptional<Record<string, any>>(`${API_BASE}/api/analytics/usage?days=7`),
+    fetchOptional<Record<string, any>>(`${API_BASE}/api/model/info`),
+    fetchOptional<Record<string, any>>(`${API_BASE}/api/config`),
+    fetchOptional<Record<string, any>>(`${API_BASE}/api/skills`),
+    fetchOptional<Record<string, any>>(`${API_BASE}/api/cron/jobs`),
+    fetchOptional<Record<string, any>>(`${API_BASE}/api/plugins`),
+  ])
+  overviewSnapshot.value = {
+    health,
+    analytics,
+    modelInfo,
+    config,
+    skills,
+    cronJobs,
+    plugins,
+  }
+  loadingOverview.value = false
+}
+
+async function fetchAlerts() {
+  loadingAlerts.value = true
+  try {
+    const data = await fetchJSON<{ alerts: AlertItem[] }>(`${API_BASE}/api/alerts?limit=8`)
+    alerts.value = data.alerts || []
+  } catch (e) {
+    alerts.value = []
+  } finally {
+    loadingAlerts.value = false
+  }
+}
+
+async function fetchSessionDetail(taskId: string) {
+  if (!taskId) return
+  loadingSessionDetail.value = true
+  sessionDetailError.value = null
+  try {
+    selectedSessionDetail.value = await fetchJSON<SessionDetailData>(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`)
+  } catch (e) {
+    selectedSessionDetail.value = null
+    sessionDetailError.value = e instanceof Error ? e.message : '未知错误'
+  } finally {
+    loadingSessionDetail.value = false
+  }
+}
+
+function openSessionDetail(taskId: string, item?: HistoryItem) {
+  selectedSessionId.value = taskId
+  selectedHistoryItem.value = item || history.value.find(h => h.task_id === taskId) || null
+  selectedSessionDetail.value = null
+  currentNav.value = 'session-detail'
+  window.location.hash = `#/sessions/${encodeURIComponent(taskId)}`
+  void fetchSessionDetail(taskId)
+}
+
+function refreshSessionDetail() {
+  if (selectedSessionId.value) void fetchSessionDetail(selectedSessionId.value)
+}
+
+function backToHistory() {
+  selectedSessionId.value = ''
+  selectedHistoryItem.value = null
+  selectedSessionDetail.value = null
+  sessionDetailError.value = null
+  handleNavChange('history')
+}
+
+function handleAlertAction(alert: AlertItem) {
+  if (alert.action_nav.startsWith('sessions/')) {
+    const taskId = alert.action_nav.replace('sessions/', '')
+    openSessionDetail(taskId)
+    return
+  }
+  if (alert.action_nav === 'dashboard') {
+    void fetchAlerts()
+    return
+  }
+  handleNavChange(alert.action_nav)
+}
+
+async function handleTopRefresh() {
+  if (currentNav.value === 'session-detail') {
+    refreshSessionDetail()
+    await fetchLogs()
+    return
+  }
+  await refreshAll()
+}
+
 async function refreshAll() {
   isRefreshing.value = true
-  await Promise.all([fetchHermesStatus(), fetchTasks(), fetchLogs(), fetchHistory()])
+  await Promise.all([fetchHermesStatus(), fetchTasks(), fetchLogs(), fetchHistory(), fetchOverviewSnapshot(), fetchAlerts()])
   isRefreshing.value = false
   addToast('success', '数据已刷新')
 }
@@ -562,10 +774,19 @@ onMounted(async () => {
     '#/history': 'history',
     '#/chat': 'chat',
     '#/agents': 'agents',
+    '#/system': 'system',
     '#/': 'dashboard',
     '': 'dashboard',
   }
   const handleHashChange = () => {
+    const sessionMatch = window.location.hash.match(/^#\/sessions\/(.+)$/)
+    if (sessionMatch) {
+      const taskId = decodeURIComponent(sessionMatch[1])
+      if (selectedSessionId.value !== taskId || currentNav.value !== 'session-detail') {
+        openSessionDetail(taskId)
+      }
+      return
+    }
     const nav = hashToNav[window.location.hash]
     if (nav && currentNav.value !== nav) currentNav.value = nav
   }

@@ -10,6 +10,7 @@ describe('AlertsPanel', () => {
       title: 'Gateway 未运行',
       message: 'Hermès Gateway 当前未运行',
       source: 'status',
+      session_id: 'session-1',
       action_label: '查看日志',
       action_nav: 'logs',
       created_at: '2026-04-28T08:00:00Z',
@@ -23,8 +24,11 @@ describe('AlertsPanel', () => {
     expect(wrapper.text()).toContain('Gateway 未运行')
     expect(wrapper.text()).toContain('严重')
 
-    await wrapper.find('.action-btn').trigger('click')
+    await wrapper.findAll('.action-btn')[1].trigger('click')
     expect(wrapper.emitted('action')?.[0]).toEqual([alert])
+
+    await wrapper.findAll('.action-btn')[0].trigger('click')
+    expect(wrapper.emitted('runbook')?.[0]).toEqual([alert])
   })
 
   it('emits refresh', async () => {

@@ -26,9 +26,14 @@
             <span>{{ formatTime(alert.created_at) }}</span>
           </div>
         </div>
-        <button class="action-btn" @click="emit('action', alert)">
-          {{ alert.action_label }}
-        </button>
+        <div class="alert-actions">
+          <button v-if="alert.session_id" class="action-btn" @click="emit('runbook', alert)">
+            生成 Runbook
+          </button>
+          <button class="action-btn" @click="emit('action', alert)">
+            {{ alert.action_label }}
+          </button>
+        </div>
       </article>
 
       <div v-if="alerts.length === 0 && !loading" class="empty-alerts">
@@ -65,6 +70,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   refresh: []
   action: [alert: AlertItem]
+  runbook: [alert: AlertItem]
 }>()
 
 const severityText: Record<string, string> = {
@@ -218,6 +224,11 @@ function formatTime(timestamp: string): string {
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.alert-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .action-btn:hover,

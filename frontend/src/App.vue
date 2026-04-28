@@ -48,6 +48,7 @@
             :loading="loadingAlerts"
             @refresh="fetchAlerts"
             @action="handleAlertAction"
+            @runbook="handleAlertRunbook"
           />
 
           <!-- 快捷入口 -->
@@ -731,15 +732,22 @@ async function analyzeSessionRca() {
 
 async function generateSessionRunbook() {
   if (!selectedSessionId.value || loadingRunbook.value) return
+  await generateRunbookForSession(selectedSessionId.value)
+}
+
+async function generateRunbookForSession(sessionId: string) {
+  if (!sessionId || loadingRunbook.value) return
   loadingRunbook.value = true
   try {
     const data = await fetchJSON<{ runbook: RunbookReport }>(
-      `${API_BASE}/api/sessions/${encodeURIComponent(selectedSessionId.value)}/runbook`,
+      `${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/runbook`,
       { method: 'POST' }
     )
-    selectedRunbook.value = data.runbook
-    await fetchLatestRca(selectedSessionId.value)
-    await fetchLatestTrace(selectedSessionId.value)
+    if (selectedSessionId.value === sessionId) {
+      selectedRunbook.value = data.runbook
+      await fetchLatestRca(sessionId)
+      await fetchLatestTrace(sessionId)
+    }
     addToast('success', 'Runbook 已生成')
   } catch (e) {
     addToast('error', 'Runbook 生成失败')
@@ -814,6 +822,11 @@ function handleAlertAction(alert: AlertItem) {
     return
   }
   handleNavChange(alert.action_nav)
+}
+
+async function handleAlertRunbook(alert: AlertItem) {
+  if (!alert.session_id) return
+  await generateRunbookForSession(alert.session_id)
 }
 
 async function handleTopRefresh() {

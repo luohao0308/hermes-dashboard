@@ -79,6 +79,7 @@
 - Added rule-based runbook generation from session detail, RCA, and trace data.
 - Added `GET/POST /api/sessions/{session_id}/runbook`.
 - Runbooks persist in the Agent trace SQLite database.
+- Alerts with linked sessions can trigger Runbook generation directly from the alerts panel.
 - Session replay pages can generate and copy Markdown runbooks.
 - Added `POST /api/sessions/{session_id}/export` for local Markdown export.
 - Added `GET /api/exports` for export directory status and recent Markdown files.

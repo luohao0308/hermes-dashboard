@@ -68,6 +68,47 @@
       </div>
     </div>
 
+    <div class="rca-panel">
+      <div class="rca-header">
+        <div>
+          <div class="panel-title">AI 失败原因分析</div>
+          <p>{{ rcaSubtitle }}</p>
+        </div>
+        <div class="rca-actions">
+          <button v-if="rcaReport" class="secondary-btn" @click="copyRcaReport">复制复盘</button>
+          <button class="primary-btn" :disabled="rcaLoading" @click="emit('analyze-rca')">
+            <span v-if="rcaLoading" class="spinner"></span>
+            {{ rcaLoading ? '分析中' : '一键分析失败原因' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-if="rcaReport" class="rca-result" :class="{ cautious: rcaReport.low_confidence }">
+        <div class="rca-cause">
+          <span>{{ categoryLabel(rcaReport.category) }}</span>
+          <strong>{{ rcaReport.root_cause }}</strong>
+          <small>置信度 {{ rcaConfidenceText }}</small>
+        </div>
+        <div class="rca-columns">
+          <div>
+            <h4>证据链</h4>
+            <article v-for="(item, idx) in rcaReport.evidence" :key="idx" class="evidence-item" :class="item.severity">
+              <span>{{ item.source }}</span>
+              <strong>{{ item.title }}</strong>
+              <p>{{ item.detail }}</p>
+            </article>
+          </div>
+          <div>
+            <h4>下一步动作</h4>
+            <ol class="action-list">
+              <li v-for="action in rcaReport.next_actions" :key="action">{{ action }}</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+      <div v-else class="empty-block">尚未生成 RCA，点击按钮后会聚合 session、日志和 trace 证据。</div>
+    </div>
+
     <TraceTimeline :run="traceRun" :spans="traceSpans" />
 
     <div class="timeline-panel">
@@ -161,6 +202,29 @@ interface TraceSpan {
   completed_at?: string | null
 }
 
+interface RcaEvidence {
+  source: string
+  title: string
+  detail: string
+  severity: 'high' | 'medium' | 'low'
+  timestamp?: string | null
+  ref?: string | null
+}
+
+interface RcaReport {
+  report_id: string
+  session_id: string
+  run_id?: string | null
+  category: string
+  root_cause: string
+  confidence: number
+  evidence: RcaEvidence[]
+  next_actions: string[]
+  low_confidence: boolean
+  generated_at: string
+  analyzer: string
+}
+
 const props = defineProps<{
   taskId: string
   item: HistoryItem | null
@@ -168,6 +232,8 @@ const props = defineProps<{
   logs: LogItem[]
   traceRun: TraceRun | null
   traceSpans: TraceSpan[]
+  rcaReport: RcaReport | null
+  rcaLoading?: boolean
   loading?: boolean
   error?: string | null
 }>()
@@ -175,6 +241,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   back: []
   refresh: []
+  'analyze-rca': []
 }>()
 
 const title = computed(() => props.detail?.name || props.item?.name || `Session ${props.taskId.slice(0, 8)}`)
@@ -250,6 +317,18 @@ const signals = computed(() => {
   return result.length > 0 ? result : ['暂无额外信号']
 })
 
+const rcaConfidenceText = computed(() => {
+  if (!props.rcaReport) return '0%'
+  return `${Math.round(props.rcaReport.confidence * 100)}%`
+})
+
+const rcaSubtitle = computed(() => {
+  if (props.rcaLoading) return '正在聚合 session、日志和 trace'
+  if (props.rcaReport?.low_confidence) return '当前证据不足，建议人工核对原始 trace'
+  if (props.rcaReport) return `由 ${props.rcaReport.analyzer} 生成`
+  return '生成可复制的 root cause、证据链和后续动作'
+})
+
 const timeRange = computed(() => {
   const start = props.detail?.started_at
   const end = props.detail?.completed_at || props.item?.completed_at
@@ -304,6 +383,36 @@ function formatNumber(value: number): string {
   if (value >= 1000) return `${(value / 1000).toFixed(1)}K`
   return String(value)
 }
+
+function categoryLabel(category: string): string {
+  const map: Record<string, string> = {
+    tool: '工具',
+    network: '网络',
+    model: '模型',
+    config: '配置',
+    data: '数据',
+    unknown: '未知',
+  }
+  return map[category] || category
+}
+
+function copyRcaReport() {
+  if (!props.rcaReport || typeof navigator === 'undefined' || !navigator.clipboard) return
+  const report = props.rcaReport
+  const evidence = report.evidence.map(item => `- [${item.source}] ${item.title}: ${item.detail}`).join('\n')
+  const actions = report.next_actions.map((action, idx) => `${idx + 1}. ${action}`).join('\n')
+  void navigator.clipboard.writeText([
+    `Root cause: ${report.root_cause}`,
+    `Category: ${report.category}`,
+    `Confidence: ${Math.round(report.confidence * 100)}%`,
+    '',
+    'Evidence:',
+    evidence,
+    '',
+    'Next actions:',
+    actions,
+  ].join('\n'))
+}
 </script>
 
 <style scoped>
@@ -316,6 +425,7 @@ function formatNumber(value: number): string {
 .detail-header,
 .summary-card,
 .analysis-panel,
+.rca-panel,
 .timeline-panel,
 .error-box {
   background: var(--glass-bg);
@@ -415,6 +525,7 @@ function formatNumber(value: number): string {
 }
 
 .analysis-panel,
+.rca-panel,
 .timeline-panel {
   padding: 20px 24px;
 }
@@ -517,6 +628,162 @@ function formatNumber(value: number): string {
 
 .related-log.error {
   border-color: rgba(239, 68, 68, 0.25);
+}
+
+.rca-header,
+.rca-actions,
+.rca-cause {
+  display: flex;
+  align-items: center;
+}
+
+.rca-header {
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.rca-header p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.rca-actions {
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.primary-btn,
+.secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.primary-btn {
+  border: 1px solid var(--accent-color);
+  background: var(--accent-color);
+  color: white;
+}
+
+.primary-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.secondary-btn {
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.rca-result {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  border-radius: var(--radius-md);
+  background: var(--success-soft);
+}
+
+.rca-result.cautious {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: var(--warning-soft);
+}
+
+.rca-cause {
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.rca-cause span {
+  padding: 4px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-primary);
+  color: var(--accent-color);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.rca-cause strong {
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.rca-cause small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.rca-columns {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 16px;
+}
+
+.rca-columns h4 {
+  margin: 0 0 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.evidence-item {
+  margin-bottom: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+}
+
+.evidence-item.high {
+  border-color: rgba(239, 68, 68, 0.28);
+}
+
+.evidence-item.medium {
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.evidence-item span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.evidence-item strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.evidence-item p,
+.action-list li {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.evidence-item p {
+  margin: 4px 0 0;
+}
+
+.action-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.action-list li + li {
+  margin-top: 8px;
 }
 
 .timeline {
@@ -638,13 +905,21 @@ function formatNumber(value: number): string {
   }
 
   .summary-grid,
-  .analysis-row {
+  .analysis-row,
+  .rca-columns {
     grid-template-columns: 1fr;
   }
 
   .back-btn,
-  .refresh-btn {
+  .refresh-btn,
+  .primary-btn,
+  .secondary-btn {
     width: 100%;
+  }
+
+  .rca-header {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>

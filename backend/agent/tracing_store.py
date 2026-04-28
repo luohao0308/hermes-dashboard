@@ -156,6 +156,64 @@ class TraceStore:
         finally:
             conn.close()
 
+    def save_rca_report(
+        self,
+        session_id: str,
+        report: dict[str, Any],
+        run_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        report_id = str(uuid.uuid4())
+        saved = {**report, "report_id": report_id, "session_id": session_id, "run_id": run_id}
+        conn = self._connect()
+        if not conn:
+            return saved
+        try:
+            conn.execute(
+                """
+                INSERT INTO rca_reports (
+                    report_id, session_id, run_id, category, root_cause, confidence,
+                    evidence_json, next_actions_json, report_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    report_id,
+                    session_id,
+                    run_id,
+                    saved.get("category"),
+                    saved.get("root_cause"),
+                    float(saved.get("confidence") or 0),
+                    _json_dumps({"evidence": saved.get("evidence", [])}),
+                    _json_dumps({"next_actions": saved.get("next_actions", [])}),
+                    _json_dumps(saved),
+                    datetime.now().isoformat(),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return saved
+
+    def get_latest_rca_report(self, session_id: str) -> Optional[dict[str, Any]]:
+        conn = self._connect()
+        if not conn:
+            return None
+        try:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT report_json FROM rca_reports
+                WHERE session_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return _json_loads(row["report_json"])
+        finally:
+            conn.close()
+
     def _connect(self):
         if not self._db_path:
             return None
@@ -198,6 +256,23 @@ class TraceStore:
                     started_at TEXT NOT NULL,
                     completed_at TEXT,
                     FOREIGN KEY(run_id) REFERENCES agent_runs(run_id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS rca_reports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    report_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    run_id TEXT,
+                    category TEXT,
+                    root_cause TEXT,
+                    confidence REAL,
+                    evidence_json TEXT,
+                    next_actions_json TEXT,
+                    report_json TEXT,
+                    created_at TEXT NOT NULL
                 )
                 """
             )

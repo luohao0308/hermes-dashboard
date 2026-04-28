@@ -130,12 +130,13 @@ OpenAI Agents SDK 的关键能力包括：
 
 任务清单：
 
-- [ ] 新增 RCA Analyst Agent
-- [ ] RCA Agent 使用 session、logs、trace、config 工具
-- [ ] 输出结构化 RCA：root_cause、evidence、confidence、next_actions
-- [ ] 前端 SessionDetail 增加“一键分析失败原因”
-- [ ] RCA 结果可保存到 chat/session 记录
-- [ ] RCA 低置信度时提示人工查看原始 trace
+- [x] 新增 RCA Analyst 分析器（先以确定性规则产出，后续可替换为 Agents SDK Agent）
+- [x] RCA 分析使用 session、logs、trace 证据
+- [x] 输出结构化 RCA：root_cause、evidence、confidence、next_actions
+- [x] 前端 SessionDetail 增加“一键分析失败原因”
+- [x] RCA 结果可保存到 session trace 数据库
+- [x] RCA 低置信度时提示人工查看原始 trace
+- [ ] RCA Agent 接入 config 工具和真实 Agents SDK structured output
 
 验收标准：
 
@@ -201,7 +202,7 @@ OpenAI Agents SDK 的关键能力包括：
 - [x] 新增 `GET /api/agent/runs/{run_id}/trace`
 - [x] 新增 `frontend/src/components/TraceTimeline.vue`
 - [x] 在 SessionDetail 接入 Trace timeline
-- [ ] 新增 guardrail 策略配置文件 `backend/agent/guardrails.yaml`
+- [x] 新增 guardrail 策略配置文件 `backend/agent/guardrails.yaml`
 - [ ] 为危险工具调用增加 confirm/approve API
-- [ ] 增加单元测试：trace store、tool schema、guardrail deny、handoff payload
+- [x] 增加单元测试：trace store、tool schema、guardrail deny、RCA analyzer
 - [ ] 增加 E2E：打开失败 session，查看 trace，触发 RCA

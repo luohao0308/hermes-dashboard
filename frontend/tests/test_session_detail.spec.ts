@@ -32,6 +32,7 @@ describe('SessionDetail', () => {
         logs: [],
         traceRun: null,
         traceSpans: [],
+        rcaReport: null,
       },
     })
 
@@ -60,6 +61,7 @@ describe('SessionDetail', () => {
         ],
         traceRun: null,
         traceSpans: [],
+        rcaReport: null,
       },
     })
 
@@ -92,6 +94,7 @@ describe('SessionDetail', () => {
             started_at: '2026-04-28T08:00:00Z',
           },
         ],
+        rcaReport: null,
       },
     })
 
@@ -100,5 +103,47 @@ describe('SessionDetail', () => {
 
     expect(wrapper.emitted('back')).toHaveLength(1)
     expect(wrapper.emitted('refresh')).toHaveLength(1)
+  })
+
+  it('renders RCA report and emits analysis action', async () => {
+    const wrapper = mount(SessionDetail, {
+      props: {
+        taskId: 'session-rca',
+        item: null,
+        detail: {
+          status: 'failed',
+          messages: [{ role: 'assistant', content: 'tool failed' }],
+        },
+        logs: [],
+        traceRun: null,
+        traceSpans: [],
+        rcaReport: {
+          report_id: 'report-1',
+          session_id: 'session-rca',
+          category: 'tool',
+          root_cause: '工具或 handoff 失败',
+          confidence: 0.82,
+          evidence: [
+            {
+              source: 'trace',
+              title: 'Tool failed',
+              detail: 'get_logs failed with validation error',
+              severity: 'high',
+            },
+          ],
+          next_actions: ['重放工具调用'],
+          low_confidence: false,
+          generated_at: '2026-04-28T08:00:00Z',
+          analyzer: 'rule_based_rca_v1',
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('工具或 handoff 失败')
+    expect(wrapper.text()).toContain('置信度 82%')
+    expect(wrapper.text()).toContain('get_logs failed')
+
+    await wrapper.find('.primary-btn').trigger('click')
+    expect(wrapper.emitted('analyze-rca')).toHaveLength(1)
   })
 })

@@ -53,10 +53,17 @@
 - Tool invocation now evaluates allow/confirm/deny policy before execution.
 - System page now displays guardrail policies.
 
+### RCA Analyst
+
+- Added structured session RCA reports with root cause, evidence, confidence, and next actions.
+- Added RCA persistence in the Agent trace SQLite database.
+- Added `GET/POST /api/sessions/{session_id}/rca`.
+- Session replay pages can generate and copy failure analysis reports.
+
 ## Verification
 
 - `npx vue-tsc --noEmit`
 - `npm run test:unit`
 - `npm run build`
-- `python -m py_compile backend/main.py backend/agent/chat_manager.py backend/agent/__init__.py`
-- `pytest backend/tests/test_agent_switch.py::TestChatManagerAPI -q`
+- `python -m py_compile backend/main.py backend/agent/chat_manager.py backend/agent/tracing_store.py backend/agent/tools/hermes_tools.py backend/agent/guardrails.py backend/agent/rca.py`
+- `pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py backend/tests/test_rca.py backend/tests/test_agent_switch.py::TestChatManagerAPI -q`

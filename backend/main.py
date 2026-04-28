@@ -25,6 +25,7 @@ from agent.chat_manager import chat_manager
 from agent.tracing_store import trace_store
 from agent.tools import execute_tool, list_tool_specs
 from agent.guardrails import evaluate_tool_call, list_tool_policies
+from agent.rca import analyze_failure
 from agent.agent_manager import _AgentRegistry
 from agents.stream_events import StreamEvent
 
@@ -689,6 +690,58 @@ async def invoke_agent_tool(tool_name: str, body: dict | None = None):
     }
 
 
+@app.get("/api/sessions/{session_id}/rca")
+async def get_session_rca(session_id: str):
+    """Return the latest saved RCA report for a session."""
+    return {"report": trace_store.get_latest_rca_report(session_id)}
+
+
+@app.post("/api/sessions/{session_id}/rca")
+async def analyze_session_rca(session_id: str):
+    """Analyze a failed or suspicious session using session, log, and trace evidence."""
+    try:
+        session = await _load_session_detail(session_id)
+    except Exception:
+        session = {
+            "task_id": session_id,
+            "status": "unknown",
+            "messages": [],
+            "message_count": 0,
+        }
+
+    try:
+        log_data = await hermes_get("/api/logs", {"lines": 200, "level": "INFO"})
+        logs = _normalize_log_entries(log_data)
+    except Exception:
+        logs = []
+
+    run = (
+        trace_store.find_latest_run(linked_session_id=session_id)
+        or trace_store.find_latest_run(session_id=session_id)
+    )
+    spans = trace_store.list_spans(run["run_id"]) if run else []
+    report = analyze_failure(session, logs, run=run, spans=spans)
+    saved = trace_store.save_rca_report(
+        session_id=session_id,
+        report=report,
+        run_id=run.get("run_id") if run else None,
+    )
+    if run:
+        trace_store.add_span(
+            run["run_id"],
+            span_type="analysis",
+            title="RCA analysis",
+            summary=f"{saved['root_cause']} (confidence={saved['confidence']})",
+            agent_name="RCA Analyst",
+            metadata={
+                "report_id": saved["report_id"],
+                "category": saved["category"],
+                "confidence": saved["confidence"],
+            },
+        )
+    return {"report": saved}
+
+
 # ============================================================================
 # Legacy Endpoints (for backward compatibility with frontend)
 # ============================================================================
@@ -719,6 +772,11 @@ async def list_tasks():
 @app.get("/tasks/{task_id}")
 async def get_task(task_id: str):
     """Get specific task/session by ID"""
+    return await _load_session_detail(task_id)
+
+
+async def _load_session_detail(task_id: str) -> dict[str, Any]:
+    """Load a Hermès session and normalize it into the task detail shape."""
     try:
         # First check if session exists by fetching sessions list
         sessions = await hermes_get("/api/sessions", {"limit": 100, "offset": 0})

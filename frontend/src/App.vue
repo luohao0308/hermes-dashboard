@@ -154,10 +154,13 @@
             :logs="logs"
             :trace-run="selectedTraceRun"
             :trace-spans="selectedTraceSpans"
+            :rca-report="selectedRcaReport"
+            :rca-loading="loadingRca"
             :loading="loadingSessionDetail"
             :error="sessionDetailError"
             @back="backToHistory"
             @refresh="refreshSessionDetail"
+            @analyze-rca="analyzeSessionRca"
           />
         </template>
 
@@ -256,6 +259,7 @@ const selectedSessionId = ref('')
 const sessionDetailError = ref<string | null>(null)
 const selectedTraceRun = ref<TraceRun | null>(null)
 const selectedTraceSpans = ref<TraceSpan[]>([])
+const selectedRcaReport = ref<RcaReport | null>(null)
 
 // Loading states
 const loadingTasks = ref(false)
@@ -264,6 +268,7 @@ const loadingHistory = ref(false)
 const loadingOverview = ref(false)
 const loadingAlerts = ref(false)
 const loadingSessionDetail = ref(false)
+const loadingRca = ref(false)
 
 // Toast notifications
 interface Toast {
@@ -425,6 +430,29 @@ interface TraceSpan {
   completed_at?: string | null
 }
 
+interface RcaEvidence {
+  source: string
+  title: string
+  detail: string
+  severity: 'high' | 'medium' | 'low'
+  timestamp?: string | null
+  ref?: string | null
+}
+
+interface RcaReport {
+  report_id: string
+  session_id: string
+  run_id?: string | null
+  category: string
+  root_cause: string
+  confidence: number
+  evidence: RcaEvidence[]
+  next_actions: string[]
+  low_confidence: boolean
+  generated_at: string
+  analyzer: string
+}
+
 interface OverviewSnapshot {
   health?: Record<string, any> | null
   analytics?: Record<string, any> | null
@@ -465,8 +493,8 @@ function handleReRunTask(item: HistoryItem) {
 }
 
 // API calls
-async function fetchJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url)
+async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init)
   if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`)
   return res.json()
 }
@@ -606,10 +634,12 @@ async function fetchSessionDetail(taskId: string) {
   try {
     selectedSessionDetail.value = await fetchJSON<SessionDetailData>(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`)
     await fetchLatestTrace(taskId)
+    await fetchLatestRca(taskId)
   } catch (e) {
     selectedSessionDetail.value = null
     sessionDetailError.value = e instanceof Error ? e.message : '未知错误'
     await fetchLatestTrace(taskId)
+    await fetchLatestRca(taskId)
   } finally {
     loadingSessionDetail.value = false
   }
@@ -628,12 +658,42 @@ async function fetchLatestTrace(taskId: string) {
   }
 }
 
+async function fetchLatestRca(taskId: string) {
+  try {
+    const data = await fetchJSON<{ report: RcaReport | null }>(
+      `${API_BASE}/api/sessions/${encodeURIComponent(taskId)}/rca`
+    )
+    selectedRcaReport.value = data.report
+  } catch (e) {
+    selectedRcaReport.value = null
+  }
+}
+
+async function analyzeSessionRca() {
+  if (!selectedSessionId.value || loadingRca.value) return
+  loadingRca.value = true
+  try {
+    const data = await fetchJSON<{ report: RcaReport }>(
+      `${API_BASE}/api/sessions/${encodeURIComponent(selectedSessionId.value)}/rca`,
+      { method: 'POST' }
+    )
+    selectedRcaReport.value = data.report
+    await fetchLatestTrace(selectedSessionId.value)
+    addToast('success', '失败原因分析已生成')
+  } catch (e) {
+    addToast('error', '失败原因分析失败')
+  } finally {
+    loadingRca.value = false
+  }
+}
+
 function openSessionDetail(taskId: string, item?: HistoryItem) {
   selectedSessionId.value = taskId
   selectedHistoryItem.value = item || history.value.find(h => h.task_id === taskId) || null
   selectedSessionDetail.value = null
   selectedTraceRun.value = null
   selectedTraceSpans.value = []
+  selectedRcaReport.value = null
   currentNav.value = 'session-detail'
   window.location.hash = `#/sessions/${encodeURIComponent(taskId)}`
   void fetchSessionDetail(taskId)
@@ -649,6 +709,7 @@ function backToHistory() {
   selectedSessionDetail.value = null
   selectedTraceRun.value = null
   selectedTraceSpans.value = []
+  selectedRcaReport.value = null
   sessionDetailError.value = null
   handleNavChange('history')
 }

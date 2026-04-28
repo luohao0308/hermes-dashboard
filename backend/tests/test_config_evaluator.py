@@ -20,6 +20,7 @@ def test_evaluate_agent_config_flags_disabled_handoff_target():
 
     assert result["score"] < 100
     assert any("不可用" in item["title"] for item in result["findings"])
+    assert any("handoff" in item["title"] for item in result["suggestions"])
 
 
 def test_evaluate_agent_config_scores_healthy_config():
@@ -41,3 +42,4 @@ def test_evaluate_agent_config_scores_healthy_config():
 
     assert result["grade"] == "A"
     assert result["findings"] == []
+    assert result["suggestions"][0]["title"] == "保持当前配置"

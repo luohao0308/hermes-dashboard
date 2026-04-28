@@ -195,7 +195,7 @@ OpenAI Agents SDK 的关键能力包括：
 - [x] 新增 Agent 配置静态评分：主 Agent、handoff 可达性、孤立节点
 - [x] 配置变更前后对比
 - [ ] 新增 Agent 配置 A/B 对比
-- [ ] Reviewer Agent 自动给 prompt/config 改进建议
+- [x] Reviewer Agent 自动给 prompt/config 改进建议
 - [ ] System 页面展示 Agent 性能趋势
 - [ ] CI 增加轻量离线 schema/eval 测试
 

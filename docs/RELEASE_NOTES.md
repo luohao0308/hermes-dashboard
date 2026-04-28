@@ -97,6 +97,7 @@
 - AgentOps overview now surfaces Agent success rate and run/error counts.
 - Added local Agent config change history at `GET /api/agent/config/history`.
 - Agent configuration page now shows recent before/after score changes.
+- Agent configuration evaluation now includes actionable improvement suggestions.
 
 ## Verification
 

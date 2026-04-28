@@ -51,6 +51,7 @@ def evaluate_agent_config(config: dict[str, Any]) -> dict[str, Any]:
         "score": score,
         "grade": "A" if score >= 90 else "B" if score >= 75 else "C" if score >= 60 else "D",
         "findings": findings,
+        "suggestions": _suggestions(findings),
         "summary": "配置健康" if not findings else f"发现 {len(findings)} 个配置信号",
     }
 
@@ -70,3 +71,47 @@ def _finding(severity: str, title: str, detail: str) -> dict[str, Any]:
 
 def _penalty(severity: str) -> int:
     return {"critical": 35, "warning": 15, "info": 5}.get(severity, 5)
+
+
+def _suggestions(findings: list[dict[str, Any]]) -> list[dict[str, str]]:
+    suggestions = []
+    for finding in findings:
+        title = finding.get("title", "")
+        if "主 Agent" in title:
+            suggestions.append({
+                "title": "恢复可用入口 Agent",
+                "detail": "选择一个已启用且具备 Dispatcher 能力的 Agent 作为 main_agent。",
+            })
+        elif "handoff 指向不可用" in title:
+            suggestions.append({
+                "title": "修正 handoff 目标",
+                "detail": "启用目标 Agent，或从 handoffs 中移除不存在/禁用的目标。",
+            })
+        elif "没有 handoff 出口" in title:
+            suggestions.append({
+                "title": "添加回退 handoff",
+                "detail": "至少添加 Dispatcher 或 Reviewer 作为回退路径，避免上下文卡死在单个 Agent。",
+            })
+        elif "没有入口路径" in title:
+            suggestions.append({
+                "title": "补充入口路径",
+                "detail": "从 Dispatcher 或相关专业 Agent 增加一条指向该 Agent 的 handoff。",
+            })
+    if not suggestions:
+        suggestions.append({
+            "title": "保持当前配置",
+            "detail": "当前静态配置未发现阻塞风险，可继续观察运行指标和失败率。",
+        })
+    return _dedupe_suggestions(suggestions)
+
+
+def _dedupe_suggestions(items: list[dict[str, str]]) -> list[dict[str, str]]:
+    seen = set()
+    result = []
+    for item in items:
+        key = (item["title"], item["detail"])
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result[:5]

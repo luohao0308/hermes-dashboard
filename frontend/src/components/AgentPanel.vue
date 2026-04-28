@@ -45,6 +45,12 @@
           <span>{{ finding.detail }}</span>
         </div>
       </div>
+      <div class="suggestion-list">
+        <div v-for="suggestion in evaluation.suggestions" :key="suggestion.title" class="suggestion-item">
+          <strong>{{ suggestion.title }}</strong>
+          <span>{{ suggestion.detail }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- Config Change History -->
@@ -223,6 +229,7 @@ interface ConfigEvaluation {
   grade: string
   summary: string
   findings: EvaluationFinding[]
+  suggestions: Array<{ title: string; detail: string }>
 }
 
 interface EvalSummary {
@@ -256,7 +263,7 @@ interface ConfigHistoryEvent {
 }
 
 const config = ref<Config>({ main_agent: 'dispatcher', agents: [] })
-const evaluation = ref<ConfigEvaluation>({ score: 0, grade: 'D', summary: '未评估', findings: [] })
+const evaluation = ref<ConfigEvaluation>({ score: 0, grade: 'D', summary: '未评估', findings: [], suggestions: [] })
 const evalSummary = ref<EvalSummary>({
   total_runs: 0,
   error_runs: 0,
@@ -310,7 +317,7 @@ async function fetchConfig() {
       main_agent: data.main_agent || 'dispatcher',
       agents: [...agentsArray, ...customArray],
     }
-    evaluation.value = data.evaluation || { score: 0, grade: 'D', summary: '未评估', findings: [] }
+    evaluation.value = data.evaluation || { score: 0, grade: 'D', summary: '未评估', findings: [], suggestions: [] }
     if (evalData) evalSummary.value = evalData
     configHistory.value = historyData?.events || []
   } catch (e) {
@@ -512,7 +519,8 @@ onMounted(() => {
   margin-top: 14px;
 }
 
-.eval-finding {
+.eval-finding,
+.suggestion-item {
   display: grid;
   grid-template-columns: 160px 1fr;
   gap: 10px;
@@ -536,6 +544,28 @@ onMounted(() => {
 }
 
 .eval-finding span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.suggestion-item {
+  border-color: rgba(34, 197, 94, 0.24);
+}
+
+.suggestion-item strong {
+  color: var(--success-color);
+  font-size: 12px;
+}
+
+.suggestion-item span {
   color: var(--text-secondary);
   font-size: 12px;
   overflow-wrap: anywhere;
@@ -873,7 +903,8 @@ onMounted(() => {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .eval-finding {
+  .eval-finding,
+  .suggestion-item {
     grid-template-columns: 1fr;
   }
 

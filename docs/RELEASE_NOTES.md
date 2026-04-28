@@ -74,6 +74,11 @@
 - Runbooks persist in the Agent trace SQLite database.
 - Session replay pages can generate and copy Markdown runbooks.
 
+### Handoff Topology
+
+- Agent configuration now shows enabled handoff paths for each Agent.
+- The main entry Agent is highlighted and disabled handoff targets are muted.
+
 ## Verification
 
 - `npx vue-tsc --noEmit`

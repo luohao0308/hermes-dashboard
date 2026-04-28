@@ -21,6 +21,38 @@
       </select>
     </div>
 
+    <!-- Handoff Topology -->
+    <div class="config-section">
+      <div class="section-label">Handoff 拓扑</div>
+      <div class="section-hint">展示启用 Agent 之间允许的交接路径</div>
+      <div class="topology-grid">
+        <div
+          v-for="agent in config.agents"
+          :key="`topology-${agent.id}`"
+          class="topology-node"
+          :class="{ disabled: !agent.enabled, main: agent.id === config.main_agent }"
+        >
+          <div class="topology-node-head">
+            <strong>{{ agent.name }}</strong>
+            <span>{{ agent.id === config.main_agent ? '入口' : agent.enabled ? '启用' : '禁用' }}</span>
+          </div>
+          <div class="handoff-list">
+            <template v-if="agent.handoffs?.length">
+              <span
+                v-for="target in agent.handoffs"
+                :key="`${agent.id}-${target}`"
+                class="handoff-chip"
+                :class="{ muted: !isHandoffTargetEnabled(target) }"
+              >
+                → {{ target }}
+              </span>
+            </template>
+            <span v-else class="handoff-empty">无交接目标</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Agent Cards Grid -->
     <div class="config-section">
       <div class="section-label">可选 Agent</div>
@@ -94,6 +126,7 @@ interface AgentConfig {
   description: string
   instructions?: string
   skill?: string
+  handoffs?: string[]
   enabled: boolean
   is_custom?: boolean
 }
@@ -125,6 +158,7 @@ async function fetchConfig() {
       name: cfg.name,
       description: cfg.description,
       instructions: cfg.instructions,
+      handoffs: cfg.handoffs || [],
       enabled: cfg.enabled,
       is_custom: false,
     }))
@@ -134,6 +168,7 @@ async function fetchConfig() {
       name: ca.name,
       description: ca.description,
       instructions: ca.instructions,
+      handoffs: ca.handoffs || [],
       enabled: ca.enabled,
       is_custom: true,
     }))
@@ -177,6 +212,14 @@ async function saveConfig() {
   } finally {
     saving.value = false
   }
+}
+
+function isHandoffTargetEnabled(target: string): boolean {
+  const normalized = target.toLowerCase().replace(/ /g, '_')
+  return config.value.agents.some(agent =>
+    agent.enabled &&
+    (agent.id === normalized || agent.name.toLowerCase() === target.toLowerCase())
+  )
 }
 
 const newAgent = ref({
@@ -263,6 +306,77 @@ onMounted(() => {
   color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;
+}
+
+.topology-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.topology-node {
+  min-height: 118px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.topology-node.main {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+
+.topology-node.disabled {
+  opacity: 0.48;
+}
+
+.topology-node-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.topology-node-head strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.topology-node-head span {
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.handoff-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.handoff-chip,
+.handoff-empty {
+  padding: 5px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.handoff-chip.muted {
+  opacity: 0.45;
+}
+
+.handoff-empty {
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 .agent-cards-grid {

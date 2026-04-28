@@ -90,6 +90,7 @@
 - System page now displays the Markdown sync/export target and recent files.
 - Session replay pages now render runbook checklist steps as an execution timeline.
 - Runbooks now include semi-automatic execution steps that require dashboard confirmation before repair actions.
+- Added a conservative runbook action runner that records safe checklist execution and blocks unsafe repair steps.
 
 ### Handoff Topology
 

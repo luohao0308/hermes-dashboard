@@ -1,4 +1,6 @@
-from agent.runbook import generate_runbook
+import pytest
+
+from agent.runbook import confirm_execution_step, execute_runbook_step, generate_runbook
 
 
 def test_generate_runbook_uses_rca_evidence_and_actions():
@@ -50,3 +52,48 @@ def test_generate_runbook_marks_repair_steps_for_confirmation():
     restart_step = runbook["execution_steps"][0]
     assert restart_step["requires_confirmation"] is True
     assert restart_step["status"] == "needs_confirmation"
+
+
+def test_confirm_and_execute_safe_runbook_step():
+    runbook = generate_runbook(
+        {"task_id": "session-3", "status": "failed", "name": "Verify"},
+        rca={
+            "report_id": "rca-3",
+            "root_cause": "工具失败",
+            "confidence": 0.8,
+            "evidence": [{"severity": "high"}],
+            "next_actions": ["执行 trace 校验"],
+        },
+        run=None,
+        spans=[],
+    )
+
+    updated, step = confirm_execution_step(runbook, "step-1", confirmed_by="test")
+    assert step["status"] == "confirmed"
+
+    executed_runbook, executed_step = execute_runbook_step(updated, "step-1")
+    assert executed_step["status"] == "completed"
+    assert executed_step["execution_result"]["executed"] is False
+    assert executed_runbook["execution_steps"][0]["status"] == "completed"
+
+
+def test_execute_step_requires_confirmation_and_blocks_unsafe_actions():
+    runbook = generate_runbook(
+        {"task_id": "session-4", "status": "failed", "name": "Deploy"},
+        rca={
+            "report_id": "rca-4",
+            "root_cause": "部署失败",
+            "confidence": 0.9,
+            "evidence": [{"severity": "high"}],
+            "next_actions": ["重启 Gateway 服务"],
+        },
+        run=None,
+        spans=[],
+    )
+
+    with pytest.raises(PermissionError):
+        execute_runbook_step(runbook, "step-1")
+
+    updated, _ = confirm_execution_step(runbook, "step-1", confirmed_by="test")
+    _, executed_step = execute_runbook_step(updated, "step-1")
+    assert executed_step["status"] == "blocked_unsafe"

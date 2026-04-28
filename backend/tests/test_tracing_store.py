@@ -83,6 +83,11 @@ def test_trace_store_persists_runbooks(tmp_path):
     assert latest["runbook_id"] == saved["runbook_id"]
     assert latest["severity"] == "high"
 
+    latest["execution_steps"] = [{"step_id": "step-1", "status": "confirmed"}]
+    restored.update_latest_runbook("hermes-1", latest)
+    updated = restored.get_latest_runbook("hermes-1")
+    assert updated["execution_steps"][0]["status"] == "confirmed"
+
 
 def test_trace_store_eval_summary_counts_runs_and_spans(tmp_path):
     db_path = tmp_path / "traces.sqlite3"

@@ -141,10 +141,10 @@
             <button
               v-if="step.requires_confirmation"
               class="confirm-step-btn"
-              :disabled="step.status === 'confirmed'"
-              @click="emit('confirm-runbook-step', step.step_id)"
+              :disabled="['completed', 'blocked_unsafe'].includes(step.status)"
+              @click="step.status === 'confirmed' ? emit('execute-runbook-step', step.step_id) : emit('confirm-runbook-step', step.step_id)"
             >
-              {{ step.status === 'confirmed' ? '已确认' : '确认执行' }}
+              {{ stepButtonLabel(step) }}
             </button>
           </div>
         </div>
@@ -315,6 +315,7 @@ const emit = defineEmits<{
   'analyze-rca': []
   'generate-runbook': []
   'confirm-runbook-step': [stepId: string]
+  'execute-runbook-step': [stepId: string]
   'export-markdown': []
   'open-chat': []
 }>()
@@ -421,6 +422,13 @@ const runbookSteps = computed<RunbookStep[]>(() => {
     status: 'pending',
   }))
 })
+
+function stepButtonLabel(step: RunbookStep): string {
+  if (step.status === 'confirmed') return '执行动作'
+  if (step.status === 'completed') return '已完成'
+  if (step.status === 'blocked_unsafe') return '已阻止'
+  return '确认执行'
+}
 
 const timeRange = computed(() => {
   const start = props.detail?.started_at

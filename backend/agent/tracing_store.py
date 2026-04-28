@@ -320,6 +320,39 @@ class TraceStore:
         finally:
             conn.close()
 
+    def update_latest_runbook(self, session_id: str, runbook: dict[str, Any]) -> dict[str, Any]:
+        conn = self._connect()
+        if not conn:
+            return runbook
+        try:
+            row = conn.execute(
+                """
+                SELECT id FROM runbooks
+                WHERE session_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+            if not row:
+                return runbook
+            conn.execute(
+                """
+                UPDATE runbooks
+                SET checklist_json = ?, report_json = ?
+                WHERE id = ?
+                """,
+                (
+                    _json_dumps({"checklist": runbook.get("checklist", [])}),
+                    _json_dumps(runbook),
+                    row[0],
+                ),
+            )
+            conn.commit()
+            return runbook
+        finally:
+            conn.close()
+
     def _connect(self):
         if not self._db_path:
             return None

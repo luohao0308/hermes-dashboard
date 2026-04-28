@@ -35,7 +35,7 @@ from agent.guardrails import (
     validate_approval_event,
 )
 from agent.rca import analyze_failure
-from agent.runbook import generate_runbook
+from agent.runbook import confirm_execution_step, execute_runbook_step, generate_runbook
 from agent.exporter import build_session_export, list_markdown_exports, save_markdown_export
 from agent.eval_samples import get_eval_sample_summary, list_eval_samples
 from agent.eval_runner import run_eval_samples
@@ -894,19 +894,15 @@ async def confirm_runbook_step(session_id: str, step_id: str, body: dict | None 
     if not runbook:
         raise HTTPException(status_code=404, detail="Runbook not found")
 
-    steps = runbook.get("execution_steps") or []
-    step = next((item for item in steps if item.get("step_id") == step_id), None)
-    if not step:
+    try:
+        updated_runbook, confirmed_step = confirm_execution_step(
+            runbook,
+            step_id,
+            confirmed_by=payload.get("confirmed_by") or "dashboard",
+        )
+    except ValueError:
         raise HTTPException(status_code=404, detail="Runbook step not found")
-    if not step.get("requires_confirmation"):
-        return {"step": {**step, "status": "confirmation_not_required"}, "executed": False}
-
-    confirmed_step = {
-        **step,
-        "status": "confirmed",
-        "confirmed_by": payload.get("confirmed_by") or "dashboard",
-        "confirmed_at": datetime.now().isoformat(),
-    }
+    trace_store.update_latest_runbook(session_id, updated_runbook)
     trace_store.add_span(
         runbook.get("run_id") or runbook.get("runbook_id"),
         span_type="runbook",
@@ -921,8 +917,43 @@ async def confirm_runbook_step(session_id: str, step_id: str, body: dict | None 
     )
     return {
         "step": confirmed_step,
+        "runbook": updated_runbook,
         "executed": False,
         "message": "Confirmation recorded. Repair execution remains gated by the runbook action runner.",
+    }
+
+
+@app.post("/api/sessions/{session_id}/runbook/steps/{step_id}/execute")
+async def execute_confirmed_runbook_step(session_id: str, step_id: str):
+    """Run a conservative built-in action runner for a confirmed runbook step."""
+    runbook = trace_store.get_latest_runbook(session_id)
+    if not runbook:
+        raise HTTPException(status_code=404, detail="Runbook not found")
+    try:
+        updated_runbook, executed_step = execute_runbook_step(runbook, step_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Runbook step not found")
+    trace_store.update_latest_runbook(session_id, updated_runbook)
+    result = executed_step.get("execution_result") or {}
+    trace_store.add_span(
+        runbook.get("run_id") or runbook.get("runbook_id"),
+        span_type="runbook",
+        title="Runbook step execution",
+        summary=f"{executed_step.get('label')} -> {result.get('status')}",
+        status="completed" if result.get("status") == "completed" else "blocked",
+        metadata={
+            "runbook_id": runbook.get("runbook_id"),
+            "step": executed_step,
+            "execution": result,
+        },
+    )
+    return {
+        "step": executed_step,
+        "runbook": updated_runbook,
+        "executed": bool(result.get("executed")),
+        "message": result.get("message"),
     }
 
 

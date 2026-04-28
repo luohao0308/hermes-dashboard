@@ -181,4 +181,43 @@ describe('SessionDetail', () => {
     expect(wrapper.emitted('confirm-runbook-step')?.[0]).toEqual(['step-1'])
     expect(wrapper.emitted('export-markdown')).toHaveLength(1)
   })
+
+  it('emits runbook execution for confirmed steps', async () => {
+    const wrapper = mount(SessionDetail, {
+      props: {
+        taskId: 'session-runbook',
+        item: null,
+        detail: { status: 'failed', messages: [] },
+        logs: [],
+        traceRun: null,
+        traceSpans: [],
+        rcaReport: null,
+        runbookReport: {
+          runbook_id: 'runbook-2',
+          session_id: 'session-runbook',
+          title: '复盘 Runbook',
+          severity: 'high',
+          summary: '工具失败',
+          checklist: ['确认最新 trace 正常'],
+          execution_steps: [
+            {
+              step_id: 'step-1',
+              label: '确认最新 trace 正常',
+              action_type: 'confirm_then_execute',
+              requires_confirmation: true,
+              status: 'confirmed',
+            },
+          ],
+          evidence_count: 1,
+          markdown: '# 复盘 Runbook',
+          generated_at: '2026-04-28T08:00:00Z',
+          generator: 'rule_based_runbook_v1',
+        },
+      },
+    })
+
+    await wrapper.find('.confirm-step-btn').trigger('click')
+
+    expect(wrapper.emitted('execute-runbook-step')?.[0]).toEqual(['step-1'])
+  })
 })

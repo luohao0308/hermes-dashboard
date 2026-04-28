@@ -167,6 +167,7 @@
             @analyze-rca="analyzeSessionRca"
             @generate-runbook="generateSessionRunbook"
             @confirm-runbook-step="confirmRunbookStep"
+            @execute-runbook-step="executeRunbookStep"
             @export-markdown="exportSessionMarkdown"
             @open-chat="openLinkedChat"
           />
@@ -783,7 +784,7 @@ async function exportSessionMarkdown() {
 async function confirmRunbookStep(stepId: string) {
   if (!selectedSessionId.value || !selectedRunbook.value) return
   try {
-    const data = await fetchJSON<{ step: { step_id: string; status: string } }>(
+    const data = await fetchJSON<{ step: { step_id: string; status: string }; runbook?: RunbookReport }>(
       `${API_BASE}/api/sessions/${encodeURIComponent(selectedSessionId.value)}/runbook/steps/${encodeURIComponent(stepId)}/confirm`,
       {
         method: 'POST',
@@ -791,16 +792,35 @@ async function confirmRunbookStep(stepId: string) {
         body: JSON.stringify({ confirmed: true, confirmed_by: 'dashboard' }),
       }
     )
-    selectedRunbook.value = {
-      ...selectedRunbook.value,
-      execution_steps: (selectedRunbook.value.execution_steps || []).map(step =>
-        step.step_id === stepId ? { ...step, status: data.step.status } : step
-      ),
-    }
+    selectedRunbook.value = data.runbook || patchRunbookStep(selectedRunbook.value, stepId, data.step.status)
     await fetchLatestTrace(selectedSessionId.value)
     addToast('success', 'Runbook 步骤已确认')
   } catch (e) {
     addToast('error', 'Runbook 步骤确认失败')
+  }
+}
+
+async function executeRunbookStep(stepId: string) {
+  if (!selectedSessionId.value || !selectedRunbook.value) return
+  try {
+    const data = await fetchJSON<{ step: { step_id: string; status: string }; runbook?: RunbookReport; message?: string }>(
+      `${API_BASE}/api/sessions/${encodeURIComponent(selectedSessionId.value)}/runbook/steps/${encodeURIComponent(stepId)}/execute`,
+      { method: 'POST' }
+    )
+    selectedRunbook.value = data.runbook || patchRunbookStep(selectedRunbook.value, stepId, data.step.status)
+    await fetchLatestTrace(selectedSessionId.value)
+    addToast(data.step.status === 'blocked_unsafe' ? 'warning' : 'success', data.message || 'Runbook 动作已处理')
+  } catch (e) {
+    addToast('error', 'Runbook 动作执行失败')
+  }
+}
+
+function patchRunbookStep(runbook: RunbookReport, stepId: string, status: string): RunbookReport {
+  return {
+    ...runbook,
+    execution_steps: (runbook.execution_steps || []).map(step =>
+      step.step_id === stepId ? { ...step, status } : step
+    ),
   }
 }
 

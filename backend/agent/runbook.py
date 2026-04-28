@@ -99,6 +99,67 @@ def _requires_confirmation(text: str) -> bool:
     return any(keyword in normalized for keyword in keywords)
 
 
+def confirm_execution_step(
+    runbook: dict[str, Any],
+    step_id: str,
+    confirmed_by: str = "dashboard",
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    updated = {**runbook, "execution_steps": [dict(step) for step in runbook.get("execution_steps", [])]}
+    step = _find_step(updated, step_id)
+    if not step:
+        raise ValueError("Runbook step not found")
+    if not step.get("requires_confirmation"):
+        step["status"] = "confirmation_not_required"
+        return updated, dict(step)
+    step["status"] = "confirmed"
+    step["confirmed_by"] = confirmed_by
+    step["confirmed_at"] = datetime.now().isoformat()
+    return updated, dict(step)
+
+
+def execute_runbook_step(runbook: dict[str, Any], step_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    updated = {**runbook, "execution_steps": [dict(step) for step in runbook.get("execution_steps", [])]}
+    step = _find_step(updated, step_id)
+    if not step:
+        raise ValueError("Runbook step not found")
+    if step.get("requires_confirmation") and step.get("status") != "confirmed":
+        raise PermissionError("Runbook step must be confirmed before execution")
+
+    result = _safe_action_result(step)
+    step["status"] = result["status"]
+    step["executed_at"] = datetime.now().isoformat()
+    step["execution_result"] = result
+    return updated, {**step}
+
+
+def _safe_action_result(step: dict[str, Any]) -> dict[str, Any]:
+    label = str(step.get("label") or "")
+    if _unsafe_action(label):
+        return {
+            "status": "blocked_unsafe",
+            "executed": False,
+            "message": "No safe action runner is configured for this repair step.",
+        }
+    return {
+        "status": "completed",
+        "executed": False,
+        "message": "Manual/checklist step recorded as completed by the runbook action runner.",
+    }
+
+
+def _unsafe_action(label: str) -> bool:
+    normalized = label.lower()
+    keywords = ("重启", "删除", "写入", "覆盖", "部署", "rollback", "restart", "delete", "write", "deploy", "execute")
+    return any(keyword in normalized for keyword in keywords)
+
+
+def _find_step(runbook: dict[str, Any], step_id: str) -> dict[str, Any] | None:
+    for step in runbook.get("execution_steps") or []:
+        if step.get("step_id") == step_id:
+            return step
+    return None
+
+
 def _markdown(
     title: str,
     session: dict[str, Any],

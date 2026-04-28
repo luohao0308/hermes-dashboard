@@ -1617,14 +1617,16 @@ async def _run_chat_agent(session, message: str, run_id: str):
             ev_type, payload = _classify_chat_event(event, current_agent_name)
 
             if ev_type == "agent_handoff":
+                handoff_payload = _build_handoff_payload(payload, session, message)
                 trace_store.add_span(
                     run_id,
                     span_type="handoff",
                     title="Agent handoff",
-                    summary=payload.get("message", ""),
+                    summary=handoff_payload["reason"],
                     agent_name=current_agent_name,
-                    metadata=payload,
+                    metadata={**payload, "handoff": handoff_payload},
                 )
+                payload = {**payload, "handoff": handoff_payload}
                 current_agent_name = payload.get("to_agent", current_agent_name)
 
             if ev_type == "agent_output":
@@ -1810,6 +1812,39 @@ def _classify_chat_event(event: StreamEvent, current_agent_name: str):
             }
 
     return None, None
+
+
+def _build_handoff_payload(payload: dict[str, Any], session, message: str) -> dict[str, Any]:
+    from_agent = payload.get("from_agent") or session.agent_id
+    to_agent = payload.get("to_agent") or payload.get("agent_name") or "unknown"
+    reason = payload.get("message") or f"Handoff from {from_agent} to {to_agent}"
+    context_refs = [f"chat:{session.session_id}"]
+    if session.linked_session_id:
+        context_refs.append(f"hermes_session:{session.linked_session_id}")
+    return {
+        "reason": reason,
+        "priority": "normal",
+        "expected_output": _expected_output_for_agent(to_agent),
+        "context_refs": context_refs,
+        "input_summary": message[:500],
+        "from_agent": from_agent,
+        "to_agent": to_agent,
+    }
+
+
+def _expected_output_for_agent(agent_name: str) -> str:
+    normalized = (agent_name or "").lower()
+    if "review" in normalized:
+        return "审查结论、风险点和可执行改进建议"
+    if "test" in normalized:
+        return "验证计划、测试结果和失败复现信息"
+    if "devops" in normalized:
+        return "部署/运行环境判断和操作步骤"
+    if "research" in normalized:
+        return "结构化研究结论和引用依据"
+    if "developer" in normalized:
+        return "代码修改方案、实现结果和验证方式"
+    return "下一步处理结论和可执行行动"
 
 
 @app.get("/api/agent/runs/{run_id}/trace")

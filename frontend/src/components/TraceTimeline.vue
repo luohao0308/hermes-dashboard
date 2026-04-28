@@ -17,6 +17,11 @@
             <span>{{ span.span_type }}</span>
           </div>
           <p>{{ span.summary || '无摘要' }}</p>
+          <div v-if="handoffPayload(span)" class="handoff-payload">
+            <span>原因：{{ handoffPayload(span)?.reason }}</span>
+            <span>优先级：{{ handoffPayload(span)?.priority }}</span>
+            <span>期望产物：{{ handoffPayload(span)?.expected_output }}</span>
+          </div>
           <div class="trace-meta">
             <span v-if="span.agent_name">{{ span.agent_name }}</span>
             <span>{{ formatTime(span.started_at) }}</span>
@@ -43,6 +48,7 @@ interface TraceRun {
   status: string
   started_at: string
   completed_at?: string | null
+  metadata?: Record<string, any>
 }
 
 interface TraceSpan {
@@ -55,6 +61,7 @@ interface TraceSpan {
   status: string
   started_at: string
   completed_at?: string | null
+  metadata?: Record<string, any>
 }
 
 const props = defineProps<{
@@ -87,6 +94,11 @@ function formatTime(timestamp: string): string {
     minute: '2-digit',
     second: '2-digit',
   })
+}
+
+function handoffPayload(span: TraceSpan): Record<string, any> | null {
+  if (span.span_type !== 'handoff') return null
+  return span.metadata?.handoff || null
 }
 </script>
 
@@ -200,6 +212,23 @@ function formatTime(timestamp: string): string {
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.handoff-payload {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.handoff-payload span {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 

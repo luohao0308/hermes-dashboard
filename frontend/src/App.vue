@@ -437,6 +437,7 @@ interface TraceSpan {
   status: string
   started_at: string
   completed_at?: string | null
+  metadata?: Record<string, any>
 }
 
 interface RcaEvidence {

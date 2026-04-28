@@ -86,6 +86,8 @@
 
 - Agent configuration now shows enabled handoff paths for each Agent.
 - The main entry Agent is highlighted and disabled handoff targets are muted.
+- Agent handoffs now store structured payloads with reason, priority, expected output, and context refs.
+- Trace timeline now shows structured handoff details on session replay pages.
 
 ### Agent Config Evaluation
 

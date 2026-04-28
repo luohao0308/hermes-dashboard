@@ -15,6 +15,8 @@ describe('SystemConfigPanel', () => {
             ? { tool_policies: [{ risk: 'read', decision: 'allow', description: 'Read-only' }] }
           : url.includes('/api/exports')
             ? { export_dir: '/tmp/hermes-exports', exists: true, files: [{ filename: 'session.md', path: '/tmp/hermes-exports/session.md', bytes: 42, updated_at: '2026-04-29T00:00:00Z' }], count: 1 }
+          : url.includes('/api/agent/evals/summary')
+            ? { total_runs: 5, success_rate: 0.8, avg_duration_seconds: 2.4, trend: [{ date: '2026-04-29', runs: 5, errors: 1, success_rate: 0.8, avg_duration_seconds: 2.4 }] }
           : url.includes('/api/plugins')
             ? { plugins: [{ name: 'notion', description: 'Sync docs' }] }
             : url.includes('/api/cron/jobs')
@@ -44,6 +46,8 @@ describe('SystemConfigPanel', () => {
     expect(wrapper.text()).toContain('daily-check')
     expect(wrapper.text()).toContain('/tmp/hermes-exports')
     expect(wrapper.text()).toContain('session.md')
+    expect(wrapper.text()).toContain('Agent 性能趋势')
+    expect(wrapper.text()).toContain('80%')
   })
 
   it('refreshes data when button is clicked', async () => {

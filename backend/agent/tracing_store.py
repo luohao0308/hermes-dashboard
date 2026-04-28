@@ -198,6 +198,7 @@ class TraceStore:
                 "tool_count": span_counts.get("tool", 0),
                 "guardrail_count": guardrail_count,
                 "agents": sorted(agent_counts.values(), key=lambda item: item["runs"], reverse=True),
+                "trend": _build_eval_trend(runs),
             }
         finally:
             conn.close()
@@ -439,6 +440,34 @@ def _duration_seconds(started_at: Optional[str], completed_at: Optional[str]) ->
         return None
 
 
+def _build_eval_trend(runs: list[sqlite3.Row]) -> list[dict[str, Any]]:
+    buckets: dict[str, dict[str, Any]] = {}
+    for row in runs:
+        day = str(row["started_at"] or "")[:10] or "unknown"
+        bucket = buckets.setdefault(day, {"date": day, "runs": 0, "errors": 0, "durations": []})
+        bucket["runs"] += 1
+        if row["status"] == "error":
+            bucket["errors"] += 1
+        duration = _duration_seconds(row["started_at"], row["completed_at"])
+        if duration is not None:
+            bucket["durations"].append(duration)
+
+    trend = []
+    for day in sorted(buckets.keys())[-14:]:
+        bucket = buckets[day]
+        durations = bucket["durations"]
+        runs = bucket["runs"]
+        errors = bucket["errors"]
+        trend.append({
+            "date": day,
+            "runs": runs,
+            "errors": errors,
+            "success_rate": round((runs - errors) / runs, 4) if runs else 0,
+            "avg_duration_seconds": round(sum(durations) / len(durations), 2) if durations else 0,
+        })
+    return trend
+
+
 def _empty_eval_summary() -> dict[str, Any]:
     return {
         "total_runs": 0,
@@ -451,6 +480,7 @@ def _empty_eval_summary() -> dict[str, Any]:
         "tool_count": 0,
         "guardrail_count": 0,
         "agents": [],
+        "trend": [],
     }
 
 

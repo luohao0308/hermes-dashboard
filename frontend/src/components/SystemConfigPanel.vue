@@ -71,6 +71,35 @@
     </div>
 
     <div class="approval-section">
+      <div class="section-title">Agent 性能趋势</div>
+      <div class="trend-summary">
+        <div>
+          <span>总运行</span>
+          <strong>{{ evalSummary?.total_runs || 0 }}</strong>
+        </div>
+        <div>
+          <span>成功率</span>
+          <strong>{{ formatPercent(evalSummary?.success_rate || 0) }}</strong>
+        </div>
+        <div>
+          <span>平均耗时</span>
+          <strong>{{ evalSummary?.avg_duration_seconds || 0 }}s</strong>
+        </div>
+      </div>
+      <div v-if="evalTrend.length > 0" class="trend-list">
+        <div v-for="point in evalTrend" :key="point.date" class="trend-row">
+          <span>{{ point.date }}</span>
+          <div class="trend-bar">
+            <i :style="{ width: trendWidth(point.runs) }"></i>
+          </div>
+          <strong>{{ point.runs }} 次 / {{ formatPercent(point.success_rate) }}</strong>
+          <small>{{ point.errors }} 错误 · {{ point.avg_duration_seconds }}s</small>
+        </div>
+      </div>
+      <div v-else class="empty">暂无 Agent 运行趋势</div>
+    </div>
+
+    <div class="approval-section">
       <div class="section-title">待审批 Guardrail</div>
       <div v-if="approvalEvents.length > 0" class="approval-list">
         <div v-for="event in approvalEvents" :key="event.event_id" class="approval-item" :class="event.status">
@@ -165,6 +194,21 @@ interface ExportsInfo {
   count: number
 }
 
+interface EvalTrendPoint {
+  date: string
+  runs: number
+  errors: number
+  success_rate: number
+  avg_duration_seconds: number
+}
+
+interface EvalSummary {
+  total_runs: number
+  success_rate: number
+  avg_duration_seconds: number
+  trend: EvalTrendPoint[]
+}
+
 const loading = ref(false)
 const error = ref('')
 const config = ref<Record<string, any> | null>(null)
@@ -177,6 +221,7 @@ const plugins = ref<ResourceItem[]>([])
 const cronJobs = ref<ResourceItem[]>([])
 const resolvingId = ref('')
 const exportsInfo = ref<ExportsInfo | null>(null)
+const evalSummary = ref<EvalSummary | null>(null)
 
 const modelName = computed(() => modelInfo.value?.model || modelInfo.value?.name || modelInfo.value?.current_model || '未确认')
 const modelProvider = computed(() => modelInfo.value?.provider || modelInfo.value?.vendor || modelInfo.value?.platform || '模型服务')
@@ -184,11 +229,13 @@ const modelProvider = computed(() => modelInfo.value?.provider || modelInfo.valu
 const configEntries = computed(() => toEntries(config.value, 8))
 const modelEntries = computed(() => toEntries(modelInfo.value, 8))
 const exportFiles = computed(() => exportsInfo.value?.files || [])
+const evalTrend = computed(() => evalSummary.value?.trend || [])
+const maxTrendRuns = computed(() => Math.max(1, ...evalTrend.value.map(point => point.runs)))
 
 async function load() {
   loading.value = true
   error.value = ''
-  const [configData, modelData, skillsData, toolsData, guardrailsData, cronData, pluginsData, exportsData] = await Promise.all([
+  const [configData, modelData, skillsData, toolsData, guardrailsData, cronData, pluginsData, exportsData, evalData] = await Promise.all([
     fetchOptional<Record<string, any>>('/api/config'),
     fetchOptional<Record<string, any>>('/api/model/info'),
     fetchOptional<Record<string, any>>('/api/skills'),
@@ -197,6 +244,7 @@ async function load() {
     fetchOptional<Record<string, any>>('/api/cron/jobs'),
     fetchOptional<Record<string, any>>('/api/plugins'),
     fetchOptional<ExportsInfo>('/api/exports?limit=8'),
+    fetchOptional<EvalSummary>('/api/agent/evals/summary'),
   ])
 
   config.value = configData
@@ -208,6 +256,7 @@ async function load() {
   cronJobs.value = normalizeCollection(cronData, ['jobs', 'cron_jobs'])
   plugins.value = normalizeCollection(pluginsData, ['plugins'])
   exportsInfo.value = exportsData
+  evalSummary.value = evalData
   if (!configData && !modelData && skills.value.length === 0 && tools.value.length === 0 && guardrails.value.length === 0 && plugins.value.length === 0 && cronJobs.value.length === 0) {
     error.value = '暂时无法读取 Hermès 配置信息，请确认 Bridge 与 Hermès API 可达。'
   }
@@ -276,6 +325,14 @@ function formatDate(value: string): string {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`
+}
+
+function trendWidth(runs: number): string {
+  return `${Math.max(8, Math.round((runs / maxTrendRuns.value) * 100))}%`
 }
 
 const ResourceList = defineComponent({
@@ -392,6 +449,73 @@ onMounted(load)
 .approval-actions {
   display: flex;
   gap: 8px;
+}
+
+.trend-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.trend-summary div {
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+}
+
+.trend-summary span,
+.trend-row span,
+.trend-row small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.trend-summary strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: 20px;
+}
+
+.trend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.trend-row {
+  display: grid;
+  grid-template-columns: 88px 1fr 110px 110px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+}
+
+.trend-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+}
+
+.trend-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-color);
+}
+
+.trend-row strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: right;
 }
 
 .approve-btn,
@@ -597,8 +721,17 @@ onMounted(load)
 
   .summary-grid,
   .config-grid,
-  .resource-grid {
+  .resource-grid,
+  .trend-summary {
     grid-template-columns: 1fr;
+  }
+
+  .trend-row {
+    grid-template-columns: 1fr;
+  }
+
+  .trend-row strong {
+    text-align: left;
   }
 }
 </style>

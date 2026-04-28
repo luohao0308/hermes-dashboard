@@ -104,6 +104,9 @@ def test_trace_store_eval_summary_counts_runs_and_spans(tmp_path):
     assert summary["tool_count"] == 1
     assert summary["guardrail_count"] == 1
     assert summary["agents"][0]["runs"] >= 1
+    assert summary["trend"]
+    assert summary["trend"][-1]["runs"] == 2
+    assert summary["trend"][-1]["errors"] == 1
 
 
 def test_trace_store_returns_stable_span_schema_with_metadata(tmp_path):

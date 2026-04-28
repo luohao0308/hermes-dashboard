@@ -1,6 +1,7 @@
 import pytest
 
 from agent.tools.hermes_tools import execute_tool, list_tool_specs
+from agent.guardrails import evaluate_tool_call, list_tool_policies
 
 
 def test_list_tool_specs_contains_read_tools():
@@ -9,6 +10,16 @@ def test_list_tool_specs_contains_read_tools():
     assert "get_status" in names
     assert "get_logs" in names
     assert "get_session_messages" in names
+
+
+def test_guardrail_allows_read_tools():
+    spec = next(tool for tool in list_tool_specs() if tool["name"] == "get_status")
+    decision = evaluate_tool_call(spec)
+    policies = list_tool_policies()
+
+    assert decision["risk"] == "read"
+    assert decision["decision"] == "allow"
+    assert any(policy["risk"] == "destructive" for policy in policies)
 
 
 @pytest.mark.asyncio

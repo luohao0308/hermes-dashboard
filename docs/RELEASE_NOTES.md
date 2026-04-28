@@ -46,6 +46,13 @@
 - Added read-only tool invocation API at `POST /api/agent/tools/{tool_name}/invoke`.
 - System page now displays the Agent tool library.
 
+### Tool Guardrails
+
+- Added guardrail policy file for tool risk decisions.
+- Added `GET /api/agent/guardrails`.
+- Tool invocation now evaluates allow/confirm/deny policy before execution.
+- System page now displays guardrail policies.
+
 ## Verification
 
 - `npx vue-tsc --noEmit`

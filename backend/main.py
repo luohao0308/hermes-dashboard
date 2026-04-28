@@ -24,6 +24,7 @@ from agent import AgentOrchestrator
 from agent.chat_manager import chat_manager
 from agent.tracing_store import trace_store
 from agent.tools import execute_tool, list_tool_specs
+from agent.guardrails import evaluate_tool_call, list_tool_policies
 from agent.agent_manager import _AgentRegistry
 from agents.stream_events import StreamEvent
 
@@ -645,14 +646,34 @@ def _normalize_log_entries(log_data: dict[str, Any]) -> list[dict[str, Any]]:
 @app.get("/api/agent/tools")
 async def list_agent_tools():
     """List SDK-ready Agent tools exposed by the dashboard."""
-    tools = list_tool_specs()
+    tools = [
+        {**tool, "guardrail": evaluate_tool_call(tool)}
+        for tool in list_tool_specs()
+    ]
     return {"tools": tools, "count": len(tools)}
+
+
+@app.get("/api/agent/guardrails")
+async def list_agent_guardrails():
+    """List configured Agent guardrail policies."""
+    return {"tool_policies": list_tool_policies()}
 
 
 @app.post("/api/agent/tools/{tool_name}/invoke")
 async def invoke_agent_tool(tool_name: str, body: dict | None = None):
     """Invoke a read-only Hermès Agent tool."""
     params = body or {}
+    tool_spec = next((tool for tool in list_tool_specs() if tool["name"] == tool_name), None)
+    if not tool_spec:
+        raise HTTPException(status_code=404, detail="Tool not found")
+    guardrail = evaluate_tool_call(tool_spec)
+    if guardrail["decision"] == "deny":
+        raise HTTPException(status_code=403, detail=guardrail["description"])
+    if guardrail["decision"] == "confirm" and not params.pop("__confirmed", False):
+        raise HTTPException(status_code=409, detail={
+            "message": "Tool call requires confirmation",
+            "guardrail": guardrail,
+        })
     try:
         result = await execute_tool(tool_name, params, hermes_get)
     except ValueError as exc:

@@ -1,0 +1,16 @@
+tool_policies:
+  read:
+    decision: allow
+    description: Read-only tools can run without extra confirmation.
+  write:
+    decision: confirm
+    description: Write tools require user confirmation.
+  execute:
+    decision: confirm
+    description: Execution tools require user confirmation.
+  network:
+    decision: confirm
+    description: Network mutation tools require user confirmation.
+  destructive:
+    decision: deny
+    description: Destructive tools are denied by default.

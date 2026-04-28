@@ -5,4 +5,5 @@ pydantic-settings>=2.0.0
 httpx>=0.25.0
 slowapi>=0.1.9
 websockets>=12.0
+pyyaml>=6.0.0
 openai-agents @ git+https://github.com/openai/openai-agents-python

@@ -794,7 +794,7 @@ async def analyze_session_rca(session_id: str):
         or trace_store.find_latest_run(session_id=session_id)
     )
     spans = trace_store.list_spans(run["run_id"]) if run else []
-    report = analyze_failure(session, logs, run=run, spans=spans)
+    report = analyze_failure(session, logs, run=run, spans=spans, config_evaluation=_agent_config_evaluation())
     saved = trace_store.save_rca_report(
         session_id=session_id,
         report=report,
@@ -846,7 +846,7 @@ async def generate_session_runbook(session_id: str):
             logs = _normalize_log_entries(log_data)
         except Exception:
             logs = []
-        rca_report = analyze_failure(session, logs, run=run, spans=spans)
+        rca_report = analyze_failure(session, logs, run=run, spans=spans, config_evaluation=_agent_config_evaluation())
         rca = trace_store.save_rca_report(
             session_id=session_id,
             report=rca_report,
@@ -873,6 +873,17 @@ async def generate_session_runbook(session_id: str):
             },
         )
     return {"runbook": saved}
+
+
+def _agent_config_evaluation() -> dict[str, Any] | None:
+    try:
+        cfg = load_config()
+        return {
+            "main_agent": cfg.get("main_agent"),
+            **evaluate_agent_config(cfg),
+        }
+    except Exception:
+        return None
 
 
 @app.post("/api/sessions/{session_id}/export")

@@ -69,10 +69,11 @@ def analyze_failure(
     logs: list[dict[str, Any]],
     run: Optional[dict[str, Any]] = None,
     spans: Optional[list[dict[str, Any]]] = None,
+    config_evaluation: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Return a structured RCA report from session, logs, and trace evidence."""
     spans = spans or []
-    evidence = _collect_evidence(session, logs, run, spans)
+    evidence = _collect_evidence(session, logs, run, spans, config_evaluation)
     evidence_text = "\n".join(item["detail"] for item in evidence)
     status = str(session.get("status") or "").lower()
     end_reason = str(session.get("end_reason") or "").lower()
@@ -92,7 +93,15 @@ def analyze_failure(
             break
 
     if category == "unknown":
-        if status in {"failed", "cancelled", "error"} or end_reason not in {"", "completed", "success"}:
+        if any(item.get("source") == "config" for item in evidence):
+            category = "config"
+            root_cause = "Agent 配置、handoff 或入口策略异常"
+            next_actions = [
+                "打开 Agent 配置页查看评分和发现项",
+                "修复 main_agent、enabled 状态或 handoff 目标后重新评估",
+                "重新触发同类 session，确认 trace 路由恢复正常",
+            ]
+        elif status in {"failed", "cancelled", "error"} or end_reason not in {"", "completed", "success"}:
             root_cause = "任务异常结束，但证据不足以归类"
             next_actions = [
                 "优先查看最后一条 assistant/tool 消息和最后一个 trace span",
@@ -124,7 +133,8 @@ def analyze_failure(
         "next_actions": next_actions[:5],
         "low_confidence": low_confidence,
         "generated_at": datetime.now().isoformat(),
-        "analyzer": "rule_based_rca_v1",
+        "analyzer": "structured_rca_v2",
+        "config_evaluation": config_evaluation,
     })
 
 
@@ -133,6 +143,7 @@ def _collect_evidence(
     logs: list[dict[str, Any]],
     run: Optional[dict[str, Any]],
     spans: list[dict[str, Any]],
+    config_evaluation: Optional[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     evidence: list[dict[str, Any]] = []
     status = str(session.get("status") or "unknown")
@@ -196,6 +207,20 @@ def _collect_evidence(
             run.get("completed_at") or run.get("started_at"),
             run.get("run_id"),
         ))
+
+    if config_evaluation:
+        score = int(config_evaluation.get("score") or 0)
+        findings = config_evaluation.get("findings") or []
+        if findings or score < 75:
+            first_finding = findings[0] if findings else {}
+            evidence.append(_evidence(
+                "config",
+                first_finding.get("title") or "Agent 配置信号",
+                first_finding.get("detail") or f"Agent config score={score}",
+                "high" if score < 60 else "medium",
+                None,
+                "agent_config",
+            ))
 
     if not evidence:
         evidence.append(_evidence(

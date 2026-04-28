@@ -67,6 +67,7 @@
 - Added RCA persistence in the Agent trace SQLite database.
 - Added `GET/POST /api/sessions/{session_id}/rca`.
 - Session replay pages can generate and copy failure analysis reports.
+- RCA analysis now includes Agent config evaluation evidence and structured output validation.
 
 ### Chat Session Binding
 

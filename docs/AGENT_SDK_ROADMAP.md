@@ -155,7 +155,7 @@ OpenAI Agents SDK 的关键能力包括：
 - [x] 前端 SessionDetail 增加“一键分析失败原因”
 - [x] RCA 结果可保存到 session trace 数据库
 - [x] RCA 低置信度时提示人工查看原始 trace
-- [ ] RCA Agent 接入 config 工具和真实 Agents SDK structured output
+- [x] RCA Agent 接入 config 工具和真实 Agents SDK structured output
 
 验收标准：
 

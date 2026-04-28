@@ -41,3 +41,28 @@ def test_rca_marks_missing_session_data_low_confidence():
     assert report["category"] == "data"
     assert report["low_confidence"] is True
     assert "原始 trace" in report["next_actions"][-1]
+
+
+def test_rca_uses_config_evaluation_as_evidence():
+    report = analyze_failure(
+        {"task_id": "session-3", "status": "failed", "message_count": 1},
+        logs=[],
+        run=None,
+        spans=[],
+        config_evaluation={
+            "score": 55,
+            "grade": "D",
+            "findings": [
+                {
+                    "severity": "critical",
+                    "title": "主 Agent 已禁用",
+                    "detail": "默认入口 Agent 被禁用",
+                }
+            ],
+        },
+    )
+
+    assert report["category"] == "config"
+    assert report["analyzer"] == "structured_rca_v2"
+    assert report["config_evaluation"]["score"] == 55
+    assert any(item["source"] == "config" for item in report["evidence"])

@@ -35,6 +35,7 @@ class RcaOutputPayload(BaseModel):
     low_confidence: bool
     generated_at: str
     analyzer: str = Field(..., min_length=1, max_length=80)
+    config_evaluation: Optional[dict[str, Any]] = None
 
 
 def validate_agent_input(payload: dict[str, Any]) -> dict[str, Any]:

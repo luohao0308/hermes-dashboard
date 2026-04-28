@@ -1618,6 +1618,29 @@ async def _run_chat_agent(session, message: str, run_id: str):
 
             if ev_type == "agent_handoff":
                 handoff_payload = _build_handoff_payload(payload, session, message)
+                if _handoff_needs_fallback(handoff_payload):
+                    fallback_payload = _build_handoff_fallback_payload(handoff_payload, session, message)
+                    trace_store.add_span(
+                        run_id,
+                        span_type="handoff",
+                        title="Agent handoff fallback",
+                        summary=fallback_payload["reason"],
+                        agent_name=current_agent_name,
+                        status="warning",
+                        metadata={**payload, "handoff": fallback_payload},
+                    )
+                    payload = {
+                        **payload,
+                        "to_agent": fallback_payload["to_agent"],
+                        "message": fallback_payload["reason"],
+                        "handoff": fallback_payload,
+                    }
+                    current_agent_name = fallback_payload["to_agent"]
+                    await session.queue.put(ServerSentEvent(
+                        event=ev_type,
+                        data=json.dumps({**payload, "run_id": run_id}),
+                    ))
+                    continue
                 trace_store.add_span(
                     run_id,
                     span_type="handoff",
@@ -1845,6 +1868,28 @@ def _expected_output_for_agent(agent_name: str) -> str:
     if "developer" in normalized:
         return "代码修改方案、实现结果和验证方式"
     return "下一步处理结论和可执行行动"
+
+
+def _handoff_needs_fallback(handoff_payload: dict[str, Any]) -> bool:
+    to_agent = str(handoff_payload.get("to_agent") or "").strip().lower()
+    return not to_agent or to_agent == "unknown"
+
+
+def _build_handoff_fallback_payload(
+    handoff_payload: dict[str, Any],
+    session,
+    message: str,
+) -> dict[str, Any]:
+    return {
+        **handoff_payload,
+        "reason": "Handoff target missing; fallback to Dispatcher to preserve context",
+        "priority": "high",
+        "expected_output": "重新判断任务路由并选择可用 Agent",
+        "context_refs": handoff_payload.get("context_refs") or [f"chat:{session.session_id}"],
+        "input_summary": handoff_payload.get("input_summary") or message[:500],
+        "to_agent": "Dispatcher",
+        "fallback": True,
+    }
 
 
 @app.get("/api/agent/runs/{run_id}/trace")

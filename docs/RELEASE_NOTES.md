@@ -88,6 +88,7 @@
 - The main entry Agent is highlighted and disabled handoff targets are muted.
 - Agent handoffs now store structured payloads with reason, priority, expected output, and context refs.
 - Trace timeline now shows structured handoff details on session replay pages.
+- Handoff events with missing targets now record a Dispatcher fallback span.
 
 ### Agent Config Evaluation
 

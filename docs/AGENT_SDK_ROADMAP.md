@@ -116,7 +116,7 @@ OpenAI Agents SDK 的关键能力包括：
 - [x] 后端保存 handoff payload 到 trace
 - [x] 前端 Agent 配置页增加 handoff 拓扑图
 - [x] SessionDetail 显示每次 handoff 的原因和结果
-- [ ] 添加 handoff 失败回退策略：回到 Dispatcher 或转 Reviewer
+- [x] 添加 handoff 失败回退策略：回到 Dispatcher 或转 Reviewer
 
 验收标准：
 

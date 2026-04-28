@@ -58,6 +58,7 @@
 - Added guardrail approval events for `confirm` tool calls.
 - Added approve/reject APIs for pending guardrail events.
 - System page now displays pending guardrail approvals with approve/reject actions.
+- Added Pydantic input and RCA output guardrails with trace spans for chat input validation.
 
 ### RCA Analyst
 

@@ -11,6 +11,8 @@ import re
 from datetime import datetime
 from typing import Any, Optional
 
+from agent.structured_guardrails import validate_rca_output
+
 
 ERROR_PATTERN = re.compile(
     r"error|failed|failure|exception|traceback|timeout|timed out|refused|unreachable|"
@@ -111,7 +113,7 @@ def analyze_failure(
     if low_confidence:
         next_actions = next_actions + ["当前置信度较低，请人工核对原始 trace 和日志"]
 
-    return {
+    return validate_rca_output({
         "report_id": "",
         "session_id": session.get("task_id") or session.get("id") or "",
         "run_id": run.get("run_id") if run else None,
@@ -123,7 +125,7 @@ def analyze_failure(
         "low_confidence": low_confidence,
         "generated_at": datetime.now().isoformat(),
         "analyzer": "rule_based_rca_v1",
-    }
+    })
 
 
 def _collect_evidence(

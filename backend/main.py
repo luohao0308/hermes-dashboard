@@ -36,6 +36,7 @@ from agent.rca import analyze_failure
 from agent.runbook import generate_runbook
 from agent.exporter import build_session_export, list_markdown_exports, save_markdown_export
 from agent.eval_samples import get_eval_sample_summary, list_eval_samples
+from agent.structured_guardrails import validate_agent_input
 from agent.agent_manager import _AgentRegistry
 from agents.stream_events import StreamEvent
 
@@ -1549,26 +1550,46 @@ async def send_chat_message(session_id: str, body: ChatMessageRequest):
     if session.is_running:
         raise HTTPException(status_code=409, detail="Agent is already running in this session")
 
-    if not body.message.strip():
+    message = body.message.strip()
+    if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    run_id = trace_store.create_run(
+        session_id=session.session_id,
+        agent_id=session.agent_id,
+        linked_session_id=session.linked_session_id,
+        input_summary=message,
+    )
+    input_guardrail = validate_agent_input({
+        "session_id": session.session_id,
+        "agent_id": session.agent_id,
+        "linked_session_id": session.linked_session_id,
+        "message": message,
+    })
+    trace_store.add_span(
+        run_id,
+        span_type="guardrail",
+        title="Input Pydantic guardrail",
+        summary=input_guardrail["reason"],
+        agent_name=session.agent_id,
+        status="completed" if input_guardrail["decision"] == "allow" else "error",
+        metadata=input_guardrail,
+    )
+    if input_guardrail["decision"] != "allow":
+        trace_store.complete_run(run_id, status="error")
+        raise HTTPException(status_code=400, detail=input_guardrail)
 
     # Append user message
     user_msg = chat_manager.append_message(
         session.session_id,
         role="user",
-        content=body.message,
-    )
-    run_id = trace_store.create_run(
-        session_id=session.session_id,
-        agent_id=session.agent_id,
-        linked_session_id=session.linked_session_id,
-        input_summary=body.message,
+        content=message,
     )
     trace_store.add_span(
         run_id,
         span_type="user_input",
         title="User message",
-        summary=body.message,
+        summary=message,
         agent_name=session.agent_id,
     )
 
@@ -1576,7 +1597,7 @@ async def send_chat_message(session_id: str, body: ChatMessageRequest):
     await session.queue.put(ServerSentEvent(
         event="user_message",
         data=json.dumps({
-            "content": body.message,
+            "content": message,
             "timestamp": user_msg.timestamp if user_msg else datetime.now().isoformat(),
             "run_id": run_id,
         })
@@ -1595,7 +1616,7 @@ async def send_chat_message(session_id: str, body: ChatMessageRequest):
     ))
 
     # Run agent in background and stream output to session queue
-    task = asyncio.create_task(_run_chat_agent(session, body.message, run_id))
+    task = asyncio.create_task(_run_chat_agent(session, message, run_id))
     session.set_task(task)
 
     return {"ok": True, "session_id": session_id, "run_id": run_id}

@@ -72,7 +72,7 @@ OpenAI Agents SDK 的关键能力包括：
 
 - [x] 定义工具风险等级：read、write、execute、network、destructive
 - [x] 为工具调用新增 allow/deny/confirm 策略
-- [ ] 接入 Agents SDK guardrails，对输入和输出做 Pydantic 校验
+- [x] 接入 Agents SDK guardrails，对输入和输出做 Pydantic 校验
 - [ ] 新增 tool guardrail：危险 shell/git/file 操作要求人工确认
 - [x] 前端新增 Guardrail 事件视图：拦截原因、建议动作、确认按钮
 - [x] 后端新增 `POST /api/agent/guardrails/{event_id}/approve`

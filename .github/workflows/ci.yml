@@ -81,10 +81,13 @@ jobs:
           pytest \
             backend/tests/test_config_evaluator.py \
             backend/tests/test_config_history.py \
+            backend/tests/test_eval_samples.py \
+            backend/tests/test_eval_runner.py \
             backend/tests/test_exporter.py \
             backend/tests/test_hermes_tools.py \
             backend/tests/test_rca.py \
             backend/tests/test_runbook.py \
+            backend/tests/test_structured_guardrails.py \
             backend/tests/test_tracing_store.py \
             -q
 
@@ -134,6 +137,10 @@ jobs:
       - name: Run unit tests
         working-directory: frontend
         run: npm run test:unit
+
+      - name: Run AgentOps E2E flow tests
+        working-directory: frontend
+        run: npx vitest run tests/e2e/test_failed_session_rca_flow.spec.ts
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4

@@ -118,7 +118,7 @@
 - Agent configuration evaluation now includes actionable improvement suggestions.
 - Added `POST /api/agent/config/compare` for static A/B config comparison.
 - Agent configuration page can compare a candidate main Agent before saving.
-- CI now runs AgentOps offline schema/eval tests for config, guardrails, RCA, runbooks, exports, and traces.
+- CI now runs AgentOps offline schema/eval tests for config, guardrails, eval runner, RCA, runbooks, exports, traces, and the failed-session RCA E2E flow.
 
 ## Verification
 

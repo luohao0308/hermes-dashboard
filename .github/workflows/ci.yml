@@ -60,6 +60,34 @@ jobs:
       - name: Run backend tests
         run: pytest tests/backend/ -v --tb=short
 
+  agentops-offline-test:
+    name: AgentOps Offline Schema & Eval Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r backend/requirements.txt
+          pip install pytest pytest-asyncio
+
+      - name: Run AgentOps offline tests
+        run: |
+          pytest \
+            backend/tests/test_config_evaluator.py \
+            backend/tests/test_config_history.py \
+            backend/tests/test_exporter.py \
+            backend/tests/test_hermes_tools.py \
+            backend/tests/test_rca.py \
+            backend/tests/test_runbook.py \
+            backend/tests/test_tracing_store.py \
+            -q
+
   # ── Frontend ───────────────────────────────────────────────
   frontend-quality:
     name: Frontend Lint & Type Check

@@ -110,6 +110,31 @@
       <div v-else class="empty-block">尚未生成 RCA，点击按钮后会聚合 session、日志和 trace 证据。</div>
     </div>
 
+    <div class="runbook-panel">
+      <div class="rca-header">
+        <div>
+          <div class="panel-title">Runbook 自动化</div>
+          <p>{{ runbookSubtitle }}</p>
+        </div>
+        <div class="rca-actions">
+          <button v-if="runbookReport" class="secondary-btn" @click="copyRunbook">复制 Runbook</button>
+          <button class="primary-btn" :disabled="runbookLoading" @click="emit('generate-runbook')">
+            <span v-if="runbookLoading" class="spinner"></span>
+            {{ runbookLoading ? '生成中' : '生成 Runbook' }}
+          </button>
+        </div>
+      </div>
+      <div v-if="runbookReport" class="runbook-result">
+        <div class="rca-cause">
+          <span>{{ runbookReport.severity }}</span>
+          <strong>{{ runbookReport.title }}</strong>
+          <small>{{ runbookReport.generator }}</small>
+        </div>
+        <pre>{{ runbookReport.markdown }}</pre>
+      </div>
+      <div v-else class="empty-block">尚未生成 Runbook，会基于 RCA、trace 和 session 摘要生成复盘清单。</div>
+    </div>
+
     <TraceTimeline :run="traceRun" :spans="traceSpans" />
 
     <div class="timeline-panel">
@@ -226,6 +251,21 @@ interface RcaReport {
   analyzer: string
 }
 
+interface RunbookReport {
+  runbook_id: string
+  session_id: string
+  run_id?: string | null
+  rca_report_id?: string | null
+  title: string
+  severity: string
+  summary: string
+  checklist: string[]
+  evidence_count: number
+  markdown: string
+  generated_at: string
+  generator: string
+}
+
 const props = defineProps<{
   taskId: string
   item: HistoryItem | null
@@ -235,6 +275,8 @@ const props = defineProps<{
   traceSpans: TraceSpan[]
   rcaReport: RcaReport | null
   rcaLoading?: boolean
+  runbookReport: RunbookReport | null
+  runbookLoading?: boolean
   loading?: boolean
   error?: string | null
 }>()
@@ -243,6 +285,7 @@ const emit = defineEmits<{
   back: []
   refresh: []
   'analyze-rca': []
+  'generate-runbook': []
   'open-chat': []
 }>()
 
@@ -331,6 +374,12 @@ const rcaSubtitle = computed(() => {
   return '生成可复制的 root cause、证据链和后续动作'
 })
 
+const runbookSubtitle = computed(() => {
+  if (props.runbookLoading) return '正在整理复盘摘要、证据和处理步骤'
+  if (props.runbookReport) return `${props.runbookReport.severity} / ${props.runbookReport.checklist.length} 个待办`
+  return '生成可复制到 issue、PR 或 Notion 的执行清单'
+})
+
 const timeRange = computed(() => {
   const start = props.detail?.started_at
   const end = props.detail?.completed_at || props.item?.completed_at
@@ -415,6 +464,11 @@ function copyRcaReport() {
     actions,
   ].join('\n'))
 }
+
+function copyRunbook() {
+  if (!props.runbookReport || typeof navigator === 'undefined' || !navigator.clipboard) return
+  void navigator.clipboard.writeText(props.runbookReport.markdown)
+}
 </script>
 
 <style scoped>
@@ -428,6 +482,7 @@ function copyRcaReport() {
 .summary-card,
 .analysis-panel,
 .rca-panel,
+.runbook-panel,
 .timeline-panel,
 .error-box {
   background: var(--glass-bg);
@@ -528,6 +583,7 @@ function copyRcaReport() {
 
 .analysis-panel,
 .rca-panel,
+.runbook-panel,
 .timeline-panel {
   padding: 20px 24px;
 }
@@ -693,6 +749,28 @@ function copyRcaReport() {
   border: 1px solid rgba(16, 185, 129, 0.28);
   border-radius: var(--radius-md);
   background: var(--success-soft);
+}
+
+.runbook-result {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+}
+
+.runbook-result pre {
+  max-height: 360px;
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .rca-result.cautious {

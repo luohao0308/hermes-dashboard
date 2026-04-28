@@ -26,6 +26,7 @@ from agent.tracing_store import trace_store
 from agent.tools import execute_tool, list_tool_specs
 from agent.guardrails import evaluate_tool_call, list_tool_policies
 from agent.rca import analyze_failure
+from agent.runbook import generate_runbook
 from agent.agent_manager import _AgentRegistry
 from agents.stream_events import StreamEvent
 
@@ -740,6 +741,65 @@ async def analyze_session_rca(session_id: str):
             },
         )
     return {"report": saved}
+
+
+@app.get("/api/sessions/{session_id}/runbook")
+async def get_session_runbook(session_id: str):
+    """Return the latest saved runbook for a session."""
+    return {"runbook": trace_store.get_latest_runbook(session_id)}
+
+
+@app.post("/api/sessions/{session_id}/runbook")
+async def generate_session_runbook(session_id: str):
+    """Generate a copyable runbook from RCA, session detail, and trace data."""
+    try:
+        session = await _load_session_detail(session_id)
+    except Exception:
+        session = {
+            "task_id": session_id,
+            "status": "unknown",
+            "messages": [],
+            "message_count": 0,
+        }
+    run = (
+        trace_store.find_latest_run(linked_session_id=session_id)
+        or trace_store.find_latest_run(session_id=session_id)
+    )
+    spans = trace_store.list_spans(run["run_id"]) if run else []
+    rca = trace_store.get_latest_rca_report(session_id)
+    if not rca:
+        try:
+            log_data = await hermes_get("/api/logs", {"lines": 200, "level": "INFO"})
+            logs = _normalize_log_entries(log_data)
+        except Exception:
+            logs = []
+        rca_report = analyze_failure(session, logs, run=run, spans=spans)
+        rca = trace_store.save_rca_report(
+            session_id=session_id,
+            report=rca_report,
+            run_id=run.get("run_id") if run else None,
+        )
+
+    runbook = generate_runbook(session, rca=rca, run=run, spans=spans)
+    saved = trace_store.save_runbook(
+        session_id=session_id,
+        runbook=runbook,
+        run_id=run.get("run_id") if run else None,
+    )
+    if run:
+        trace_store.add_span(
+            run["run_id"],
+            span_type="runbook",
+            title="Runbook generated",
+            summary=saved["summary"],
+            agent_name="Runbook Generator",
+            metadata={
+                "runbook_id": saved["runbook_id"],
+                "severity": saved["severity"],
+                "rca_report_id": saved.get("rca_report_id"),
+            },
+        )
+    return {"runbook": saved}
 
 
 # ============================================================================

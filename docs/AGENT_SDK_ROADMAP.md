@@ -169,12 +169,13 @@ OpenAI Agents SDK 的关键能力包括：
 
 任务清单：
 
-- [ ] 定义 runbook schema：trigger、checks、tools、approval_required、rollback
+- [x] 定义首版 runbook schema：severity、summary、evidence、checklist、markdown
 - [ ] 从告警面板触发 runbook
-- [ ] 支持只读 runbook：收集状态、日志、trace、配置
+- [x] 支持只读 runbook：收集 session、RCA、trace
 - [ ] 支持半自动 runbook：需要用户确认后执行修复动作
+- [x] 前端 SessionDetail 显示并复制 Runbook 产物
+- [x] 失败 runbook 自动生成复盘记录
 - [ ] 前端新增 Runbook 执行时间线
-- [ ] 失败 runbook 自动生成复盘记录
 
 验收标准：
 

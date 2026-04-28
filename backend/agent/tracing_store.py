@@ -214,6 +214,65 @@ class TraceStore:
         finally:
             conn.close()
 
+    def save_runbook(
+        self,
+        session_id: str,
+        runbook: dict[str, Any],
+        run_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        runbook_id = str(uuid.uuid4())
+        saved = {**runbook, "runbook_id": runbook_id, "session_id": session_id, "run_id": run_id}
+        conn = self._connect()
+        if not conn:
+            return saved
+        try:
+            conn.execute(
+                """
+                INSERT INTO runbooks (
+                    runbook_id, session_id, run_id, rca_report_id, title, severity,
+                    summary, markdown, checklist_json, report_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    runbook_id,
+                    session_id,
+                    run_id,
+                    saved.get("rca_report_id"),
+                    saved.get("title"),
+                    saved.get("severity"),
+                    saved.get("summary"),
+                    saved.get("markdown"),
+                    _json_dumps({"checklist": saved.get("checklist", [])}),
+                    _json_dumps(saved),
+                    datetime.now().isoformat(),
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return saved
+
+    def get_latest_runbook(self, session_id: str) -> Optional[dict[str, Any]]:
+        conn = self._connect()
+        if not conn:
+            return None
+        try:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT report_json FROM runbooks
+                WHERE session_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return _json_loads(row["report_json"])
+        finally:
+            conn.close()
+
     def _connect(self):
         if not self._db_path:
             return None
@@ -271,6 +330,24 @@ class TraceStore:
                     confidence REAL,
                     evidence_json TEXT,
                     next_actions_json TEXT,
+                    report_json TEXT,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS runbooks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    runbook_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    run_id TEXT,
+                    rca_report_id TEXT,
+                    title TEXT,
+                    severity TEXT,
+                    summary TEXT,
+                    markdown TEXT,
+                    checklist_json TEXT,
                     report_json TEXT,
                     created_at TEXT NOT NULL
                 )

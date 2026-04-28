@@ -33,6 +33,7 @@ describe('SessionDetail', () => {
         traceRun: null,
         traceSpans: [],
         rcaReport: null,
+        runbookReport: null,
       },
     })
 
@@ -62,6 +63,7 @@ describe('SessionDetail', () => {
         traceRun: null,
         traceSpans: [],
         rcaReport: null,
+        runbookReport: null,
       },
     })
 
@@ -95,16 +97,19 @@ describe('SessionDetail', () => {
           },
         ],
         rcaReport: null,
+        runbookReport: null,
       },
     })
 
     await wrapper.find('.back-btn').trigger('click')
     await wrapper.find('.refresh-btn').trigger('click')
     await wrapper.findAll('.refresh-btn')[1].trigger('click')
+    await wrapper.find('.runbook-panel .primary-btn').trigger('click')
 
     expect(wrapper.emitted('back')).toHaveLength(1)
     expect(wrapper.emitted('refresh')).toHaveLength(1)
     expect(wrapper.emitted('open-chat')).toHaveLength(1)
+    expect(wrapper.emitted('generate-runbook')).toHaveLength(1)
   })
 
   it('renders RCA report and emits analysis action', async () => {
@@ -138,12 +143,25 @@ describe('SessionDetail', () => {
           generated_at: '2026-04-28T08:00:00Z',
           analyzer: 'rule_based_rca_v1',
         },
+        runbookReport: {
+          runbook_id: 'runbook-1',
+          session_id: 'session-rca',
+          title: '复盘 Runbook',
+          severity: 'high',
+          summary: '工具失败',
+          checklist: ['重放工具调用'],
+          evidence_count: 1,
+          markdown: '# 复盘 Runbook\n\n- [ ] 重放工具调用',
+          generated_at: '2026-04-28T08:00:00Z',
+          generator: 'rule_based_runbook_v1',
+        },
       },
     })
 
     expect(wrapper.text()).toContain('工具或 handoff 失败')
     expect(wrapper.text()).toContain('置信度 82%')
     expect(wrapper.text()).toContain('get_logs failed')
+    expect(wrapper.text()).toContain('复盘 Runbook')
 
     await wrapper.find('.primary-btn').trigger('click')
     expect(wrapper.emitted('analyze-rca')).toHaveLength(1)

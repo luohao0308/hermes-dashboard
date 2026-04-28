@@ -156,11 +156,14 @@
             :trace-spans="selectedTraceSpans"
             :rca-report="selectedRcaReport"
             :rca-loading="loadingRca"
+            :runbook-report="selectedRunbook"
+            :runbook-loading="loadingRunbook"
             :loading="loadingSessionDetail"
             :error="sessionDetailError"
             @back="backToHistory"
             @refresh="refreshSessionDetail"
             @analyze-rca="analyzeSessionRca"
+            @generate-runbook="generateSessionRunbook"
             @open-chat="openLinkedChat"
           />
         </template>
@@ -261,6 +264,7 @@ const sessionDetailError = ref<string | null>(null)
 const selectedTraceRun = ref<TraceRun | null>(null)
 const selectedTraceSpans = ref<TraceSpan[]>([])
 const selectedRcaReport = ref<RcaReport | null>(null)
+const selectedRunbook = ref<RunbookReport | null>(null)
 
 // Loading states
 const loadingTasks = ref(false)
@@ -270,6 +274,7 @@ const loadingOverview = ref(false)
 const loadingAlerts = ref(false)
 const loadingSessionDetail = ref(false)
 const loadingRca = ref(false)
+const loadingRunbook = ref(false)
 
 // Toast notifications
 interface Toast {
@@ -454,6 +459,21 @@ interface RcaReport {
   analyzer: string
 }
 
+interface RunbookReport {
+  runbook_id: string
+  session_id: string
+  run_id?: string | null
+  rca_report_id?: string | null
+  title: string
+  severity: string
+  summary: string
+  checklist: string[]
+  evidence_count: number
+  markdown: string
+  generated_at: string
+  generator: string
+}
+
 interface OverviewSnapshot {
   health?: Record<string, any> | null
   analytics?: Record<string, any> | null
@@ -636,11 +656,13 @@ async function fetchSessionDetail(taskId: string) {
     selectedSessionDetail.value = await fetchJSON<SessionDetailData>(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`)
     await fetchLatestTrace(taskId)
     await fetchLatestRca(taskId)
+    await fetchLatestRunbook(taskId)
   } catch (e) {
     selectedSessionDetail.value = null
     sessionDetailError.value = e instanceof Error ? e.message : '未知错误'
     await fetchLatestTrace(taskId)
     await fetchLatestRca(taskId)
+    await fetchLatestRunbook(taskId)
   } finally {
     loadingSessionDetail.value = false
   }
@@ -670,6 +692,17 @@ async function fetchLatestRca(taskId: string) {
   }
 }
 
+async function fetchLatestRunbook(taskId: string) {
+  try {
+    const data = await fetchJSON<{ runbook: RunbookReport | null }>(
+      `${API_BASE}/api/sessions/${encodeURIComponent(taskId)}/runbook`
+    )
+    selectedRunbook.value = data.runbook
+  } catch (e) {
+    selectedRunbook.value = null
+  }
+}
+
 async function analyzeSessionRca() {
   if (!selectedSessionId.value || loadingRca.value) return
   loadingRca.value = true
@@ -688,6 +721,25 @@ async function analyzeSessionRca() {
   }
 }
 
+async function generateSessionRunbook() {
+  if (!selectedSessionId.value || loadingRunbook.value) return
+  loadingRunbook.value = true
+  try {
+    const data = await fetchJSON<{ runbook: RunbookReport }>(
+      `${API_BASE}/api/sessions/${encodeURIComponent(selectedSessionId.value)}/runbook`,
+      { method: 'POST' }
+    )
+    selectedRunbook.value = data.runbook
+    await fetchLatestRca(selectedSessionId.value)
+    await fetchLatestTrace(selectedSessionId.value)
+    addToast('success', 'Runbook 已生成')
+  } catch (e) {
+    addToast('error', 'Runbook 生成失败')
+  } finally {
+    loadingRunbook.value = false
+  }
+}
+
 function openSessionDetail(taskId: string, item?: HistoryItem) {
   selectedSessionId.value = taskId
   selectedHistoryItem.value = item || history.value.find(h => h.task_id === taskId) || null
@@ -695,6 +747,7 @@ function openSessionDetail(taskId: string, item?: HistoryItem) {
   selectedTraceRun.value = null
   selectedTraceSpans.value = []
   selectedRcaReport.value = null
+  selectedRunbook.value = null
   currentNav.value = 'session-detail'
   window.location.hash = `#/sessions/${encodeURIComponent(taskId)}`
   void fetchSessionDetail(taskId)
@@ -721,6 +774,7 @@ function backToHistory() {
   selectedTraceRun.value = null
   selectedTraceSpans.value = []
   selectedRcaReport.value = null
+  selectedRunbook.value = null
   sessionDetailError.value = null
   handleNavChange('history')
 }

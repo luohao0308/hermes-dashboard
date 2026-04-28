@@ -135,7 +135,7 @@ OpenAI Agents SDK 的关键能力包括：
 - [x] Chat header 显示关联 Hermès session 并可返回复盘页
 - [x] 后端 Agent 运行时注入 linked session 摘要和最新 RCA
 - [x] trace 记录 linked session context span
-- [ ] Chat 消息区展示关联 session 的 RCA/trace 快捷卡片
+- [x] Chat 消息区展示关联 session 的 RCA/trace 快捷卡片
 
 验收标准：
 

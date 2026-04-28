@@ -69,6 +69,7 @@
 - Agent Chat reuses existing linked conversations and shows the linked session in the header.
 - Agent runs now receive linked session summary context and latest RCA when available.
 - Linked session context is stored as a trace span.
+- Agent Chat now shows a linked session context card with RCA and trace counts.
 
 ### Runbook Automation
 

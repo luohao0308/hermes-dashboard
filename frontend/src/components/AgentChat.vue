@@ -63,6 +63,19 @@
           </div>
         </div>
 
+        <div v-if="currentLinkedSessionId" class="linked-context-card">
+          <div class="linked-context-main">
+            <span>关联 Session</span>
+            <strong>#{{ currentLinkedSessionId.slice(0, 8) }}</strong>
+            <p>{{ linkedContextSummary }}</p>
+          </div>
+          <div class="linked-context-meta">
+            <span>Trace {{ linkedTraceSpans.length }}</span>
+            <span v-if="linkedRca">RCA {{ Math.round(linkedRca.confidence * 100) }}%</span>
+            <button @click="openLinkedSession">查看复盘</button>
+          </div>
+        </div>
+
         <!-- Messages -->
         <div class="messages-area" ref="messagesRef">
           <div
@@ -127,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, nextTick, onUnmounted } from 'vue'
+import { computed, ref, nextTick, onUnmounted, watch } from 'vue'
 import { API_BASE } from '../config'
 
 // Session types
@@ -147,6 +160,20 @@ interface ChatMessage {
   content: string
   timestamp?: string
   agent_name?: string
+}
+
+interface RcaReport {
+  root_cause: string
+  confidence: number
+  low_confidence: boolean
+  generated_at: string
+}
+
+interface TraceSpan {
+  span_id: string
+  span_type: string
+  title: string
+  status: string
 }
 
 // Chinese display names for agents (used in UI)
@@ -175,12 +202,19 @@ const isThinking = ref(false)
 const messagesRef = ref<HTMLElement | null>(null)
 const currentAgentName = ref('Dispatcher')
 const availableAgents = ref<string[]>([])
+const linkedRca = ref<RcaReport | null>(null)
+const linkedTraceSpans = ref<TraceSpan[]>([])
 let eventSource: EventSource | null = null
 
 const currentSession = computed(() =>
   sessions.value.find(session => session.session_id === currentSessionId.value) || null
 )
 const currentLinkedSessionId = computed(() => currentSession.value?.linked_session_id || '')
+const linkedContextSummary = computed(() => {
+  if (linkedRca.value) return linkedRca.value.root_cause
+  if (linkedTraceSpans.value.length > 0) return `已关联最新 trace，共 ${linkedTraceSpans.value.length} 个 span`
+  return 'Agent 运行时会自动带入该 session 的摘要、RCA 和 trace 上下文'
+})
 
 // Computed
 function sessionTitle(session: ChatSession): string {
@@ -258,11 +292,35 @@ async function selectSession(sessionId: string) {
   if (session) {
     currentAgentName.value = session.agent_id === 'main' ? 'Dispatcher' : session.agent_id
   }
+  await fetchLinkedContext(session?.linked_session_id || '')
 
   // Fetch history + open SSE stream
   await fetchHistoryAndStream(sessionId)
   // Load available agents
   fetchAgents()
+}
+
+async function fetchLinkedContext(linkedSessionId: string) {
+  linkedRca.value = null
+  linkedTraceSpans.value = []
+  if (!linkedSessionId) return
+  try {
+    const [rcaRes, traceRes] = await Promise.all([
+      fetch(`${API_BASE}/api/sessions/${encodeURIComponent(linkedSessionId)}/rca`),
+      fetch(`${API_BASE}/api/agent/traces/latest?linked_session_id=${encodeURIComponent(linkedSessionId)}`),
+    ])
+    if (rcaRes.ok) {
+      const data = await rcaRes.json()
+      linkedRca.value = data.report || null
+    }
+    if (traceRes.ok) {
+      const data = await traceRes.json()
+      linkedTraceSpans.value = data.spans || []
+    }
+  } catch (e) {
+    linkedRca.value = null
+    linkedTraceSpans.value = []
+  }
 }
 
 async function fetchAgents() {
@@ -578,6 +636,10 @@ async function init() {
 
 init()
 
+watch(currentLinkedSessionId, (linkedSessionId) => {
+  void fetchLinkedContext(linkedSessionId)
+})
+
 onUnmounted(() => {
   if (eventSource) {
     eventSource.close()
@@ -804,6 +866,65 @@ onUnmounted(() => {
   background: var(--error-soft);
   color: var(--error-color);
   border-color: var(--error-color);
+}
+
+.linked-context-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.linked-context-main span,
+.linked-context-meta span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.linked-context-main strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.linked-context-main p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.linked-context-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.linked-context-meta span {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.linked-context-meta button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--accent-color);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent-color);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 /* Messages */

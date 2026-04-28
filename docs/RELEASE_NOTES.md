@@ -80,6 +80,7 @@
 - Added `POST /api/sessions/{session_id}/export` for local Markdown export.
 - Added `GET /api/exports` for export directory status and recent Markdown files.
 - System page now displays the Markdown sync/export target and recent files.
+- Session replay pages now render runbook checklist steps as an execution timeline.
 
 ### Handoff Topology
 

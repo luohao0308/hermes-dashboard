@@ -162,6 +162,7 @@ describe('SessionDetail', () => {
     expect(wrapper.text()).toContain('置信度 82%')
     expect(wrapper.text()).toContain('get_logs failed')
     expect(wrapper.text()).toContain('复盘 Runbook')
+    expect(wrapper.find('.runbook-step').exists()).toBe(true)
 
     await wrapper.find('.primary-btn').trigger('click')
     await wrapper.findAll('.runbook-panel .secondary-btn')[1].trigger('click')

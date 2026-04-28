@@ -134,6 +134,12 @@
           <small>{{ runbookReport.generator }}</small>
         </div>
         <pre>{{ runbookReport.markdown }}</pre>
+        <div class="runbook-steps">
+          <div v-for="(step, idx) in runbookReport.checklist" :key="step" class="runbook-step">
+            <span>{{ idx + 1 }}</span>
+            <p>{{ step }}</p>
+          </div>
+        </div>
       </div>
       <div v-else class="empty-block">尚未生成 Runbook，会基于 RCA、trace 和 session 摘要生成复盘清单。</div>
     </div>
@@ -776,6 +782,40 @@ function copyRunbook() {
   font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+.runbook-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.runbook-step {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.runbook-step span {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-color);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.runbook-step p {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .rca-result.cautious {

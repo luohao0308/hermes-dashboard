@@ -176,7 +176,7 @@ OpenAI Agents SDK 的关键能力包括：
 - [x] 前端 SessionDetail 显示并复制 Runbook 产物
 - [x] 失败 runbook 自动生成复盘记录
 - [x] 支持 RCA/Runbook Markdown 本地导出，为 Obsidian/Notion 同步打底
-- [ ] 前端新增 Runbook 执行时间线
+- [x] 前端新增 Runbook 执行时间线
 
 验收标准：
 

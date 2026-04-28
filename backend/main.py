@@ -711,11 +711,12 @@ async def invoke_agent_tool(tool_name: str, body: dict | None = None):
     tool_spec = next((tool for tool in list_tool_specs() if tool["name"] == tool_name), None)
     if not tool_spec:
         raise HTTPException(status_code=404, detail="Tool not found")
-    guardrail = evaluate_tool_call(tool_spec)
+    approval_id = params.pop("__approval_id", None)
+    confirmed = params.pop("__confirmed", False)
+    guardrail = evaluate_tool_call(tool_spec, params)
     if guardrail["decision"] == "deny":
         raise HTTPException(status_code=403, detail=guardrail["description"])
-    approval_id = params.pop("__approval_id", None)
-    if guardrail["decision"] == "confirm" and not params.pop("__confirmed", False):
+    if guardrail["decision"] == "confirm" and not confirmed:
         if approval_id:
             try:
                 validate_approval_event(approval_id, tool_name, params)

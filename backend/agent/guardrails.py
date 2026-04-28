@@ -30,16 +30,24 @@ def list_tool_policies() -> list[dict[str, Any]]:
     ]
 
 
-def evaluate_tool_call(tool_spec: dict[str, Any]) -> dict[str, Any]:
+def evaluate_tool_call(tool_spec: dict[str, Any], params: dict[str, Any] | None = None) -> dict[str, Any]:
     risk = tool_spec.get("risk", "read")
+    dynamic_signal = _dangerous_operation_signal(tool_spec, params or {})
+    if dynamic_signal and risk == "read":
+        risk = "execute"
     policy = load_guardrail_policy()
     details = policy.get("tool_policies", {}).get(risk, {})
     decision = details.get("decision", "confirm")
+    description = details.get("description", "No guardrail policy configured.")
+    if dynamic_signal:
+        decision = "confirm" if decision == "allow" else decision
+        description = f"{description} Dynamic guardrail matched {dynamic_signal}."
     return {
         "tool": tool_spec.get("name"),
         "risk": risk,
         "decision": decision,
-        "description": details.get("description", "No guardrail policy configured."),
+        "description": description,
+        "dynamic_signal": dynamic_signal,
     }
 
 
@@ -120,3 +128,51 @@ def _preview_params(params: dict[str, Any]) -> dict[str, Any]:
         text = json.dumps(value, ensure_ascii=False, default=str)
         preview[key] = text[:180]
     return preview
+
+
+def _dangerous_operation_signal(tool_spec: dict[str, Any], params: dict[str, Any]) -> str | None:
+    tool_name = str(tool_spec.get("name") or "").lower()
+    payload = json.dumps(params, ensure_ascii=False, sort_keys=True, default=str).lower()
+    if any(token in tool_name for token in ("shell", "terminal", "command", "exec")):
+        if _matches_any(payload, (
+            "rm -rf",
+            "rm -fr",
+            "sudo ",
+            "mkfs",
+            "dd if=",
+            "chmod -r",
+            "chown -r",
+            "curl ",
+            "wget ",
+            "| sh",
+            "| bash",
+        )):
+            return "dangerous_shell"
+    if "git" in tool_name or "git " in payload:
+        if _matches_any(payload, (
+            "reset --hard",
+            "clean -fd",
+            "push --force",
+            "push -f",
+            "rebase ",
+            "checkout --",
+        )):
+            return "dangerous_git"
+    if any(token in tool_name for token in ("file", "fs", "write", "delete")):
+        if _matches_any(payload, (
+            '"action": "delete"',
+            '"action":"delete"',
+            '"action": "write"',
+            '"action":"write"',
+            '"mode": "w"',
+            '"mode":"w"',
+            "overwrite",
+            "unlink",
+            "delete",
+        )):
+            return "dangerous_file"
+    return None
+
+
+def _matches_any(value: str, patterns: tuple[str, ...]) -> bool:
+    return any(pattern in value for pattern in patterns)

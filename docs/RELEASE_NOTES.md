@@ -59,6 +59,7 @@
 - Added approve/reject APIs for pending guardrail events.
 - System page now displays pending guardrail approvals with approve/reject actions.
 - Added Pydantic input and RCA output guardrails with trace spans for chat input validation.
+- Dangerous shell/git/file tool parameters now dynamically require guardrail confirmation.
 
 ### RCA Analyst
 

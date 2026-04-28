@@ -31,6 +31,28 @@ def test_guardrail_allows_read_tools():
     assert any(policy["risk"] == "destructive" for policy in policies)
 
 
+def test_guardrail_confirms_dangerous_shell_params():
+    decision = evaluate_tool_call(
+        {"name": "shell_command", "risk": "read"},
+        {"command": "rm -rf tmp/cache"},
+    )
+
+    assert decision["decision"] == "confirm"
+    assert decision["risk"] == "execute"
+    assert decision["dynamic_signal"] == "dangerous_shell"
+
+
+def test_guardrail_confirms_dangerous_file_params():
+    decision = evaluate_tool_call(
+        {"name": "file_operation", "risk": "read"},
+        {"action": "delete", "path": "backend/data/agent_traces.sqlite3"},
+    )
+
+    assert decision["decision"] == "confirm"
+    assert decision["risk"] == "execute"
+    assert decision["dynamic_signal"] == "dangerous_file"
+
+
 def test_guardrail_approval_event_lifecycle():
     spec = {"name": "write_file", "risk": "write"}
     guardrail = {"tool": "write_file", "risk": "write", "decision": "confirm", "description": "needs approval"}

@@ -73,7 +73,7 @@ OpenAI Agents SDK 的关键能力包括：
 - [x] 定义工具风险等级：read、write、execute、network、destructive
 - [x] 为工具调用新增 allow/deny/confirm 策略
 - [x] 接入 Agents SDK guardrails，对输入和输出做 Pydantic 校验
-- [ ] 新增 tool guardrail：危险 shell/git/file 操作要求人工确认
+- [x] 新增 tool guardrail：危险 shell/git/file 操作要求人工确认
 - [x] 前端新增 Guardrail 事件视图：拦截原因、建议动作、确认按钮
 - [x] 后端新增 `POST /api/agent/guardrails/{event_id}/approve`
 - [x] 测试：confirm 工具调用审批后才继续
@@ -226,6 +226,6 @@ OpenAI Agents SDK 的关键能力包括：
 - [x] 新增 `frontend/src/components/TraceTimeline.vue`
 - [x] 在 SessionDetail 接入 Trace timeline
 - [x] 新增 guardrail 策略配置文件 `backend/agent/guardrails.yaml`
-- [ ] 为危险工具调用增加 confirm/approve API
+- [x] 为危险工具调用增加 confirm/approve API
 - [x] 增加单元测试：trace store、tool schema、guardrail deny、RCA analyzer
 - [ ] 增加 E2E：打开失败 session，查看 trace，触发 RCA

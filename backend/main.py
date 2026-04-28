@@ -737,7 +737,7 @@ async def invoke_agent_tool(tool_name: str, body: dict | None = None):
                 "event": event,
             })
     try:
-        result = await execute_tool(tool_name, params, hermes_get)
+        result = await execute_tool(tool_name, params, hermes_get, dashboard_get)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except httpx.HTTPStatusError as exc:
@@ -749,6 +749,16 @@ async def invoke_agent_tool(tool_name: str, body: dict | None = None):
         "risk": next((tool["risk"] for tool in list_tool_specs() if tool["name"] == tool_name), "unknown"),
         "result": result,
     }
+
+
+async def dashboard_get(endpoint: str, params: dict | None = None) -> dict[str, Any]:
+    """Expose bridge-local read APIs to Agent tools."""
+    if endpoint == "/api/alerts":
+        params = params or {}
+        return await get_alerts(limit=params.get("limit", 10))
+    if endpoint == "/api/terminal/sessions":
+        return await list_terminal_sessions()
+    raise ValueError(f"Unsupported dashboard endpoint: {endpoint}")
 
 
 @app.get("/api/sessions/{session_id}/rca")

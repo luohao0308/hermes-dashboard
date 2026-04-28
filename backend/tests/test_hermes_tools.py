@@ -17,6 +17,8 @@ def test_list_tool_specs_contains_read_tools():
     assert "get_status" in names
     assert "get_logs" in names
     assert "get_session_messages" in names
+    assert "create_alert_summary" in names
+    assert "terminal_session_list" in names
 
 
 def test_guardrail_allows_read_tools():
@@ -75,3 +77,75 @@ async def test_execute_tool_rejects_unknown_params():
 
     with pytest.raises(ValueError, match="Unknown params"):
         await execute_tool("get_status", {"extra": "nope"}, fake_hermes_get)
+
+
+@pytest.mark.asyncio
+async def test_execute_create_alert_summary_uses_dashboard_api():
+    async def fake_hermes_get(endpoint, params=None):
+        return {}
+
+    async def fake_dashboard_get(endpoint, params=None):
+        assert endpoint == "/api/alerts"
+        assert params == {"limit": 2}
+        return {
+            "generated_at": "2026-04-29T00:00:00",
+            "total": 2,
+            "alerts": [
+                {"id": "a1", "severity": "critical", "title": "Gateway down", "source": "status"},
+                {"id": "a2", "severity": "warning", "title": "Idle session", "source": "session"},
+            ],
+        }
+
+    result = await execute_tool(
+        "create_alert_summary",
+        {"limit": 2},
+        fake_hermes_get,
+        fake_dashboard_get,
+    )
+
+    assert result["severity_counts"]["critical"] == 1
+    assert result["severity_counts"]["warning"] == 1
+    assert result["summary"] == "1 critical, 1 warning, 0 info alerts"
+
+
+@pytest.mark.asyncio
+async def test_execute_terminal_session_list_summarizes_state():
+    async def fake_hermes_get(endpoint, params=None):
+        return {}
+
+    async def fake_dashboard_get(endpoint, params=None):
+        assert endpoint == "/api/terminal/sessions"
+        return {
+            "total": 2,
+            "sessions": [
+                {
+                    "session_id": "term-1",
+                    "pid": 123,
+                    "alive": True,
+                    "is_attached": True,
+                    "attach_count": 2,
+                    "pending_dangerous_command": "rm -rf tmp",
+                },
+                {
+                    "session_id": "term-2",
+                    "pid": 456,
+                    "alive": False,
+                    "is_attached": False,
+                    "attach_count": 0,
+                    "pending_dangerous_command": None,
+                },
+            ],
+        }
+
+    result = await execute_tool(
+        "terminal_session_list",
+        {},
+        fake_hermes_get,
+        fake_dashboard_get,
+    )
+
+    assert result["total"] == 2
+    assert result["alive_count"] == 1
+    assert result["attached_count"] == 1
+    assert result["pending_dangerous_count"] == 1
+    assert result["sessions"][0]["has_pending_dangerous_command"] is True

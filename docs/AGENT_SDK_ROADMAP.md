@@ -94,8 +94,8 @@ OpenAI Agents SDK 的关键能力包括：
 - [x] 封装 `search_sessions_tool`
 - [x] 封装 `get_session_messages_tool`
 - [x] 封装 `get_logs_tool`
-- [ ] 封装 `create_alert_summary_tool`
-- [ ] 封装 `terminal_session_list_tool`
+- [x] 封装 `create_alert_summary_tool`
+- [x] 封装 `terminal_session_list_tool`
 - [x] 为第一批工具定义输入 schema、风险等级和错误处理
 - [x] 前端 System 页面显示工具清单和风险等级
 

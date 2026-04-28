@@ -47,6 +47,7 @@
 - Added tool discovery API at `GET /api/agent/tools`.
 - Added read-only tool invocation API at `POST /api/agent/tools/{tool_name}/invoke`.
 - System page now displays the Agent tool library.
+- Added `create_alert_summary` and `terminal_session_list` tools for Monitor Agent triage.
 
 ### Tool Guardrails
 

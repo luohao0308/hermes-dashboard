@@ -70,6 +70,36 @@
       </div>
     </div>
 
+    <div class="approval-section">
+      <div class="section-title">待审批 Guardrail</div>
+      <div v-if="approvalEvents.length > 0" class="approval-list">
+        <div v-for="event in approvalEvents" :key="event.event_id" class="approval-item" :class="event.status">
+          <div class="approval-main">
+            <strong>{{ event.tool }}</strong>
+            <span>{{ event.risk }} / {{ event.status }}</span>
+            <p>{{ event.description }}</p>
+          </div>
+          <div class="approval-actions">
+            <button
+              class="approve-btn"
+              :disabled="event.status !== 'pending' || resolvingId === event.event_id"
+              @click="resolveApproval(event.event_id, 'approve')"
+            >
+              批准
+            </button>
+            <button
+              class="reject-btn"
+              :disabled="event.status !== 'pending' || resolvingId === event.event_id"
+              @click="resolveApproval(event.event_id, 'reject')"
+            >
+              拒绝
+            </button>
+          </div>
+        </div>
+      </div>
+      <div v-else class="empty">暂无待审批工具调用</div>
+    </div>
+
     <div class="resource-grid">
       <ResourceList title="Skills" :items="skills" empty-text="暂无 Skills" />
       <ResourceList title="Tools" :items="tools" empty-text="暂无 Tools" />
@@ -96,6 +126,16 @@ interface ResourceItem {
   decision?: string
 }
 
+interface ApprovalEvent {
+  event_id: string
+  tool: string
+  risk: string
+  description: string
+  status: 'pending' | 'approved' | 'rejected'
+  created_at: string
+  updated_at: string
+}
+
 const loading = ref(false)
 const error = ref('')
 const config = ref<Record<string, any> | null>(null)
@@ -103,8 +143,10 @@ const modelInfo = ref<Record<string, any> | null>(null)
 const skills = ref<ResourceItem[]>([])
 const tools = ref<ResourceItem[]>([])
 const guardrails = ref<ResourceItem[]>([])
+const approvalEvents = ref<ApprovalEvent[]>([])
 const plugins = ref<ResourceItem[]>([])
 const cronJobs = ref<ResourceItem[]>([])
+const resolvingId = ref('')
 
 const modelName = computed(() => modelInfo.value?.model || modelInfo.value?.name || modelInfo.value?.current_model || '未确认')
 const modelProvider = computed(() => modelInfo.value?.provider || modelInfo.value?.vendor || modelInfo.value?.platform || '模型服务')
@@ -130,12 +172,30 @@ async function load() {
   skills.value = normalizeCollection(skillsData, ['skills'])
   tools.value = normalizeCollection(toolsData, ['tools'])
   guardrails.value = normalizeCollection(guardrailsData, ['tool_policies'])
+  approvalEvents.value = normalizeCollection(guardrailsData, ['approval_events']) as ApprovalEvent[]
   cronJobs.value = normalizeCollection(cronData, ['jobs', 'cron_jobs'])
   plugins.value = normalizeCollection(pluginsData, ['plugins'])
   if (!configData && !modelData && skills.value.length === 0 && tools.value.length === 0 && guardrails.value.length === 0 && plugins.value.length === 0 && cronJobs.value.length === 0) {
     error.value = '暂时无法读取 Hermès 配置信息，请确认 Bridge 与 Hermès API 可达。'
   }
   loading.value = false
+}
+
+async function resolveApproval(eventId: string, action: 'approve' | 'reject') {
+  resolvingId.value = eventId
+  try {
+    const res = await fetch(`${API_BASE}/api/agent/guardrails/${eventId}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolved_by: 'dashboard' }),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    await load()
+  } catch (e) {
+    error.value = '审批操作失败，请刷新后重试。'
+  } finally {
+    resolvingId.value = ''
+  }
 }
 
 async function fetchOptional<T>(path: string): Promise<T | null> {
@@ -203,6 +263,7 @@ onMounted(load)
 .summary-card,
 .config-section,
 .resource-section,
+.approval-section,
 .error-box {
   background: var(--glass-bg);
   backdrop-filter: blur(20px);
@@ -210,6 +271,84 @@ onMounted(load)
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   box-shadow: var(--glass-shadow);
+}
+
+.approval-section {
+  padding: 20px 24px;
+}
+
+.approval-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.approval-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+}
+
+.approval-item.pending {
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.approval-main strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.approval-main span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.approval-main p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.approve-btn,
+.reject-btn {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.approve-btn {
+  border: 1px solid var(--success-color);
+  background: var(--success-soft);
+  color: var(--success-color);
+}
+
+.reject-btn {
+  border: 1px solid var(--error-color);
+  background: var(--error-soft);
+  color: var(--error-color);
+}
+
+.approve-btn:disabled,
+.reject-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .system-header {

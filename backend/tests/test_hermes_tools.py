@@ -1,7 +1,14 @@
 import pytest
 
 from agent.tools.hermes_tools import execute_tool, list_tool_specs
-from agent.guardrails import evaluate_tool_call, list_tool_policies
+from agent.guardrails import (
+    create_approval_event,
+    evaluate_tool_call,
+    list_approval_events,
+    list_tool_policies,
+    resolve_approval_event,
+    validate_approval_event,
+)
 
 
 def test_list_tool_specs_contains_read_tools():
@@ -20,6 +27,27 @@ def test_guardrail_allows_read_tools():
     assert decision["risk"] == "read"
     assert decision["decision"] == "allow"
     assert any(policy["risk"] == "destructive" for policy in policies)
+
+
+def test_guardrail_approval_event_lifecycle():
+    spec = {"name": "write_file", "risk": "write"}
+    guardrail = {"tool": "write_file", "risk": "write", "decision": "confirm", "description": "needs approval"}
+    params = {"path": "README.md", "content": "ok"}
+
+    event = create_approval_event(spec, params, guardrail)
+    assert event["status"] == "pending"
+    assert any(item["event_id"] == event["event_id"] for item in list_approval_events("pending"))
+
+    with pytest.raises(PermissionError):
+        validate_approval_event(event["event_id"], "write_file", params)
+
+    approved = resolve_approval_event(event["event_id"], approved=True, resolved_by="test")
+    assert approved is not None
+    assert approved["status"] == "approved"
+    assert validate_approval_event(event["event_id"], "write_file", params)["status"] == "approved"
+
+    with pytest.raises(ValueError, match="params mismatch"):
+        validate_approval_event(event["event_id"], "write_file", {"path": "README.md"})
 
 
 @pytest.mark.asyncio

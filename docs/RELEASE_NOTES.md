@@ -52,6 +52,9 @@
 - Added `GET /api/agent/guardrails`.
 - Tool invocation now evaluates allow/confirm/deny policy before execution.
 - System page now displays guardrail policies.
+- Added guardrail approval events for `confirm` tool calls.
+- Added approve/reject APIs for pending guardrail events.
+- System page now displays pending guardrail approvals with approve/reject actions.
 
 ### RCA Analyst
 

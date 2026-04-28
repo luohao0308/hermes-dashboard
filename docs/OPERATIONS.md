@@ -33,6 +33,7 @@ pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py ba
 
 - Never commit real `.env` files or Notion/API tokens.
 - Browser terminal high-risk commands are blocked before execution unless re-entered with `confirm `.
+- Agent tool calls with `confirm` policy create dashboard approval events and require `POST /api/agent/guardrails/{event_id}/approve` before execution.
 - The terminal session API supports listing and explicit PTY shutdown:
   - `GET /api/terminal/sessions`
   - `DELETE /api/terminal/sessions/{session_id}`
@@ -46,4 +47,4 @@ pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py ba
 5. Click "生成 Runbook" and confirm a Markdown runbook appears.
 6. On the same replay page, click "继续对话" and confirm Agent Chat opens with the session linked.
 7. Open Agent Chat, create a session, send a message, restart backend, and confirm the session appears again.
-8. Open System and confirm model/config/skills/plugins/cron sections render.
+8. Open System and confirm model/config/skills/plugins/guardrail approvals/cron sections render.

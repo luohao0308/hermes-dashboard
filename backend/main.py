@@ -24,7 +24,14 @@ from agent import AgentOrchestrator
 from agent.chat_manager import chat_manager
 from agent.tracing_store import trace_store
 from agent.tools import execute_tool, list_tool_specs
-from agent.guardrails import evaluate_tool_call, list_tool_policies
+from agent.guardrails import (
+    create_approval_event,
+    evaluate_tool_call,
+    list_approval_events,
+    list_tool_policies,
+    resolve_approval_event,
+    validate_approval_event,
+)
 from agent.rca import analyze_failure
 from agent.runbook import generate_runbook
 from agent.agent_manager import _AgentRegistry
@@ -658,24 +665,76 @@ async def list_agent_tools():
 @app.get("/api/agent/guardrails")
 async def list_agent_guardrails():
     """List configured Agent guardrail policies."""
-    return {"tool_policies": list_tool_policies()}
+    return {
+        "tool_policies": list_tool_policies(),
+        "approval_events": list_approval_events(),
+    }
+
+
+@app.post("/api/agent/guardrails/{event_id}/approve")
+async def approve_agent_guardrail(event_id: str, body: dict | None = None):
+    """Approve a pending guardrail event."""
+    payload = body or {}
+    event = resolve_approval_event(
+        event_id,
+        approved=True,
+        resolved_by=payload.get("resolved_by", "local_user"),
+        note=payload.get("note"),
+    )
+    if not event:
+        raise HTTPException(status_code=404, detail="Guardrail event not found")
+    return {"event": event}
+
+
+@app.post("/api/agent/guardrails/{event_id}/reject")
+async def reject_agent_guardrail(event_id: str, body: dict | None = None):
+    """Reject a pending guardrail event."""
+    payload = body or {}
+    event = resolve_approval_event(
+        event_id,
+        approved=False,
+        resolved_by=payload.get("resolved_by", "local_user"),
+        note=payload.get("note"),
+    )
+    if not event:
+        raise HTTPException(status_code=404, detail="Guardrail event not found")
+    return {"event": event}
 
 
 @app.post("/api/agent/tools/{tool_name}/invoke")
 async def invoke_agent_tool(tool_name: str, body: dict | None = None):
     """Invoke a read-only Hermès Agent tool."""
-    params = body or {}
+    params = dict(body or {})
     tool_spec = next((tool for tool in list_tool_specs() if tool["name"] == tool_name), None)
     if not tool_spec:
         raise HTTPException(status_code=404, detail="Tool not found")
     guardrail = evaluate_tool_call(tool_spec)
     if guardrail["decision"] == "deny":
         raise HTTPException(status_code=403, detail=guardrail["description"])
+    approval_id = params.pop("__approval_id", None)
     if guardrail["decision"] == "confirm" and not params.pop("__confirmed", False):
-        raise HTTPException(status_code=409, detail={
-            "message": "Tool call requires confirmation",
-            "guardrail": guardrail,
-        })
+        if approval_id:
+            try:
+                validate_approval_event(approval_id, tool_name, params)
+            except PermissionError as exc:
+                raise HTTPException(status_code=409, detail=str(exc))
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
+        else:
+            event = create_approval_event(tool_spec, params, guardrail)
+            trace_store.add_span(
+                event["event_id"],
+                span_type="guardrail",
+                title="Tool approval required",
+                summary=f"{tool_name} requires approval: {guardrail['description']}",
+                status="pending",
+                metadata=event,
+            )
+            raise HTTPException(status_code=409, detail={
+                "message": "Tool call requires confirmation",
+                "guardrail": guardrail,
+                "event": event,
+            })
     try:
         result = await execute_tool(tool_name, params, hermes_get)
     except ValueError as exc:

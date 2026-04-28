@@ -11,6 +11,7 @@
         <span v-if="loading" class="spinner"></span>
         {{ loading ? '加载中' : '刷新' }}
       </button>
+      <button class="refresh-btn" @click="emit('open-chat')">继续对话</button>
     </div>
 
     <div v-if="error" class="error-box">
@@ -242,6 +243,7 @@ const emit = defineEmits<{
   back: []
   refresh: []
   'analyze-rca': []
+  'open-chat': []
 }>()
 
 const title = computed(() => props.detail?.name || props.item?.name || `Session ${props.taskId.slice(0, 8)}`)

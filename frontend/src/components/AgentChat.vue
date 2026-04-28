@@ -3,7 +3,7 @@
     <!-- Left sidebar: session list -->
     <aside class="chat-sidebar">
       <div class="sidebar-header">
-        <button class="btn-new-chat" @click="createSession">+ 新对话</button>
+        <button class="btn-new-chat" @click="createSession()">+ 新对话</button>
       </div>
       <div class="session-list">
         <div
@@ -54,6 +54,9 @@
               <option v-for="agent in availableAgents" :key="agent" :value="agent">{{ AGENT_NAMES_CN[agent] || agent }}</option>
             </select>
             <span v-else class="agent-badge">{{ currentAgentName }}</span>
+            <button v-if="currentLinkedSessionId" class="linked-session-chip" @click="openLinkedSession">
+              关联 #{{ currentLinkedSessionId.slice(0, 8) }}
+            </button>
           </div>
           <div class="header-actions">
             <button class="btn-clear" @click="clearSession" title="清空对话">清空</button>
@@ -124,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onUnmounted } from 'vue'
+import { computed, ref, nextTick, onUnmounted } from 'vue'
 import { API_BASE } from '../config'
 
 // Session types
@@ -174,6 +177,11 @@ const currentAgentName = ref('Dispatcher')
 const availableAgents = ref<string[]>([])
 let eventSource: EventSource | null = null
 
+const currentSession = computed(() =>
+  sessions.value.find(session => session.session_id === currentSessionId.value) || null
+)
+const currentLinkedSessionId = computed(() => currentSession.value?.linked_session_id || '')
+
 // Computed
 function sessionTitle(session: ChatSession): string {
   if (session.title) return session.title
@@ -194,12 +202,16 @@ async function fetchSessions() {
   }
 }
 
-async function createSession() {
+async function createSession(options: { linkedSessionId?: string; title?: string } = {}) {
   try {
     const res = await fetch(`${API_BASE}/api/agent/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent_id: 'main' }),
+      body: JSON.stringify({
+        agent_id: 'main',
+        linked_session_id: options.linkedSessionId,
+        title: options.title,
+      }),
     })
     const data = await res.json()
     sessions.value.unshift({
@@ -216,6 +228,19 @@ async function createSession() {
   } catch (e) {
     console.error('Failed to create session:', e)
   }
+}
+
+async function openOrCreateLinkedSession(linkedSessionId: string, title?: string | null) {
+  const existing = sessions.value.find(session => session.linked_session_id === linkedSessionId)
+  if (existing) {
+    await selectSession(existing.session_id)
+    return
+  }
+  await createSession({
+    linkedSessionId,
+    title: title || `Hermès #${linkedSessionId.slice(0, 8)} 复盘`,
+  })
+  inputText.value = '请基于关联的 Hermès session 上下文，继续分析当前问题并给出下一步行动。'
 }
 
 async function selectSession(sessionId: string) {
@@ -507,6 +532,23 @@ async function clearSession() {
   }
 }
 
+function openLinkedSession() {
+  if (!currentLinkedSessionId.value) return
+  window.location.hash = `#/sessions/${encodeURIComponent(currentLinkedSessionId.value)}`
+}
+
+function readLinkedSessionRequest(): { linkedSessionId: string; title?: string | null } | null {
+  const [, query = ''] = window.location.hash.split('?')
+  if (!query) return null
+  const params = new URLSearchParams(query)
+  const linkedSessionId = params.get('linked_session_id')
+  if (!linkedSessionId) return null
+  return {
+    linkedSessionId,
+    title: params.get('title'),
+  }
+}
+
 function scrollToBottom() {
   nextTick(() => {
     const el = messagesRef.value
@@ -523,6 +565,11 @@ function autoResize(e: Event) {
 // Init
 async function init() {
   await fetchSessions()
+  const linkedRequest = readLinkedSessionRequest()
+  if (linkedRequest) {
+    await openOrCreateLinkedSession(linkedRequest.linkedSessionId, linkedRequest.title)
+    return
+  }
   // Auto-select last session if any
   if (sessions.value.length > 0) {
     await selectSession(sessions.value[0].session_id)
@@ -693,6 +740,13 @@ onUnmounted(() => {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
+.header-left,
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
 .agent-badge {
   background: var(--gradient-prism);
   color: white;
@@ -720,6 +774,20 @@ onUnmounted(() => {
 .agent-select:focus {
   border-color: var(--accent-color);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.linked-session-chip {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent-color);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
 }
 .btn-clear {
   background: var(--bg-tertiary);

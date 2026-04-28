@@ -42,5 +42,6 @@ pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py ba
 2. Confirm Alerts panel renders and actions navigate to logs/session/terminal.
 3. Open History, click details, and verify `#/sessions/{id}` loads a replay page.
 4. On a session replay page, click "一键分析失败原因" and confirm an RCA report appears.
-5. Open Agent Chat, create a session, send a message, restart backend, and confirm the session appears again.
-6. Open System and confirm model/config/skills/plugins/cron sections render.
+5. On the same replay page, click "继续对话" and confirm Agent Chat opens with the session linked.
+6. Open Agent Chat, create a session, send a message, restart backend, and confirm the session appears again.
+7. Open System and confirm model/config/skills/plugins/cron sections render.

@@ -1428,7 +1428,8 @@ async def _run_chat_agent(session, message: str, run_id: str):
             agent_name=agent.name,
         )
 
-        result = Runner.run_streamed(agent, message)
+        agent_input = await _build_chat_agent_input(session, message, run_id)
+        result = Runner.run_streamed(agent, agent_input)
         current_agent_name = agent.name
         all_output = []
 
@@ -1511,6 +1512,53 @@ async def _run_chat_agent(session, message: str, run_id: str):
         ))
     finally:
         session.is_running = False
+
+
+async def _build_chat_agent_input(session, message: str, run_id: str) -> str:
+    if not session.linked_session_id:
+        return message
+    context_lines = [
+        "关联 Hermès session 上下文：",
+        f"- session_id: {session.linked_session_id}",
+    ]
+    try:
+        detail = await _load_session_detail(session.linked_session_id)
+        context_lines.extend([
+            f"- name: {detail.get('name') or 'unknown'}",
+            f"- status: {detail.get('status') or 'unknown'}",
+            f"- model: {detail.get('model') or 'unknown'}",
+            f"- end_reason: {detail.get('end_reason') or 'none'}",
+            f"- message_count: {detail.get('message_count') or 0}",
+        ])
+        recent_messages = []
+        for item in (detail.get("messages") or [])[-6:]:
+            content = str(item.get("content") or item.get("text") or item.get("message") or "").strip()
+            if content:
+                recent_messages.append(f"{item.get('role') or 'message'}: {content[:400]}")
+        if recent_messages:
+            context_lines.append("- recent_messages:")
+            context_lines.extend(f"  - {line}" for line in recent_messages)
+    except Exception as exc:
+        context_lines.append(f"- detail_error: {exc}")
+
+    rca = trace_store.get_latest_rca_report(session.linked_session_id)
+    if rca:
+        context_lines.extend([
+            "- latest_rca:",
+            f"  - root_cause: {rca.get('root_cause')}",
+            f"  - confidence: {rca.get('confidence')}",
+        ])
+
+    context = "\n".join(context_lines)
+    trace_store.add_span(
+        run_id,
+        span_type="context",
+        title="Linked Hermès session context",
+        summary=context,
+        agent_name=session.agent_id,
+        metadata={"linked_session_id": session.linked_session_id},
+    )
+    return f"{message}\n\n{context}"
 
 
 def _classify_chat_event(event: StreamEvent, current_agent_name: str):
@@ -1627,14 +1675,15 @@ async def delete_chat_session(session_id: str):
 
 @app.patch("/api/agent/chat/{session_id}")
 async def patch_chat_session(session_id: str, body: dict | None = None):
-    """Update session agent_id."""
+    """Update session agent_id and context links."""
     if body is None:
         raise HTTPException(status_code=400, detail="body required")
     agent_id = body.get("agent_id")
-    if not agent_id:
-        raise HTTPException(status_code=400, detail="agent_id required")
-    ok = chat_manager.update_session_agent(session_id, agent_id)
-    if not ok:
+    if agent_id:
+        ok = chat_manager.update_session_agent(session_id, agent_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Session not found")
+    elif not chat_manager.get_session(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
     chat_manager.update_session_context(
         session_id,
@@ -1642,7 +1691,14 @@ async def patch_chat_session(session_id: str, body: dict | None = None):
         linked_session_id=body.get("linked_session_id"),
         terminal_session_id=body.get("terminal_session_id"),
     )
-    return {"ok": True, "agent_id": agent_id}
+    session = chat_manager.get_session(session_id)
+    return {
+        "ok": True,
+        "agent_id": session.agent_id if session else agent_id,
+        "linked_session_id": session.linked_session_id if session else None,
+        "terminal_session_id": session.terminal_session_id if session else None,
+        "title": session.title if session else None,
+    }
 
 
 @app.post("/api/agent/chat/{session_id}/stop")

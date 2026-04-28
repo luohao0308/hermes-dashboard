@@ -60,6 +60,13 @@
 - Added `GET/POST /api/sessions/{session_id}/rca`.
 - Session replay pages can generate and copy failure analysis reports.
 
+### Chat Session Binding
+
+- Session replay pages can open Agent Chat with the current Hermès session linked.
+- Agent Chat reuses existing linked conversations and shows the linked session in the header.
+- Agent runs now receive linked session summary context and latest RCA when available.
+- Linked session context is stored as a trace span.
+
 ## Verification
 
 - `npx vue-tsc --noEmit`

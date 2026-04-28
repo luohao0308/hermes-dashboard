@@ -161,6 +161,7 @@
             @back="backToHistory"
             @refresh="refreshSessionDetail"
             @analyze-rca="analyzeSessionRca"
+            @open-chat="openLinkedChat"
           />
         </template>
 
@@ -703,6 +704,16 @@ function refreshSessionDetail() {
   if (selectedSessionId.value) void fetchSessionDetail(selectedSessionId.value)
 }
 
+function openLinkedChat() {
+  if (!selectedSessionId.value) return
+  currentNav.value = 'chat'
+  const params = new URLSearchParams({
+    linked_session_id: selectedSessionId.value,
+    title: selectedSessionDetail.value?.name || selectedHistoryItem.value?.name || `Session ${selectedSessionId.value.slice(0, 8)}`,
+  })
+  window.location.hash = `#/chat?${params.toString()}`
+}
+
 function backToHistory() {
   selectedSessionId.value = ''
   selectedHistoryItem.value = null
@@ -894,7 +905,8 @@ onMounted(async () => {
       }
       return
     }
-    const nav = hashToNav[window.location.hash]
+    const baseHash = window.location.hash.split('?')[0]
+    const nav = hashToNav[baseHash]
     if (nav && currentNav.value !== nav) currentNav.value = nav
   }
   window.addEventListener('hashchange', handleHashChange)

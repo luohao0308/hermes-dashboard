@@ -100,9 +100,11 @@ describe('SessionDetail', () => {
 
     await wrapper.find('.back-btn').trigger('click')
     await wrapper.find('.refresh-btn').trigger('click')
+    await wrapper.findAll('.refresh-btn')[1].trigger('click')
 
     expect(wrapper.emitted('back')).toHaveLength(1)
     expect(wrapper.emitted('refresh')).toHaveLength(1)
+    expect(wrapper.emitted('open-chat')).toHaveLength(1)
   })
 
   it('renders RCA report and emits analysis action', async () => {

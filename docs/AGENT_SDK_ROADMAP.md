@@ -124,6 +124,25 @@ OpenAI Agents SDK 的关键能力包括：
 - 每次 handoff 都有输入摘要和期望产物
 - handoff 失败不会丢失上下文
 
+### Phase D0: Chat 与 Session 双向绑定
+
+目标：让用户从失败复盘无缝进入 Agent Chat，并让 Agent 自动携带 Hermès session 证据上下文。
+
+任务清单：
+
+- [x] SessionDetail 增加“继续对话”入口
+- [x] Agent Chat 支持通过 `#/chat?linked_session_id=...` 打开或复用关联对话
+- [x] Chat header 显示关联 Hermès session 并可返回复盘页
+- [x] 后端 Agent 运行时注入 linked session 摘要和最新 RCA
+- [x] trace 记录 linked session context span
+- [ ] Chat 消息区展示关联 session 的 RCA/trace 快捷卡片
+
+验收标准：
+
+- 用户能从 session 复盘一键进入带上下文的 Chat
+- Agent 回答时知道关联 session 的状态、消息摘要和 RCA
+- 用户能从 Chat 返回对应 session 复盘页
+
 ### Phase E: AI Root Cause Analyst
 
 目标：把 Phase 2 的规则型失败初判升级成 Agent 辅助 RCA。

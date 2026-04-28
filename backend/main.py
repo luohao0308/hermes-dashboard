@@ -25,6 +25,8 @@ from agent.chat_manager import chat_manager
 from agent.tracing_store import trace_store
 from agent.tools import execute_tool, list_tool_specs
 from agent.guardrails import (
+    approval_event_store_status,
+    configure_approval_event_store,
     create_approval_event,
     evaluate_tool_call,
     list_approval_events,
@@ -52,6 +54,11 @@ _pty_lock = asyncio.Lock()
 
 # Hermès Agent Dashboard API base URL (override with HERMES_API_URL env var)
 HERMES_API_BASE = os.environ.get("HERMES_API_URL", "http://127.0.0.1:9119")
+GUARDRAIL_EVENTS_PATH = os.environ.get(
+    "GUARDRAIL_EVENTS_PATH",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "data", "guardrail_approval_events.json")),
+)
+configure_approval_event_store(GUARDRAIL_EVENTS_PATH)
 
 # Clear proxy env vars for httpx (avoid SOCKS proxy issues)
 for _k in list(os.environ.keys()):
@@ -671,6 +678,7 @@ async def list_agent_guardrails():
     return {
         "tool_policies": list_tool_policies(),
         "approval_events": list_approval_events(),
+        "approval_event_store": approval_event_store_status(),
     }
 
 

@@ -2,6 +2,7 @@ import pytest
 
 from agent.tools.hermes_tools import execute_tool, list_tool_specs
 from agent.guardrails import (
+    configure_approval_event_store,
     create_approval_event,
     evaluate_tool_call,
     list_approval_events,
@@ -9,6 +10,13 @@ from agent.guardrails import (
     resolve_approval_event,
     validate_approval_event,
 )
+
+
+@pytest.fixture(autouse=True)
+def isolated_guardrail_store(tmp_path):
+    configure_approval_event_store(str(tmp_path / "guardrail_events.json"))
+    yield
+    configure_approval_event_store(None)
 
 
 def test_list_tool_specs_contains_read_tools():
@@ -72,6 +80,24 @@ def test_guardrail_approval_event_lifecycle():
 
     with pytest.raises(ValueError, match="params mismatch"):
         validate_approval_event(event["event_id"], "write_file", {"path": "README.md"})
+
+
+def test_guardrail_approval_events_persist_between_store_reloads(tmp_path):
+    store_path = str(tmp_path / "persisted_events.json")
+    configure_approval_event_store(store_path)
+    spec = {"name": "write_file", "risk": "write"}
+    guardrail = {"tool": "write_file", "risk": "write", "decision": "confirm", "description": "needs approval"}
+    params = {"path": "README.md", "content": "ok"}
+
+    event = create_approval_event(spec, params, guardrail)
+    configure_approval_event_store(store_path)
+
+    assert any(item["event_id"] == event["event_id"] for item in list_approval_events("pending"))
+
+    resolve_approval_event(event["event_id"], approved=True, resolved_by="test")
+    configure_approval_event_store(store_path)
+
+    assert validate_approval_event(event["event_id"], "write_file", params)["status"] == "approved"
 
 
 @pytest.mark.asyncio

@@ -30,6 +30,7 @@ pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py ba
 - Agent run metrics can be read with `GET /api/agent/evals/summary`.
 - Offline eval samples can be read with `GET /api/agent/evals/samples`.
 - Chat input and RCA output are validated by Pydantic guardrails before Agent execution or report persistence.
+- Guardrail approval events persist to `backend/data/guardrail_approval_events.json` by default. Override with `GUARDRAIL_EVENTS_PATH=/path/to/events.json`.
 - Agent config changes are appended to `backend/data/agent_config_history.jsonl` by default.
 - Markdown exports are written to `backend/data/exports` by default. Override with `HERMES_EXPORT_DIR=/path/to/export`.
 - Point `HERMES_EXPORT_DIR` to an Obsidian vault folder to turn session runbooks into local notes.

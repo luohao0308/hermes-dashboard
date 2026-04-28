@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +14,93 @@ import yaml
 
 
 POLICY_PATH = Path(__file__).parent / "guardrails.yaml"
-_approval_events: dict[str, dict[str, Any]] = {}
+
+
+class ApprovalEventStore:
+    """Small JSON-backed store for guardrail approval events."""
+
+    def __init__(self, path: str | None = None):
+        self._path = path
+        self._events: dict[str, dict[str, Any]] = {}
+        self._load()
+
+    def create(self, event: dict[str, Any]) -> dict[str, Any]:
+        self._events[event["event_id"]] = dict(event)
+        self._persist()
+        return dict(event)
+
+    def list(self, status: str | None = None) -> list[dict[str, Any]]:
+        events = list(self._events.values())
+        if status:
+            events = [event for event in events if event.get("status") == status]
+        return [
+            dict(event)
+            for event in sorted(events, key=lambda item: item.get("created_at", ""), reverse=True)
+        ]
+
+    def get(self, event_id: str) -> dict[str, Any] | None:
+        event = self._events.get(event_id)
+        return dict(event) if event else None
+
+    def update(self, event_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+        event = self._events.get(event_id)
+        if not event:
+            return None
+        event.update(updates)
+        self._persist()
+        return dict(event)
+
+    def _load(self) -> None:
+        if not self._path or not os.path.exists(self._path):
+            return
+        try:
+            with open(self._path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                events = data.get("events", data)
+                if isinstance(events, dict):
+                    self._events = {
+                        event_id: event
+                        for event_id, event in events.items()
+                        if isinstance(event, dict)
+                    }
+                elif isinstance(events, list):
+                    self._events = {
+                        event["event_id"]: event
+                        for event in events
+                        if isinstance(event, dict) and event.get("event_id")
+                    }
+        except Exception:
+            self._events = {}
+
+    def _persist(self) -> None:
+        if not self._path:
+            return
+        directory = os.path.dirname(self._path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        tmp_path = f"{self._path}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump({"events": self._events}, f, ensure_ascii=False, indent=2, sort_keys=True)
+        os.replace(tmp_path, self._path)
+
+
+_approval_store = ApprovalEventStore()
+
+
+def configure_approval_event_store(path: str | None = None) -> None:
+    """Configure persistence for approval events."""
+    global _approval_store
+    _approval_store = ApprovalEventStore(path)
+
+
+def approval_event_store_status() -> dict[str, Any]:
+    return {
+        "persistent": bool(_approval_store._path),
+        "path": _approval_store._path,
+        "count": len(_approval_store.list()),
+        "pending_count": len(_approval_store.list("pending")),
+    }
 
 
 def load_guardrail_policy() -> dict[str, Any]:
@@ -72,18 +159,11 @@ def create_approval_event(
         "resolved_by": None,
         "resolution_note": None,
     }
-    _approval_events[event_id] = event
-    return dict(event)
+    return _approval_store.create(event)
 
 
 def list_approval_events(status: str | None = None) -> list[dict[str, Any]]:
-    events = list(_approval_events.values())
-    if status:
-        events = [event for event in events if event.get("status") == status]
-    return [
-        dict(event)
-        for event in sorted(events, key=lambda item: item.get("created_at", ""), reverse=True)
-    ]
+    return _approval_store.list(status)
 
 
 def resolve_approval_event(
@@ -92,20 +172,21 @@ def resolve_approval_event(
     resolved_by: str = "local_user",
     note: str | None = None,
 ) -> dict[str, Any] | None:
-    event = _approval_events.get(event_id)
+    event = _approval_store.get(event_id)
     if not event:
         return None
     if event.get("status") != "pending":
         return dict(event)
-    event["status"] = "approved" if approved else "rejected"
-    event["updated_at"] = datetime.now().isoformat()
-    event["resolved_by"] = resolved_by
-    event["resolution_note"] = note
-    return dict(event)
+    return _approval_store.update(event_id, {
+        "status": "approved" if approved else "rejected",
+        "updated_at": datetime.now().isoformat(),
+        "resolved_by": resolved_by,
+        "resolution_note": note,
+    })
 
 
 def validate_approval_event(event_id: str, tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
-    event = _approval_events.get(event_id)
+    event = _approval_store.get(event_id)
     if not event:
         raise ValueError("Approval event not found")
     if event.get("tool") != tool_name:

@@ -58,6 +58,7 @@
 - Added guardrail approval events for `confirm` tool calls.
 - Added approve/reject APIs for pending guardrail events.
 - System page now displays pending guardrail approvals with approve/reject actions.
+- Guardrail approval events now persist to local storage and survive Bridge restarts.
 - Added Pydantic input and RCA output guardrails with trace spans for chat input validation.
 - Dangerous shell/git/file tool parameters now dynamically require guardrail confirmation.
 

@@ -9,6 +9,8 @@ describe('SystemConfigPanel', () => {
         ? { model: 'MiniMax-M2.7', provider: 'MiniMax' }
         : url.includes('/api/skills')
           ? { skills: [{ name: 'review', description: 'Code review' }] }
+          : url.includes('/api/agent/tools')
+            ? { tools: [{ name: 'get_status', description: 'Read status', risk: 'read' }] }
           : url.includes('/api/plugins')
             ? { plugins: [{ name: 'notion', description: 'Sync docs' }] }
             : url.includes('/api/cron/jobs')
@@ -32,6 +34,7 @@ describe('SystemConfigPanel', () => {
 
     expect(wrapper.text()).toContain('MiniMax-M2.7')
     expect(wrapper.text()).toContain('review')
+    expect(wrapper.text()).toContain('get_status')
     expect(wrapper.text()).toContain('notion')
     expect(wrapper.text()).toContain('daily-check')
   })

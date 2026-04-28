@@ -39,6 +39,13 @@
 - Added Trace Timeline component to Session replay pages.
 - Agent Chat now emits and stores trace spans for user input, Agent start, handoff, tool events, output, and errors.
 
+### Agent Tool Library
+
+- Added SDK-ready read-only Hermès tool specs.
+- Added tool discovery API at `GET /api/agent/tools`.
+- Added read-only tool invocation API at `POST /api/agent/tools/{tool_name}/invoke`.
+- System page now displays the Agent tool library.
+
 ## Verification
 
 - `npx vue-tsc --noEmit`

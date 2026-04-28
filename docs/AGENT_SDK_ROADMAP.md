@@ -90,14 +90,14 @@ OpenAI Agents SDK 的关键能力包括：
 
 任务清单：
 
-- [ ] 封装 `get_status_tool`
-- [ ] 封装 `search_sessions_tool`
-- [ ] 封装 `get_session_messages_tool`
-- [ ] 封装 `get_logs_tool`
+- [x] 封装 `get_status_tool`
+- [x] 封装 `search_sessions_tool`
+- [x] 封装 `get_session_messages_tool`
+- [x] 封装 `get_logs_tool`
 - [ ] 封装 `create_alert_summary_tool`
 - [ ] 封装 `terminal_session_list_tool`
-- [ ] 为每个工具定义输入 schema、输出 schema、超时和错误码
-- [ ] 前端 System 页面显示工具清单、风险等级和启用状态
+- [x] 为第一批工具定义输入 schema、风险等级和错误处理
+- [x] 前端 System 页面显示工具清单和风险等级
 
 验收标准：
 
@@ -195,7 +195,7 @@ OpenAI Agents SDK 的关键能力包括：
 
 ## 下一批实施任务
 
-- [ ] 创建 `backend/agent/tools/`，实现 Hermès API 工具封装
+- [x] 创建 `backend/agent/tools/`，实现 Hermès API 工具封装
 - [x] 创建 `backend/agent/tracing_store.py`，保存本地 trace span
 - [x] 扩展 `_classify_chat_event`，识别 tool、handoff 并写入 trace
 - [x] 新增 `GET /api/agent/runs/{run_id}/trace`

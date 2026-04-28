@@ -30,6 +30,11 @@
         <small>Dashboard 扩展</small>
       </div>
       <div class="summary-card">
+        <span>Tools</span>
+        <strong>{{ tools.length }}</strong>
+        <small>Agent 可调用能力</small>
+      </div>
+      <div class="summary-card">
         <span>Cron</span>
         <strong>{{ cronJobs.length }}</strong>
         <small>定时任务</small>
@@ -62,6 +67,7 @@
 
     <div class="resource-grid">
       <ResourceList title="Skills" :items="skills" empty-text="暂无 Skills" />
+      <ResourceList title="Tools" :items="tools" empty-text="暂无 Tools" />
       <ResourceList title="Plugins" :items="plugins" empty-text="暂无 Plugins" />
       <ResourceList title="Cron Jobs" :items="cronJobs" empty-text="暂无定时任务" />
     </div>
@@ -80,6 +86,7 @@ interface ResourceItem {
   enabled?: boolean
   status?: string
   schedule?: string
+  risk?: string
 }
 
 const loading = ref(false)
@@ -87,6 +94,7 @@ const error = ref('')
 const config = ref<Record<string, any> | null>(null)
 const modelInfo = ref<Record<string, any> | null>(null)
 const skills = ref<ResourceItem[]>([])
+const tools = ref<ResourceItem[]>([])
 const plugins = ref<ResourceItem[]>([])
 const cronJobs = ref<ResourceItem[]>([])
 
@@ -99,10 +107,11 @@ const modelEntries = computed(() => toEntries(modelInfo.value, 8))
 async function load() {
   loading.value = true
   error.value = ''
-  const [configData, modelData, skillsData, cronData, pluginsData] = await Promise.all([
+  const [configData, modelData, skillsData, toolsData, cronData, pluginsData] = await Promise.all([
     fetchOptional<Record<string, any>>('/api/config'),
     fetchOptional<Record<string, any>>('/api/model/info'),
     fetchOptional<Record<string, any>>('/api/skills'),
+    fetchOptional<Record<string, any>>('/api/agent/tools'),
     fetchOptional<Record<string, any>>('/api/cron/jobs'),
     fetchOptional<Record<string, any>>('/api/plugins'),
   ])
@@ -110,9 +119,10 @@ async function load() {
   config.value = configData
   modelInfo.value = modelData
   skills.value = normalizeCollection(skillsData, ['skills'])
+  tools.value = normalizeCollection(toolsData, ['tools'])
   cronJobs.value = normalizeCollection(cronData, ['jobs', 'cron_jobs'])
   plugins.value = normalizeCollection(pluginsData, ['plugins'])
-  if (!configData && !modelData && skills.value.length === 0 && plugins.value.length === 0 && cronJobs.value.length === 0) {
+  if (!configData && !modelData && skills.value.length === 0 && tools.value.length === 0 && plugins.value.length === 0 && cronJobs.value.length === 0) {
     error.value = '暂时无法读取 Hermès 配置信息，请确认 Bridge 与 Hermès API 可达。'
   }
   loading.value = false
@@ -161,7 +171,7 @@ const ResourceList = defineComponent({
         ? h('div', { class: 'resource-list' }, props.items.slice(0, 12).map((item, idx) =>
           h('div', { class: 'resource-item', key: item.id || item.name || idx }, [
             h('strong', item.name || item.title || item.id || `Item ${idx + 1}`),
-            h('span', item.description || item.schedule || item.status || (item.enabled === false ? 'disabled' : 'enabled')),
+            h('span', item.description || item.schedule || item.risk || item.status || (item.enabled === false ? 'disabled' : 'enabled')),
           ])
         ))
         : h('div', { class: 'empty' }, props.emptyText),

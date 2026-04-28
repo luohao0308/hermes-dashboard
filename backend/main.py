@@ -23,6 +23,7 @@ from config import settings
 from agent import AgentOrchestrator
 from agent.chat_manager import chat_manager
 from agent.tracing_store import trace_store
+from agent.tools import execute_tool, list_tool_specs
 from agent.agent_manager import _AgentRegistry
 from agents.stream_events import StreamEvent
 
@@ -639,6 +640,32 @@ def _normalize_log_entries(log_data: dict[str, Any]) -> list[dict[str, Any]]:
     if isinstance(log_data.get("lines"), list):
         return [{"message": str(line)} for line in log_data["lines"]]
     return []
+
+
+@app.get("/api/agent/tools")
+async def list_agent_tools():
+    """List SDK-ready Agent tools exposed by the dashboard."""
+    tools = list_tool_specs()
+    return {"tools": tools, "count": len(tools)}
+
+
+@app.post("/api/agent/tools/{tool_name}/invoke")
+async def invoke_agent_tool(tool_name: str, body: dict | None = None):
+    """Invoke a read-only Hermès Agent tool."""
+    params = body or {}
+    try:
+        result = await execute_tool(tool_name, params, hermes_get)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail="Hermès API error")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Tool execution failed: {exc}")
+    return {
+        "tool": tool_name,
+        "risk": next((tool["risk"] for tool in list_tool_specs() if tool["name"] == tool_name), "unknown"),
+        "result": result,
+    }
 
 
 # ============================================================================

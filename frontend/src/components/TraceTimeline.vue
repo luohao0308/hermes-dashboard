@@ -17,6 +17,9 @@
             <span>{{ span.span_type }}</span>
           </div>
           <p>{{ span.summary || '无摘要' }}</p>
+          <div v-if="traceDetails(span).length" class="trace-details">
+            <span v-for="detail in traceDetails(span)" :key="detail">{{ detail }}</span>
+          </div>
           <div v-if="handoffPayload(span)" class="handoff-payload">
             <span>原因：{{ handoffPayload(span)?.reason }}</span>
             <span>优先级：{{ handoffPayload(span)?.priority }}</span>
@@ -99,6 +102,29 @@ function formatTime(timestamp: string): string {
 function handoffPayload(span: TraceSpan): Record<string, any> | null {
   if (span.span_type !== 'handoff') return null
   return span.metadata?.handoff || null
+}
+
+function traceDetails(span: TraceSpan): string[] {
+  const details: string[] = []
+  const metadata = span.metadata || {}
+  const duration = durationText(span, metadata)
+  if (duration) details.push(`耗时 ${duration}`)
+  if (metadata.tool_name) details.push(`工具 ${metadata.tool_name}`)
+  if (metadata.tokens || metadata.token_count) details.push(`Token ${metadata.tokens || metadata.token_count}`)
+  if (metadata.input_summary) details.push(`输入 ${String(metadata.input_summary).slice(0, 80)}`)
+  if (metadata.output_summary) details.push(`输出 ${String(metadata.output_summary).slice(0, 80)}`)
+  return details
+}
+
+function durationText(span: TraceSpan, metadata: Record<string, any>): string {
+  if (typeof metadata.duration_ms === 'number') return `${metadata.duration_ms}ms`
+  const start = new Date(span.started_at)
+  const end = new Date(span.completed_at || '')
+  if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end >= start) {
+    const ms = end.getTime() - start.getTime()
+    return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+  }
+  return ''
 }
 </script>
 
@@ -215,6 +241,7 @@ function handoffPayload(span: TraceSpan): Record<string, any> | null {
   overflow-wrap: anywhere;
 }
 
+.trace-details,
 .handoff-payload {
   display: grid;
   gap: 5px;
@@ -225,6 +252,7 @@ function handoffPayload(span: TraceSpan): Record<string, any> | null {
   background: var(--bg-secondary);
 }
 
+.trace-details span,
 .handoff-payload span {
   color: var(--text-secondary);
   font-size: 11px;

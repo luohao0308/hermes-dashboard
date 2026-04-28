@@ -55,8 +55,8 @@ OpenAI Agents SDK 的关键能力包括：
 - [x] 本地保存 trace span 摘要
 - [x] 新增 `GET /api/agent/runs/{run_id}/trace`
 - [x] 前端 SessionDetail 增加 Trace timeline：tool、handoff、input、output、error 分段展示
-- [ ] Trace 节点显示耗时、token、Agent 名、工具名、输入摘要和输出摘要
-- [ ] 测试：模拟 handoff/tool event 后，trace API 返回稳定 schema
+- [x] Trace 节点显示耗时、token、Agent 名、工具名、输入摘要和输出摘要
+- [x] 测试：模拟 handoff/tool event 后，trace API 返回稳定 schema
 
 验收标准：
 

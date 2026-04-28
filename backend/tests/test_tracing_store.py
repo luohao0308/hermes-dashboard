@@ -104,3 +104,41 @@ def test_trace_store_eval_summary_counts_runs_and_spans(tmp_path):
     assert summary["tool_count"] == 1
     assert summary["guardrail_count"] == 1
     assert summary["agents"][0]["runs"] >= 1
+
+
+def test_trace_store_returns_stable_span_schema_with_metadata(tmp_path):
+    db_path = tmp_path / "traces.sqlite3"
+    store = TraceStore(db_path=str(db_path))
+    run_id = store.create_run("chat-1", "Dispatcher", "handoff")
+
+    store.add_span(
+        run_id,
+        span_type="handoff",
+        title="Agent handoff",
+        summary="handoff to Reviewer",
+        agent_name="Dispatcher",
+        metadata={
+            "handoff": {
+                "reason": "需要审查",
+                "priority": "normal",
+                "expected_output": "审查结论",
+                "context_refs": ["chat:chat-1"],
+            }
+        },
+    )
+
+    span = store.list_spans(run_id)[0]
+
+    assert {
+        "span_id",
+        "run_id",
+        "span_type",
+        "title",
+        "summary",
+        "agent_name",
+        "status",
+        "metadata",
+        "started_at",
+        "completed_at",
+    }.issubset(span.keys())
+    assert span["metadata"]["handoff"]["expected_output"] == "审查结论"

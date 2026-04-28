@@ -24,6 +24,7 @@ describe('TraceTimeline', () => {
             status: 'completed',
             started_at: '2026-04-28T08:00:00Z',
             metadata: {
+              duration_ms: 120,
               handoff: {
                 reason: '需要 Reviewer 审查',
                 priority: 'normal',
@@ -39,6 +40,7 @@ describe('TraceTimeline', () => {
     expect(wrapper.text()).toContain('completed')
     expect(wrapper.text()).toContain('Agent handoff')
     expect(wrapper.text()).toContain('handoff to Reviewer')
+    expect(wrapper.text()).toContain('耗时 120ms')
     expect(wrapper.text()).toContain('需要 Reviewer 审查')
     expect(wrapper.text()).toContain('审查结论')
   })

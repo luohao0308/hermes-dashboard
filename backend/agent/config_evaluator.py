@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+import copy
 
 
 def evaluate_agent_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -53,6 +54,34 @@ def evaluate_agent_config(config: dict[str, Any]) -> dict[str, Any]:
         "findings": findings,
         "suggestions": _suggestions(findings),
         "summary": "配置健康" if not findings else f"发现 {len(findings)} 个配置信号",
+    }
+
+
+def compare_agent_config(
+    base_config: dict[str, Any],
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    proposed = copy.deepcopy(base_config)
+    if candidate.get("main_agent"):
+        proposed["main_agent"] = candidate["main_agent"]
+    for agent_key, enabled in (candidate.get("enabled_overrides") or {}).items():
+        if agent_key in proposed.get("agents", {}):
+            proposed["agents"][agent_key]["enabled"] = bool(enabled)
+
+    current = evaluate_agent_config(base_config)
+    proposed_eval = evaluate_agent_config(proposed)
+    return {
+        "current": current,
+        "candidate": proposed_eval,
+        "delta": proposed_eval["score"] - current["score"],
+        "changed": {
+            "main_agent": {
+                "from": base_config.get("main_agent"),
+                "to": proposed.get("main_agent"),
+            },
+            "enabled_overrides": candidate.get("enabled_overrides") or {},
+        },
+        "recommendation": _comparison_recommendation(current, proposed_eval),
     }
 
 
@@ -115,3 +144,12 @@ def _dedupe_suggestions(items: list[dict[str, str]]) -> list[dict[str, str]]:
         seen.add(key)
         result.append(item)
     return result[:5]
+
+
+def _comparison_recommendation(current: dict[str, Any], proposed: dict[str, Any]) -> str:
+    delta = proposed["score"] - current["score"]
+    if delta > 0:
+        return "候选配置静态评分更高，可以考虑保存后观察运行指标。"
+    if delta < 0:
+        return "候选配置静态评分更低，不建议直接保存为默认配置。"
+    return "候选配置评分持平，建议结合实际 run 成功率和 handoff 次数再判断。"

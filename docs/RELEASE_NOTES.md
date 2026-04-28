@@ -98,6 +98,8 @@
 - Added local Agent config change history at `GET /api/agent/config/history`.
 - Agent configuration page now shows recent before/after score changes.
 - Agent configuration evaluation now includes actionable improvement suggestions.
+- Added `POST /api/agent/config/compare` for static A/B config comparison.
+- Agent configuration page can compare a candidate main Agent before saving.
 
 ## Verification
 

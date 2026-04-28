@@ -1323,7 +1323,7 @@ from pydantic import BaseModel
 from typing import Optional
 from agent.config_loader import load_config, save_config
 from agent.agent_manager import reload_agents
-from agent.config_evaluator import evaluate_agent_config
+from agent.config_evaluator import compare_agent_config, evaluate_agent_config
 from agent.config_history import config_history
 
 
@@ -1342,6 +1342,11 @@ class CustomAgentCreate(BaseModel):
     enabled: bool = True
 
 
+class ConfigCompareRequest(BaseModel):
+    main_agent: Optional[str] = None
+    enabled_overrides: dict[str, bool] = {}
+
+
 @app.get("/api/agent/config")
 async def get_agent_config():
     """Return full agent configuration."""
@@ -1358,6 +1363,13 @@ async def get_agent_config():
 async def get_agent_config_history(limit: int = Query(20, ge=1, le=100)):
     """Return local Agent config change history."""
     return {"events": config_history.list_events(limit=limit)}
+
+
+@app.post("/api/agent/config/compare")
+async def compare_agent_config_endpoint(body: ConfigCompareRequest):
+    """Compare current Agent config with a proposed candidate."""
+    cfg = load_config()
+    return compare_agent_config(cfg, body.dict())
 
 
 @app.put("/api/agent/config/enabled")

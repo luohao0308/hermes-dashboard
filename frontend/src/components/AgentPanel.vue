@@ -53,6 +53,32 @@
       </div>
     </div>
 
+    <!-- A/B Config Compare -->
+    <div class="config-section">
+      <div class="section-label">A/B 配置对比</div>
+      <div class="section-hint">选择候选入口 Agent，预览静态评分变化，不会保存配置</div>
+      <div class="compare-form">
+        <select v-model="candidateMainAgent" class="select-main">
+          <option v-for="agent in enabledAgents" :key="`candidate-${agent.id}`" :value="agent.id">
+            {{ agent.name }}
+          </option>
+        </select>
+        <button class="btn-secondary" :disabled="comparing || !candidateMainAgent" @click="compareConfig">
+          {{ comparing ? '对比中...' : '对比' }}
+        </button>
+      </div>
+      <div v-if="compareResult" class="compare-result">
+        <div class="compare-score">
+          <span>当前 {{ compareResult.current.grade }} {{ compareResult.current.score }}</span>
+          <strong :class="{ good: compareResult.delta > 0, bad: compareResult.delta < 0 }">
+            {{ compareResult.delta > 0 ? '+' : '' }}{{ compareResult.delta }}
+          </strong>
+          <span>候选 {{ compareResult.candidate.grade }} {{ compareResult.candidate.score }}</span>
+        </div>
+        <p>{{ compareResult.recommendation }}</p>
+      </div>
+    </div>
+
     <!-- Config Change History -->
     <div class="config-section">
       <div class="section-label">配置变更记录</div>
@@ -262,6 +288,13 @@ interface ConfigHistoryEvent {
   after: ConfigHistorySummary
 }
 
+interface ConfigCompareResult {
+  current: ConfigEvaluation
+  candidate: ConfigEvaluation
+  delta: number
+  recommendation: string
+}
+
 const config = ref<Config>({ main_agent: 'dispatcher', agents: [] })
 const evaluation = ref<ConfigEvaluation>({ score: 0, grade: 'D', summary: '未评估', findings: [], suggestions: [] })
 const evalSummary = ref<EvalSummary>({
@@ -276,8 +309,11 @@ const evalSummary = ref<EvalSummary>({
 const configHistory = ref<ConfigHistoryEvent[]>([])
 const loading = ref(false)
 const saving = ref(false)
+const comparing = ref(false)
 const lastSaved = ref(false)
 const saveError = ref('')
+const candidateMainAgent = ref('')
+const compareResult = ref<ConfigCompareResult | null>(null)
 
 const enabledAgents = computed(() =>
   config.value.agents.filter(a => a.enabled)
@@ -317,6 +353,7 @@ async function fetchConfig() {
       main_agent: data.main_agent || 'dispatcher',
       agents: [...agentsArray, ...customArray],
     }
+    candidateMainAgent.value = config.value.main_agent
     evaluation.value = data.evaluation || { score: 0, grade: 'D', summary: '未评估', findings: [], suggestions: [] }
     if (evalData) evalSummary.value = evalData
     configHistory.value = historyData?.events || []
@@ -355,6 +392,25 @@ async function saveConfig() {
     saveError.value = '保存失败'
   } finally {
     saving.value = false
+  }
+}
+
+async function compareConfig() {
+  if (!candidateMainAgent.value) return
+  comparing.value = true
+  try {
+    const res = await fetch(`${API_BASE}/api/agent/config/compare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ main_agent: candidateMainAgent.value }),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    compareResult.value = await res.json()
+  } catch (e) {
+    console.error('Failed to compare config:', e)
+    saveError.value = '配置对比失败'
+  } finally {
+    comparing.value = false
   }
 }
 
@@ -608,6 +664,53 @@ onMounted(() => {
 
 .history-score strong {
   color: var(--accent-color);
+}
+
+.compare-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.compare-result {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.compare-score {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.compare-score span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.compare-score strong {
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.compare-score strong.good {
+  color: var(--success-color);
+}
+
+.compare-score strong.bad {
+  color: var(--error-color);
+}
+
+.compare-result p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .metric-grid {
@@ -909,6 +1012,10 @@ onMounted(() => {
   }
 
   .history-item {
+    grid-template-columns: 1fr;
+  }
+
+  .compare-form {
     grid-template-columns: 1fr;
   }
 }

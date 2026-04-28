@@ -68,6 +68,8 @@
       </div>
     </div>
 
+    <TraceTimeline :run="traceRun" :spans="traceSpans" />
+
     <div class="timeline-panel">
       <div class="panel-title">消息时间线</div>
       <div v-if="loading" class="skeleton-list">
@@ -92,6 +94,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import TraceTimeline from './TraceTimeline.vue'
 
 interface HistoryItem {
   task_id: string
@@ -135,11 +138,36 @@ interface SessionDetailData {
   end_reason?: string
 }
 
+interface TraceRun {
+  run_id: string
+  session_id: string
+  agent_id: string
+  linked_session_id?: string | null
+  input_summary?: string
+  status: string
+  started_at: string
+  completed_at?: string | null
+}
+
+interface TraceSpan {
+  span_id: string
+  run_id: string
+  span_type: string
+  title: string
+  summary?: string
+  agent_name?: string | null
+  status: string
+  started_at: string
+  completed_at?: string | null
+}
+
 const props = defineProps<{
   taskId: string
   item: HistoryItem | null
   detail: SessionDetailData | null
   logs: LogItem[]
+  traceRun: TraceRun | null
+  traceSpans: TraceSpan[]
   loading?: boolean
   error?: string | null
 }>()

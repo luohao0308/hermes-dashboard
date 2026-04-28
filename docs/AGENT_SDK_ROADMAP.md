@@ -51,10 +51,10 @@ OpenAI Agents SDK 的关键能力包括：
 
 任务清单：
 
-- [ ] 后端新增 `agent_run_id`，把 chat message、handoff、tool event、alert 统一挂到同一运行 ID
-- [ ] 接入 Agents SDK tracing，本地保存 trace span 摘要
-- [ ] 新增 `GET /api/agent/runs/{run_id}/trace`
-- [ ] 前端 SessionDetail 增加 Trace tab：LLM、tool、handoff、guardrail 分段展示
+- [x] 后端新增 `agent_run_id`，把 chat message、handoff、tool event 统一挂到同一运行 ID
+- [x] 本地保存 trace span 摘要
+- [x] 新增 `GET /api/agent/runs/{run_id}/trace`
+- [x] 前端 SessionDetail 增加 Trace timeline：tool、handoff、input、output、error 分段展示
 - [ ] Trace 节点显示耗时、token、Agent 名、工具名、输入摘要和输出摘要
 - [ ] 测试：模拟 handoff/tool event 后，trace API 返回稳定 schema
 
@@ -196,11 +196,11 @@ OpenAI Agents SDK 的关键能力包括：
 ## 下一批实施任务
 
 - [ ] 创建 `backend/agent/tools/`，实现 Hermès API 工具封装
-- [ ] 创建 `backend/agent/tracing_store.py`，保存本地 trace span
-- [ ] 扩展 `_classify_chat_event`，识别 tool、handoff、guardrail 并写入 trace
-- [ ] 新增 `GET /api/agent/runs/{run_id}/trace`
-- [ ] 新增 `frontend/src/components/TraceTimeline.vue`
-- [ ] 在 SessionDetail 接入 Trace tab
+- [x] 创建 `backend/agent/tracing_store.py`，保存本地 trace span
+- [x] 扩展 `_classify_chat_event`，识别 tool、handoff 并写入 trace
+- [x] 新增 `GET /api/agent/runs/{run_id}/trace`
+- [x] 新增 `frontend/src/components/TraceTimeline.vue`
+- [x] 在 SessionDetail 接入 Trace timeline
 - [ ] 新增 guardrail 策略配置文件 `backend/agent/guardrails.yaml`
 - [ ] 为危险工具调用增加 confirm/approve API
 - [ ] 增加单元测试：trace store、tool schema、guardrail deny、handoff payload

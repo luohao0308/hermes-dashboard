@@ -32,6 +32,13 @@
 
 - Added System page for model info, Hermès config, Skills, Plugins, and Cron jobs.
 
+### Trace Timeline
+
+- Added SQLite-backed Agent run trace storage.
+- Added trace APIs for run lookup and latest trace lookup.
+- Added Trace Timeline component to Session replay pages.
+- Agent Chat now emits and stores trace spans for user input, Agent start, handoff, tool events, output, and errors.
+
 ## Verification
 
 - `npx vue-tsc --noEmit`

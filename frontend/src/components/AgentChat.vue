@@ -364,6 +364,20 @@ async function fetchHistoryAndStream(sessionId: string) {
     }
   })
 
+  eventSource.addEventListener('agent_tool', (e) => {
+    try {
+      const data = JSON.parse(e.data)
+      messages.value.push({
+        role: 'system',
+        content: `工具事件: ${data.tool_name || data.summary || 'tool'}`,
+        agent_name: data.agent_name,
+      })
+      scrollToBottom()
+    } catch (err) {
+      console.error('Failed to parse agent_tool:', err)
+    }
+  })
+
   eventSource.addEventListener('agent_complete', (e) => {
     try {
       const data = JSON.parse(e.data)

@@ -23,6 +23,8 @@ pytest backend/tests/test_agent_switch.py::TestChatManagerAPI -q
 
 - Chat sessions persist to SQLite at `backend/data/chat_sessions.sqlite3` by default.
 - Override with `CHAT_DB_PATH=/path/to/chat.sqlite3`.
+- Agent run traces persist to SQLite at `backend/data/agent_traces.sqlite3` by default.
+- Override with `TRACE_DB_PATH=/path/to/agent_traces.sqlite3`.
 - Runtime database files and PID files are ignored by git.
 
 ## Security Notes

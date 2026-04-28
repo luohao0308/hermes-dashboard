@@ -152,6 +152,8 @@
             :item="selectedHistoryItem"
             :detail="selectedSessionDetail"
             :logs="logs"
+            :trace-run="selectedTraceRun"
+            :trace-spans="selectedTraceSpans"
             :loading="loadingSessionDetail"
             :error="sessionDetailError"
             @back="backToHistory"
@@ -252,6 +254,8 @@ const selectedHistoryItem = ref<HistoryItem | null>(null)
 const selectedSessionDetail = ref<SessionDetailData | null>(null)
 const selectedSessionId = ref('')
 const sessionDetailError = ref<string | null>(null)
+const selectedTraceRun = ref<TraceRun | null>(null)
+const selectedTraceSpans = ref<TraceSpan[]>([])
 
 // Loading states
 const loadingTasks = ref(false)
@@ -396,6 +400,29 @@ interface SessionDetailData {
   input_tokens?: number
   output_tokens?: number
   end_reason?: string
+}
+
+interface TraceRun {
+  run_id: string
+  session_id: string
+  agent_id: string
+  linked_session_id?: string | null
+  input_summary?: string
+  status: string
+  started_at: string
+  completed_at?: string | null
+}
+
+interface TraceSpan {
+  span_id: string
+  run_id: string
+  span_type: string
+  title: string
+  summary?: string
+  agent_name?: string | null
+  status: string
+  started_at: string
+  completed_at?: string | null
 }
 
 interface OverviewSnapshot {
@@ -578,11 +605,26 @@ async function fetchSessionDetail(taskId: string) {
   sessionDetailError.value = null
   try {
     selectedSessionDetail.value = await fetchJSON<SessionDetailData>(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`)
+    await fetchLatestTrace(taskId)
   } catch (e) {
     selectedSessionDetail.value = null
     sessionDetailError.value = e instanceof Error ? e.message : '未知错误'
+    await fetchLatestTrace(taskId)
   } finally {
     loadingSessionDetail.value = false
+  }
+}
+
+async function fetchLatestTrace(taskId: string) {
+  try {
+    const data = await fetchJSON<{ run: TraceRun | null; spans: TraceSpan[] }>(
+      `${API_BASE}/api/agent/traces/latest?linked_session_id=${encodeURIComponent(taskId)}`
+    )
+    selectedTraceRun.value = data.run
+    selectedTraceSpans.value = data.spans || []
+  } catch (e) {
+    selectedTraceRun.value = null
+    selectedTraceSpans.value = []
   }
 }
 
@@ -590,6 +632,8 @@ function openSessionDetail(taskId: string, item?: HistoryItem) {
   selectedSessionId.value = taskId
   selectedHistoryItem.value = item || history.value.find(h => h.task_id === taskId) || null
   selectedSessionDetail.value = null
+  selectedTraceRun.value = null
+  selectedTraceSpans.value = []
   currentNav.value = 'session-detail'
   window.location.hash = `#/sessions/${encodeURIComponent(taskId)}`
   void fetchSessionDetail(taskId)
@@ -603,6 +647,8 @@ function backToHistory() {
   selectedSessionId.value = ''
   selectedHistoryItem.value = null
   selectedSessionDetail.value = null
+  selectedTraceRun.value = null
+  selectedTraceSpans.value = []
   sessionDetailError.value = null
   handleNavChange('history')
 }

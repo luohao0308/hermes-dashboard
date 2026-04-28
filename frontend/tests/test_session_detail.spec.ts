@@ -30,6 +30,8 @@ describe('SessionDetail', () => {
           output_tokens: 50,
         },
         logs: [],
+        traceRun: null,
+        traceSpans: [],
       },
     })
 
@@ -56,6 +58,8 @@ describe('SessionDetail', () => {
             message: 'abc12345 tool failed with timeout',
           },
         ],
+        traceRun: null,
+        traceSpans: [],
       },
     })
 
@@ -70,6 +74,24 @@ describe('SessionDetail', () => {
         item: null,
         detail: null,
         logs: [],
+        traceRun: {
+          run_id: 'run-12345678',
+          session_id: 'session-1',
+          agent_id: 'Developer',
+          status: 'completed',
+          started_at: '2026-04-28T08:00:00Z',
+        },
+        traceSpans: [
+          {
+            span_id: 'span-1',
+            run_id: 'run-12345678',
+            span_type: 'user_input',
+            title: 'User message',
+            summary: 'hello',
+            status: 'completed',
+            started_at: '2026-04-28T08:00:00Z',
+          },
+        ],
       },
     })
 

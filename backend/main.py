@@ -22,6 +22,7 @@ from sse_manager import sse_manager
 from config import settings
 from agent import AgentOrchestrator
 from agent.chat_manager import chat_manager
+from agent.tracing_store import trace_store
 from agent.agent_manager import _AgentRegistry
 from agents.stream_events import StreamEvent
 
@@ -1260,6 +1261,19 @@ async def send_chat_message(session_id: str, body: ChatMessageRequest):
         role="user",
         content=body.message,
     )
+    run_id = trace_store.create_run(
+        session_id=session.session_id,
+        agent_id=session.agent_id,
+        linked_session_id=session.linked_session_id,
+        input_summary=body.message,
+    )
+    trace_store.add_span(
+        run_id,
+        span_type="user_input",
+        title="User message",
+        summary=body.message,
+        agent_name=session.agent_id,
+    )
 
     # Emit user message to stream
     await session.queue.put(ServerSentEvent(
@@ -1267,6 +1281,7 @@ async def send_chat_message(session_id: str, body: ChatMessageRequest):
         data=json.dumps({
             "content": body.message,
             "timestamp": user_msg.timestamp if user_msg else datetime.now().isoformat(),
+            "run_id": run_id,
         })
     ))
 
@@ -1278,17 +1293,18 @@ async def send_chat_message(session_id: str, body: ChatMessageRequest):
         data=json.dumps({
             "status": "running",
             "message": "正在思考...",
+            "run_id": run_id,
         })
     ))
 
     # Run agent in background and stream output to session queue
-    task = asyncio.create_task(_run_chat_agent(session, body.message))
+    task = asyncio.create_task(_run_chat_agent(session, body.message, run_id))
     session.set_task(task)
 
-    return {"ok": True, "session_id": session_id}
+    return {"ok": True, "session_id": session_id, "run_id": run_id}
 
 
-async def _run_chat_agent(session, message: str):
+async def _run_chat_agent(session, message: str, run_id: str):
     """Run the agent for a chat session and stream results."""
     from agents import Runner
     from agents.stream_events import StreamEvent
@@ -1298,6 +1314,13 @@ async def _run_chat_agent(session, message: str):
         agents = _agent_registry.get_all_agents()
         # Case-insensitive lookup: registry keys are lowercase (developer, dispatcher, etc.)
         agent = agents.get(session.agent_id.lower(), agents.get("dispatcher"))
+        trace_store.add_span(
+            run_id,
+            span_type="agent_start",
+            title=f"{agent.name} started",
+            summary=f"Agent run started for chat session {session.session_id}",
+            agent_name=agent.name,
+        )
 
         result = Runner.run_streamed(agent, message)
         current_agent_name = agent.name
@@ -1307,23 +1330,49 @@ async def _run_chat_agent(session, message: str):
             ev_type, payload = _classify_chat_event(event, current_agent_name)
 
             if ev_type == "agent_handoff":
+                trace_store.add_span(
+                    run_id,
+                    span_type="handoff",
+                    title="Agent handoff",
+                    summary=payload.get("message", ""),
+                    agent_name=current_agent_name,
+                    metadata=payload,
+                )
                 current_agent_name = payload.get("to_agent", current_agent_name)
 
             if ev_type == "agent_output":
                 all_output.append(payload.get("delta", ""))
+            elif ev_type == "agent_tool":
+                trace_store.add_span(
+                    run_id,
+                    span_type="tool",
+                    title=payload.get("tool_name", "Tool event"),
+                    summary=payload.get("summary", ""),
+                    agent_name=current_agent_name,
+                    metadata=payload,
+                )
 
             if ev_type and payload:
                 await session.queue.put(ServerSentEvent(
                     event=ev_type,
-                    data=json.dumps(payload),
+                    data=json.dumps({**payload, "run_id": run_id}),
                 ))
 
         final_text = "".join(all_output)
+        trace_store.add_span(
+            run_id,
+            span_type="assistant_output",
+            title="Assistant output",
+            summary=final_text,
+            agent_name=current_agent_name,
+        )
+        trace_store.complete_run(run_id)
         await session.queue.put(ServerSentEvent(
             event="agent_complete",
             data=json.dumps({
                 "content": final_text,
                 "agent_name": current_agent_name,
+                "run_id": run_id,
             }),
         ))
 
@@ -1336,6 +1385,15 @@ async def _run_chat_agent(session, message: str):
         )
 
     except Exception as exc:
+        trace_store.add_span(
+            run_id,
+            span_type="error",
+            title="Agent error",
+            summary=str(exc),
+            agent_name=session.agent_id,
+            status="error",
+        )
+        trace_store.complete_run(run_id, status="error")
         chat_manager.append_message(
             session.session_id,
             role="system",
@@ -1343,7 +1401,7 @@ async def _run_chat_agent(session, message: str):
         )
         await session.queue.put(ServerSentEvent(
             event="agent_error",
-            data=json.dumps({"error": str(exc)}),
+            data=json.dumps({"error": str(exc), "run_id": run_id}),
         ))
     finally:
         session.is_running = False
@@ -1395,9 +1453,10 @@ def _classify_chat_event(event: StreamEvent, current_agent_name: str):
                     return None, None
 
             elif name in ("tool_called", "tool_output"):
-                return "agent_output", {
+                return "agent_tool", {
                     "agent_name": current_agent_name,
-                    "delta": f"[{name}]",
+                    "tool_name": name,
+                    "summary": f"[{name}]",
                 }
 
             elif name in ("handoff_requested", "handoff_occurs"):
@@ -1417,6 +1476,33 @@ def _classify_chat_event(event: StreamEvent, current_agent_name: str):
             }
 
     return None, None
+
+
+@app.get("/api/agent/runs/{run_id}/trace")
+async def get_agent_run_trace(run_id: str):
+    """Return trace timeline for an Agent run."""
+    run = trace_store.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {
+        "run": run,
+        "spans": trace_store.list_spans(run_id),
+    }
+
+
+@app.get("/api/agent/traces/latest")
+async def get_latest_agent_trace(
+    session_id: Optional[str] = Query(None, description="Agent chat session id"),
+    linked_session_id: Optional[str] = Query(None, description="Hermès session id"),
+):
+    """Return latest trace for a chat session or linked Hermès session."""
+    run = trace_store.find_latest_run(session_id=session_id, linked_session_id=linked_session_id)
+    if not run:
+        return {"run": None, "spans": []}
+    return {
+        "run": run,
+        "spans": trace_store.list_spans(run["run_id"]),
+    }
 
 
 @app.get("/api/agent/chat")

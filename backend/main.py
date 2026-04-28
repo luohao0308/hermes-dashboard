@@ -38,6 +38,7 @@ from agent.rca import analyze_failure
 from agent.runbook import generate_runbook
 from agent.exporter import build_session_export, list_markdown_exports, save_markdown_export
 from agent.eval_samples import get_eval_sample_summary, list_eval_samples
+from agent.eval_runner import run_eval_samples
 from agent.structured_guardrails import validate_agent_input
 from agent.agent_manager import _AgentRegistry
 from agents.stream_events import StreamEvent
@@ -2028,6 +2029,16 @@ async def get_agent_eval_samples(category: Optional[str] = Query(None)):
         "count": len(samples),
         "summary": get_eval_sample_summary(),
     }
+
+
+@app.post("/api/agent/evals/run")
+async def run_agent_evals(category: Optional[str] = Query(None)):
+    """Run offline Agent eval samples against the local Agent/tool contract."""
+    return run_eval_samples(
+        category=category,
+        agent_config=load_config(),
+        tool_specs=list_tool_specs(),
+    )
 
 
 @app.get("/api/agent/chat")

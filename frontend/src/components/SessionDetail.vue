@@ -118,6 +118,9 @@
         </div>
         <div class="rca-actions">
           <button v-if="runbookReport" class="secondary-btn" @click="copyRunbook">复制 Runbook</button>
+          <button v-if="runbookReport" class="secondary-btn" :disabled="exportLoading" @click="emit('export-markdown')">
+            {{ exportLoading ? '导出中' : '导出 Markdown' }}
+          </button>
           <button class="primary-btn" :disabled="runbookLoading" @click="emit('generate-runbook')">
             <span v-if="runbookLoading" class="spinner"></span>
             {{ runbookLoading ? '生成中' : '生成 Runbook' }}
@@ -277,6 +280,7 @@ const props = defineProps<{
   rcaLoading?: boolean
   runbookReport: RunbookReport | null
   runbookLoading?: boolean
+  exportLoading?: boolean
   loading?: boolean
   error?: string | null
 }>()
@@ -286,6 +290,7 @@ const emit = defineEmits<{
   refresh: []
   'analyze-rca': []
   'generate-runbook': []
+  'export-markdown': []
   'open-chat': []
 }>()
 

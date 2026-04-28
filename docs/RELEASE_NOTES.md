@@ -77,6 +77,7 @@
 - Added `GET/POST /api/sessions/{session_id}/runbook`.
 - Runbooks persist in the Agent trace SQLite database.
 - Session replay pages can generate and copy Markdown runbooks.
+- Added `POST /api/sessions/{session_id}/export` for local Markdown export.
 
 ### Handoff Topology
 
@@ -94,5 +95,5 @@
 - `npx vue-tsc --noEmit`
 - `npm run test:unit`
 - `npm run build`
-- `python -m py_compile backend/main.py backend/agent/chat_manager.py backend/agent/tracing_store.py backend/agent/tools/hermes_tools.py backend/agent/guardrails.py backend/agent/rca.py backend/agent/runbook.py backend/agent/config_evaluator.py`
-- `pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py backend/tests/test_rca.py backend/tests/test_runbook.py backend/tests/test_config_evaluator.py backend/tests/test_agent_switch.py::TestChatManagerAPI -q`
+- `python -m py_compile backend/main.py backend/agent/chat_manager.py backend/agent/tracing_store.py backend/agent/tools/hermes_tools.py backend/agent/guardrails.py backend/agent/rca.py backend/agent/runbook.py backend/agent/config_evaluator.py backend/agent/exporter.py`
+- `pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py backend/tests/test_rca.py backend/tests/test_runbook.py backend/tests/test_config_evaluator.py backend/tests/test_exporter.py backend/tests/test_agent_switch.py::TestChatManagerAPI -q`

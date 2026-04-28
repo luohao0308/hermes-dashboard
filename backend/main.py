@@ -34,6 +34,7 @@ from agent.guardrails import (
 )
 from agent.rca import analyze_failure
 from agent.runbook import generate_runbook
+from agent.exporter import build_session_export, save_markdown_export
 from agent.agent_manager import _AgentRegistry
 from agents.stream_events import StreamEvent
 
@@ -859,6 +860,27 @@ async def generate_session_runbook(session_id: str):
             },
         )
     return {"runbook": saved}
+
+
+@app.post("/api/sessions/{session_id}/export")
+async def export_session_markdown(session_id: str, body: dict | None = None):
+    """Export RCA and runbook content to a local Markdown file."""
+    payload = body or {}
+    export_dir = payload.get("export_dir") or os.environ.get(
+        "HERMES_EXPORT_DIR",
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "data", "exports")),
+    )
+    rca = trace_store.get_latest_rca_report(session_id)
+    runbook = trace_store.get_latest_runbook(session_id)
+    content = build_session_export(session_id, rca=rca, runbook=runbook)
+    saved = save_markdown_export(export_dir, session_id, content)
+    return {
+        "export": {
+            **saved,
+            "session_id": session_id,
+            "target": "markdown",
+        }
+    }
 
 
 # ============================================================================

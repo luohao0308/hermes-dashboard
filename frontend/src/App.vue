@@ -158,12 +158,14 @@
             :rca-loading="loadingRca"
             :runbook-report="selectedRunbook"
             :runbook-loading="loadingRunbook"
+            :export-loading="exportingMarkdown"
             :loading="loadingSessionDetail"
             :error="sessionDetailError"
             @back="backToHistory"
             @refresh="refreshSessionDetail"
             @analyze-rca="analyzeSessionRca"
             @generate-runbook="generateSessionRunbook"
+            @export-markdown="exportSessionMarkdown"
             @open-chat="openLinkedChat"
           />
         </template>
@@ -275,6 +277,7 @@ const loadingAlerts = ref(false)
 const loadingSessionDetail = ref(false)
 const loadingRca = ref(false)
 const loadingRunbook = ref(false)
+const exportingMarkdown = ref(false)
 
 // Toast notifications
 interface Toast {
@@ -737,6 +740,22 @@ async function generateSessionRunbook() {
     addToast('error', 'Runbook 生成失败')
   } finally {
     loadingRunbook.value = false
+  }
+}
+
+async function exportSessionMarkdown() {
+  if (!selectedSessionId.value || exportingMarkdown.value) return
+  exportingMarkdown.value = true
+  try {
+    const data = await fetchJSON<{ export: { path: string } }>(
+      `${API_BASE}/api/sessions/${encodeURIComponent(selectedSessionId.value)}/export`,
+      { method: 'POST' }
+    )
+    addToast('success', `Markdown 已导出: ${data.export.path}`)
+  } catch (e) {
+    addToast('error', 'Markdown 导出失败')
+  } finally {
+    exportingMarkdown.value = false
   }
 }
 

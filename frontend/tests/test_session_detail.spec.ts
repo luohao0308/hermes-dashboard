@@ -164,6 +164,8 @@ describe('SessionDetail', () => {
     expect(wrapper.text()).toContain('复盘 Runbook')
 
     await wrapper.find('.primary-btn').trigger('click')
+    await wrapper.findAll('.runbook-panel .secondary-btn')[1].trigger('click')
     expect(wrapper.emitted('analyze-rca')).toHaveLength(1)
+    expect(wrapper.emitted('export-markdown')).toHaveLength(1)
   })
 })

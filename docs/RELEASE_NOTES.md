@@ -97,6 +97,7 @@
 ### Agent Config Evaluation
 
 - Added static Agent configuration scoring for main Agent validity, handoff reachability, and isolated nodes.
+- Added offline Agent eval samples for debug, review, research, deploy, and monitor tasks.
 - Agent configuration API now returns an `evaluation` block.
 - Agent configuration page displays score, grade, and actionable findings.
 - Added aggregate Agent run metrics at `GET /api/agent/evals/summary`.

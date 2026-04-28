@@ -35,6 +35,7 @@ from agent.guardrails import (
 from agent.rca import analyze_failure
 from agent.runbook import generate_runbook
 from agent.exporter import build_session_export, list_markdown_exports, save_markdown_export
+from agent.eval_samples import get_eval_sample_summary, list_eval_samples
 from agent.agent_manager import _AgentRegistry
 from agents.stream_events import StreamEvent
 
@@ -1933,6 +1934,17 @@ async def get_latest_agent_trace(
 async def get_agent_eval_summary():
     """Return aggregate Agent run and trace metrics."""
     return trace_store.get_eval_summary()
+
+
+@app.get("/api/agent/evals/samples")
+async def get_agent_eval_samples(category: Optional[str] = Query(None)):
+    """Return offline Agent eval samples for debug/review/research/deploy/monitor tasks."""
+    samples = list_eval_samples(category=category)
+    return {
+        "samples": samples,
+        "count": len(samples),
+        "summary": get_eval_sample_summary(),
+    }
 
 
 @app.get("/api/agent/chat")

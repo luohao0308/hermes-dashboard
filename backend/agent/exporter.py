@@ -54,6 +54,29 @@ def save_markdown_export(export_dir: str, session_id: str, content: str) -> dict
     }
 
 
+def list_markdown_exports(export_dir: str, limit: int = 20) -> dict[str, Any]:
+    directory = Path(export_dir).expanduser().resolve()
+    files = []
+    if directory.exists():
+        files = [
+            {
+                "filename": path.name,
+                "path": str(path),
+                "bytes": path.stat().st_size,
+                "updated_at": datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+            }
+            for path in directory.glob("*.md")
+            if path.is_file()
+        ]
+        files.sort(key=lambda item: item["updated_at"], reverse=True)
+    return {
+        "export_dir": str(directory),
+        "exists": directory.exists(),
+        "files": files[:limit],
+        "count": len(files),
+    }
+
+
 def _slug(value: str) -> str:
     slug = re.sub(r"[^a-zA-Z0-9_.-]+", "-", value).strip("-")
     return slug[:80] or "session"

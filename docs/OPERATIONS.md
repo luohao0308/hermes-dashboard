@@ -29,6 +29,7 @@ pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py ba
 - Read them with `GET /api/sessions/{session_id}/rca` and `GET /api/sessions/{session_id}/runbook`.
 - Agent run metrics can be read with `GET /api/agent/evals/summary`.
 - Markdown exports are written to `backend/data/exports` by default. Override with `HERMES_EXPORT_DIR=/path/to/export`.
+- Point `HERMES_EXPORT_DIR` to an Obsidian vault folder to turn session runbooks into local notes.
 - Runtime database files and PID files are ignored by git.
 
 ## Security Notes

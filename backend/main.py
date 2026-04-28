@@ -34,7 +34,7 @@ from agent.guardrails import (
 )
 from agent.rca import analyze_failure
 from agent.runbook import generate_runbook
-from agent.exporter import build_session_export, save_markdown_export
+from agent.exporter import build_session_export, list_markdown_exports, save_markdown_export
 from agent.agent_manager import _AgentRegistry
 from agents.stream_events import StreamEvent
 
@@ -881,6 +881,16 @@ async def export_session_markdown(session_id: str, body: dict | None = None):
             "target": "markdown",
         }
     }
+
+
+@app.get("/api/exports")
+async def list_session_exports(limit: int = Query(20, ge=1, le=100)):
+    """List recent local Markdown exports."""
+    export_dir = os.environ.get(
+        "HERMES_EXPORT_DIR",
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "data", "exports")),
+    )
+    return list_markdown_exports(export_dir, limit=limit)
 
 
 # ============================================================================

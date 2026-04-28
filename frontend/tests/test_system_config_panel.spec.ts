@@ -13,6 +13,8 @@ describe('SystemConfigPanel', () => {
             ? { tools: [{ name: 'get_status', description: 'Read status', risk: 'read' }] }
           : url.includes('/api/agent/guardrails')
             ? { tool_policies: [{ risk: 'read', decision: 'allow', description: 'Read-only' }] }
+          : url.includes('/api/exports')
+            ? { export_dir: '/tmp/hermes-exports', exists: true, files: [{ filename: 'session.md', path: '/tmp/hermes-exports/session.md', bytes: 42, updated_at: '2026-04-29T00:00:00Z' }], count: 1 }
           : url.includes('/api/plugins')
             ? { plugins: [{ name: 'notion', description: 'Sync docs' }] }
             : url.includes('/api/cron/jobs')
@@ -40,6 +42,8 @@ describe('SystemConfigPanel', () => {
     expect(wrapper.text()).toContain('Read-only')
     expect(wrapper.text()).toContain('notion')
     expect(wrapper.text()).toContain('daily-check')
+    expect(wrapper.text()).toContain('/tmp/hermes-exports')
+    expect(wrapper.text()).toContain('session.md')
   })
 
   it('refreshes data when button is clicked', async () => {

@@ -78,6 +78,8 @@
 - Runbooks persist in the Agent trace SQLite database.
 - Session replay pages can generate and copy Markdown runbooks.
 - Added `POST /api/sessions/{session_id}/export` for local Markdown export.
+- Added `GET /api/exports` for export directory status and recent Markdown files.
+- System page now displays the Markdown sync/export target and recent files.
 
 ### Handoff Topology
 

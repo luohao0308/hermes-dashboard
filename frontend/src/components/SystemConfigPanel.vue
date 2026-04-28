@@ -100,6 +100,21 @@
       <div v-else class="empty">暂无待审批工具调用</div>
     </div>
 
+    <div class="approval-section">
+      <div class="section-title">Markdown 同步</div>
+      <div class="export-target">
+        <span>导出目录</span>
+        <strong>{{ exportsInfo?.export_dir || '未确认' }}</strong>
+      </div>
+      <div v-if="exportFiles.length > 0" class="export-list">
+        <div v-for="file in exportFiles" :key="file.path" class="export-item">
+          <strong>{{ file.filename }}</strong>
+          <span>{{ formatBytes(file.bytes) }} / {{ formatDate(file.updated_at) }}</span>
+        </div>
+      </div>
+      <div v-else class="empty">暂无 Markdown 导出文件</div>
+    </div>
+
     <div class="resource-grid">
       <ResourceList title="Skills" :items="skills" empty-text="暂无 Skills" />
       <ResourceList title="Tools" :items="tools" empty-text="暂无 Tools" />
@@ -136,6 +151,20 @@ interface ApprovalEvent {
   updated_at: string
 }
 
+interface ExportFile {
+  filename: string
+  path: string
+  bytes: number
+  updated_at: string
+}
+
+interface ExportsInfo {
+  export_dir: string
+  exists: boolean
+  files: ExportFile[]
+  count: number
+}
+
 const loading = ref(false)
 const error = ref('')
 const config = ref<Record<string, any> | null>(null)
@@ -147,17 +176,19 @@ const approvalEvents = ref<ApprovalEvent[]>([])
 const plugins = ref<ResourceItem[]>([])
 const cronJobs = ref<ResourceItem[]>([])
 const resolvingId = ref('')
+const exportsInfo = ref<ExportsInfo | null>(null)
 
 const modelName = computed(() => modelInfo.value?.model || modelInfo.value?.name || modelInfo.value?.current_model || '未确认')
 const modelProvider = computed(() => modelInfo.value?.provider || modelInfo.value?.vendor || modelInfo.value?.platform || '模型服务')
 
 const configEntries = computed(() => toEntries(config.value, 8))
 const modelEntries = computed(() => toEntries(modelInfo.value, 8))
+const exportFiles = computed(() => exportsInfo.value?.files || [])
 
 async function load() {
   loading.value = true
   error.value = ''
-  const [configData, modelData, skillsData, toolsData, guardrailsData, cronData, pluginsData] = await Promise.all([
+  const [configData, modelData, skillsData, toolsData, guardrailsData, cronData, pluginsData, exportsData] = await Promise.all([
     fetchOptional<Record<string, any>>('/api/config'),
     fetchOptional<Record<string, any>>('/api/model/info'),
     fetchOptional<Record<string, any>>('/api/skills'),
@@ -165,6 +196,7 @@ async function load() {
     fetchOptional<Record<string, any>>('/api/agent/guardrails'),
     fetchOptional<Record<string, any>>('/api/cron/jobs'),
     fetchOptional<Record<string, any>>('/api/plugins'),
+    fetchOptional<ExportsInfo>('/api/exports?limit=8'),
   ])
 
   config.value = configData
@@ -175,6 +207,7 @@ async function load() {
   approvalEvents.value = normalizeCollection(guardrailsData, ['approval_events']) as ApprovalEvent[]
   cronJobs.value = normalizeCollection(cronData, ['jobs', 'cron_jobs'])
   plugins.value = normalizeCollection(pluginsData, ['plugins'])
+  exportsInfo.value = exportsData
   if (!configData && !modelData && skills.value.length === 0 && tools.value.length === 0 && guardrails.value.length === 0 && plugins.value.length === 0 && cronJobs.value.length === 0) {
     error.value = '暂时无法读取 Hermès 配置信息，请确认 Bridge 与 Hermès API 可达。'
   }
@@ -226,6 +259,23 @@ function toEntries(value: Record<string, any> | null, limit: number) {
       key,
       value: entryValue === null || entryValue === undefined ? 'N/A' : String(entryValue),
     }))
+}
+
+function formatBytes(value: number): string {
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${value} B`
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-CN', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 const ResourceList = defineComponent({
@@ -284,7 +334,9 @@ onMounted(load)
   margin-top: 12px;
 }
 
-.approval-item {
+.approval-item,
+.export-item,
+.export-target {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 14px;
@@ -299,16 +351,35 @@ onMounted(load)
   border-color: rgba(245, 158, 11, 0.35);
 }
 
-.approval-main strong {
+.export-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.export-target {
+  margin-top: 12px;
+}
+
+.approval-main strong,
+.export-item strong,
+.export-target strong {
   display: block;
   color: var(--text-primary);
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
-.approval-main span {
+.approval-main span,
+.export-item span,
+.export-target span {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 800;
+}
+
+.approval-main span {
   text-transform: uppercase;
 }
 

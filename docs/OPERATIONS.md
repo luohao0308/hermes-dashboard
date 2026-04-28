@@ -27,6 +27,7 @@ pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py ba
 - Override with `TRACE_DB_PATH=/path/to/agent_traces.sqlite3`.
 - RCA reports and generated runbooks are stored in the same trace database.
 - Read them with `GET /api/sessions/{session_id}/rca` and `GET /api/sessions/{session_id}/runbook`.
+- Agent run metrics can be read with `GET /api/agent/evals/summary`.
 - Markdown exports are written to `backend/data/exports` by default. Override with `HERMES_EXPORT_DIR=/path/to/export`.
 - Runtime database files and PID files are ignored by git.
 

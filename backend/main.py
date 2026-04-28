@@ -1802,6 +1802,12 @@ async def get_latest_agent_trace(
     }
 
 
+@app.get("/api/agent/evals/summary")
+async def get_agent_eval_summary():
+    """Return aggregate Agent run and trace metrics."""
+    return trace_store.get_eval_summary()
+
+
 @app.get("/api/agent/chat")
 async def list_chat_sessions():
     """List all chat sessions."""

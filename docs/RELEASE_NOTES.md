@@ -89,6 +89,8 @@
 - Added static Agent configuration scoring for main Agent validity, handoff reachability, and isolated nodes.
 - Agent configuration API now returns an `evaluation` block.
 - Agent configuration page displays score, grade, and actionable findings.
+- Added aggregate Agent run metrics at `GET /api/agent/evals/summary`.
+- Agent configuration page now displays total runs, success rate, average duration, handoffs, tools, and guardrails.
 
 ## Verification
 

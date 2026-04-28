@@ -47,6 +47,37 @@
       </div>
     </div>
 
+    <!-- Runtime Evaluation -->
+    <div class="config-section">
+      <div class="section-label">运行指标</div>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <span>Runs</span>
+          <strong>{{ evalSummary.total_runs }}</strong>
+        </div>
+        <div class="metric-card">
+          <span>成功率</span>
+          <strong>{{ Math.round(evalSummary.success_rate * 100) }}%</strong>
+        </div>
+        <div class="metric-card">
+          <span>平均耗时</span>
+          <strong>{{ evalSummary.avg_duration_seconds }}s</strong>
+        </div>
+        <div class="metric-card">
+          <span>Handoff</span>
+          <strong>{{ evalSummary.handoff_count }}</strong>
+        </div>
+        <div class="metric-card">
+          <span>Tools</span>
+          <strong>{{ evalSummary.tool_count }}</strong>
+        </div>
+        <div class="metric-card">
+          <span>Guardrails</span>
+          <strong>{{ evalSummary.guardrail_count }}</strong>
+        </div>
+      </div>
+    </div>
+
     <!-- Handoff Topology -->
     <div class="config-section">
       <div class="section-label">Handoff 拓扑</div>
@@ -175,8 +206,27 @@ interface ConfigEvaluation {
   findings: EvaluationFinding[]
 }
 
+interface EvalSummary {
+  total_runs: number
+  error_runs: number
+  success_rate: number
+  avg_duration_seconds: number
+  handoff_count: number
+  tool_count: number
+  guardrail_count: number
+}
+
 const config = ref<Config>({ main_agent: 'dispatcher', agents: [] })
 const evaluation = ref<ConfigEvaluation>({ score: 0, grade: 'D', summary: '未评估', findings: [] })
+const evalSummary = ref<EvalSummary>({
+  total_runs: 0,
+  error_runs: 0,
+  success_rate: 0,
+  avg_duration_seconds: 0,
+  handoff_count: 0,
+  tool_count: 0,
+  guardrail_count: 0,
+})
 const loading = ref(false)
 const saving = ref(false)
 const lastSaved = ref(false)
@@ -192,6 +242,8 @@ async function fetchConfig() {
     const res = await fetch(`${API_BASE}/api/agent/config`)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
+    const evalRes = await fetch(`${API_BASE}/api/agent/evals/summary`)
+    const evalData = evalRes.ok ? await evalRes.json() : null
     // Transform dict of agents to array format
     const agentsArray = Object.entries(data.agents || {}).map(([id, cfg]: [string, any]) => ({
       id,
@@ -217,6 +269,7 @@ async function fetchConfig() {
       agents: [...agentsArray, ...customArray],
     }
     evaluation.value = data.evaluation || { score: 0, grade: 'D', summary: '未评估', findings: [] }
+    if (evalData) evalSummary.value = evalData
   } catch (e) {
     console.error('Failed to fetch agent config:', e)
     saveError.value = '加载配置失败'
@@ -422,6 +475,33 @@ onMounted(() => {
   color: var(--text-secondary);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+
+.metric-card {
+  min-height: 74px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.metric-card span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.metric-card strong {
+  color: var(--text-primary);
+  font-size: 20px;
 }
 
 .topology-grid {
@@ -683,5 +763,15 @@ onMounted(() => {
 
 .status-err {
   color: var(--color-error, #ef4444);
+}
+
+@media (max-width: 900px) {
+  .metric-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .eval-finding {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

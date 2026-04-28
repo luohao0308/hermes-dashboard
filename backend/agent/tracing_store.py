@@ -156,6 +156,52 @@ class TraceStore:
         finally:
             conn.close()
 
+    def get_eval_summary(self) -> dict[str, Any]:
+        conn = self._connect()
+        if not conn:
+            return _empty_eval_summary()
+        try:
+            conn.row_factory = sqlite3.Row
+            runs = conn.execute("SELECT * FROM agent_runs ORDER BY started_at DESC").fetchall()
+            spans = conn.execute("SELECT span_type, status, agent_name FROM trace_spans").fetchall()
+            status_counts: dict[str, int] = {}
+            agent_counts: dict[str, dict[str, Any]] = {}
+            durations: list[float] = []
+            for row in runs:
+                status = row["status"]
+                status_counts[status] = status_counts.get(status, 0) + 1
+                agent_id = row["agent_id"] or "unknown"
+                agent_counts.setdefault(agent_id, {"agent_id": agent_id, "runs": 0, "errors": 0})
+                agent_counts[agent_id]["runs"] += 1
+                if status == "error":
+                    agent_counts[agent_id]["errors"] += 1
+                duration = _duration_seconds(row["started_at"], row["completed_at"])
+                if duration is not None:
+                    durations.append(duration)
+            span_counts: dict[str, int] = {}
+            guardrail_count = 0
+            for span in spans:
+                span_type = span["span_type"]
+                span_counts[span_type] = span_counts.get(span_type, 0) + 1
+                if span_type == "guardrail":
+                    guardrail_count += 1
+            total_runs = len(runs)
+            error_runs = status_counts.get("error", 0)
+            return {
+                "total_runs": total_runs,
+                "error_runs": error_runs,
+                "success_rate": round((total_runs - error_runs) / total_runs, 4) if total_runs else 0,
+                "avg_duration_seconds": round(sum(durations) / len(durations), 2) if durations else 0,
+                "status_counts": status_counts,
+                "span_counts": span_counts,
+                "handoff_count": span_counts.get("handoff", 0),
+                "tool_count": span_counts.get("tool", 0),
+                "guardrail_count": guardrail_count,
+                "agents": sorted(agent_counts.values(), key=lambda item: item["runs"], reverse=True),
+            }
+        finally:
+            conn.close()
+
     def save_rca_report(
         self,
         session_id: str,
@@ -380,6 +426,32 @@ def _json_loads(value: Optional[str]) -> dict[str, Any]:
         return json.loads(value)
     except Exception:
         return {}
+
+
+def _duration_seconds(started_at: Optional[str], completed_at: Optional[str]) -> Optional[float]:
+    if not started_at or not completed_at:
+        return None
+    try:
+        start = datetime.fromisoformat(started_at)
+        end = datetime.fromisoformat(completed_at)
+        return max(0, (end - start).total_seconds())
+    except Exception:
+        return None
+
+
+def _empty_eval_summary() -> dict[str, Any]:
+    return {
+        "total_runs": 0,
+        "error_runs": 0,
+        "success_rate": 0,
+        "avg_duration_seconds": 0,
+        "status_counts": {},
+        "span_counts": {},
+        "handoff_count": 0,
+        "tool_count": 0,
+        "guardrail_count": 0,
+        "agents": [],
+    }
 
 
 _default_trace_db_path = os.environ.get(

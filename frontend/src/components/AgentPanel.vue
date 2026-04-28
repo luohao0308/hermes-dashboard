@@ -21,6 +21,32 @@
       </select>
     </div>
 
+    <!-- Config Evaluation -->
+    <div class="config-section">
+      <div class="section-label">配置评估</div>
+      <div class="eval-summary">
+        <div class="eval-score" :class="evaluation.grade.toLowerCase()">
+          <strong>{{ evaluation.score }}</strong>
+          <span>Grade {{ evaluation.grade }}</span>
+        </div>
+        <div>
+          <div class="eval-title">{{ evaluation.summary }}</div>
+          <div class="section-hint">检查入口 Agent、handoff 可达性和孤立节点</div>
+        </div>
+      </div>
+      <div v-if="evaluation.findings.length" class="eval-findings">
+        <div
+          v-for="finding in evaluation.findings"
+          :key="`${finding.title}-${finding.detail}`"
+          class="eval-finding"
+          :class="finding.severity"
+        >
+          <strong>{{ finding.title }}</strong>
+          <span>{{ finding.detail }}</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Handoff Topology -->
     <div class="config-section">
       <div class="section-label">Handoff 拓扑</div>
@@ -136,7 +162,21 @@ interface Config {
   agents: AgentConfig[]
 }
 
+interface EvaluationFinding {
+  severity: 'critical' | 'warning' | 'info'
+  title: string
+  detail: string
+}
+
+interface ConfigEvaluation {
+  score: number
+  grade: string
+  summary: string
+  findings: EvaluationFinding[]
+}
+
 const config = ref<Config>({ main_agent: 'dispatcher', agents: [] })
+const evaluation = ref<ConfigEvaluation>({ score: 0, grade: 'D', summary: '未评估', findings: [] })
 const loading = ref(false)
 const saving = ref(false)
 const lastSaved = ref(false)
@@ -176,6 +216,7 @@ async function fetchConfig() {
       main_agent: data.main_agent || 'dispatcher',
       agents: [...agentsArray, ...customArray],
     }
+    evaluation.value = data.evaluation || { score: 0, grade: 'D', summary: '未评估', findings: [] }
   } catch (e) {
     console.error('Failed to fetch agent config:', e)
     saveError.value = '加载配置失败'
@@ -306,6 +347,81 @@ onMounted(() => {
   color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;
+}
+
+.eval-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.eval-score {
+  width: 74px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--success-soft);
+  color: var(--success-color);
+}
+
+.eval-score.c,
+.eval-score.d {
+  background: var(--warning-soft);
+  color: var(--warning-color);
+}
+
+.eval-score strong {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.eval-score span {
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.eval-title {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.eval-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.eval-finding {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.eval-finding.critical {
+  border-color: rgba(239, 68, 68, 0.32);
+}
+
+.eval-finding.warning {
+  border-color: rgba(245, 158, 11, 0.32);
+}
+
+.eval-finding strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.eval-finding span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .topology-grid {

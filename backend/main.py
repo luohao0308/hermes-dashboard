@@ -1232,6 +1232,7 @@ from pydantic import BaseModel
 from typing import Optional
 from agent.config_loader import load_config, save_config
 from agent.agent_manager import reload_agents
+from agent.config_evaluator import evaluate_agent_config
 
 
 class AgentToggle(BaseModel):
@@ -1257,6 +1258,7 @@ async def get_agent_config():
         "main_agent": cfg.get("main_agent"),
         "agents": cfg.get("agents", {}),
         "custom_agents": cfg.get("custom_agents", []),
+        "evaluation": evaluate_agent_config(cfg),
     }
 
 

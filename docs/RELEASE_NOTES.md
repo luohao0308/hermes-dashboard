@@ -79,10 +79,16 @@
 - Agent configuration now shows enabled handoff paths for each Agent.
 - The main entry Agent is highlighted and disabled handoff targets are muted.
 
+### Agent Config Evaluation
+
+- Added static Agent configuration scoring for main Agent validity, handoff reachability, and isolated nodes.
+- Agent configuration API now returns an `evaluation` block.
+- Agent configuration page displays score, grade, and actionable findings.
+
 ## Verification
 
 - `npx vue-tsc --noEmit`
 - `npm run test:unit`
 - `npm run build`
-- `python -m py_compile backend/main.py backend/agent/chat_manager.py backend/agent/tracing_store.py backend/agent/tools/hermes_tools.py backend/agent/guardrails.py backend/agent/rca.py backend/agent/runbook.py`
-- `pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py backend/tests/test_rca.py backend/tests/test_runbook.py backend/tests/test_agent_switch.py::TestChatManagerAPI -q`
+- `python -m py_compile backend/main.py backend/agent/chat_manager.py backend/agent/tracing_store.py backend/agent/tools/hermes_tools.py backend/agent/guardrails.py backend/agent/rca.py backend/agent/runbook.py backend/agent/config_evaluator.py`
+- `pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py backend/tests/test_rca.py backend/tests/test_runbook.py backend/tests/test_config_evaluator.py backend/tests/test_agent_switch.py::TestChatManagerAPI -q`

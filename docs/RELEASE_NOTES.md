@@ -36,6 +36,7 @@
 
 - Added SQLite-backed Agent run trace storage.
 - Added trace APIs for run lookup and latest trace lookup.
+- Added Agent knowledge search API across trace, RCA, and runbook records.
 - Added Trace Timeline component to Session replay pages.
 - Agent Chat now emits and stores trace spans for user input, Agent start, handoff, tool events, output, and errors.
 - Trace Timeline now shows span duration, tool name, token count, input summary, and output summary.

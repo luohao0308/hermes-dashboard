@@ -353,6 +353,62 @@ class TraceStore:
         finally:
             conn.close()
 
+    def search_knowledge(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
+        term = query.strip()
+        if not term:
+            return []
+        conn = self._connect()
+        if not conn:
+            return []
+        like = f"%{term}%"
+        results: list[dict[str, Any]] = []
+        try:
+            conn.row_factory = sqlite3.Row
+            for row in conn.execute(
+                """
+                SELECT span_id AS item_id, run_id, NULL AS session_id, title, summary,
+                       span_type AS item_type, status, started_at AS created_at
+                FROM trace_spans
+                WHERE title LIKE ? OR summary LIKE ? OR metadata_json LIKE ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (like, like, like, limit),
+            ).fetchall():
+                results.append(_knowledge_row(row, "trace"))
+
+            for row in conn.execute(
+                """
+                SELECT report_id AS item_id, run_id, session_id, root_cause AS title,
+                       category || ': ' || root_cause AS summary,
+                       category AS item_type, CAST(confidence AS TEXT) AS status,
+                       created_at
+                FROM rca_reports
+                WHERE root_cause LIKE ? OR category LIKE ? OR evidence_json LIKE ? OR next_actions_json LIKE ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (like, like, like, like, limit),
+            ).fetchall():
+                results.append(_knowledge_row(row, "rca"))
+
+            for row in conn.execute(
+                """
+                SELECT runbook_id AS item_id, run_id, session_id, title, summary,
+                       severity AS item_type, severity AS status, created_at
+                FROM runbooks
+                WHERE title LIKE ? OR summary LIKE ? OR markdown LIKE ? OR checklist_json LIKE ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (like, like, like, like, limit),
+            ).fetchall():
+                results.append(_knowledge_row(row, "runbook"))
+        finally:
+            conn.close()
+        results.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+        return results[:limit]
+
     def _connect(self):
         if not self._db_path:
             return None
@@ -443,6 +499,21 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     if "metadata_json" in data:
         data["metadata"] = _json_loads(data.pop("metadata_json"))
     return data
+
+
+def _knowledge_row(row: sqlite3.Row, source: str) -> dict[str, Any]:
+    data = dict(row)
+    return {
+        "source": source,
+        "item_id": data.get("item_id"),
+        "run_id": data.get("run_id"),
+        "session_id": data.get("session_id"),
+        "title": data.get("title") or "",
+        "summary": data.get("summary") or "",
+        "item_type": data.get("item_type"),
+        "status": data.get("status"),
+        "created_at": data.get("created_at"),
+    }
 
 
 def _json_dumps(value: dict[str, Any]) -> str:

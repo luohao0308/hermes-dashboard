@@ -2051,6 +2051,15 @@ async def get_agent_eval_summary():
     return trace_store.get_eval_summary()
 
 
+@app.get("/api/agent/knowledge/search")
+async def search_agent_knowledge(q: str = Query(..., min_length=1), limit: int = Query(20, ge=1, le=50)):
+    """Search trace, RCA, and runbook knowledge records."""
+    return {
+        "query": q,
+        "results": trace_store.search_knowledge(q, limit=limit),
+    }
+
+
 @app.get("/api/agent/evals/samples")
 async def get_agent_eval_samples(category: Optional[str] = Query(None)):
     """Return offline Agent eval samples for debug/review/research/deploy/monitor tasks."""

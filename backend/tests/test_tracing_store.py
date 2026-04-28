@@ -89,6 +89,35 @@ def test_trace_store_persists_runbooks(tmp_path):
     assert updated["execution_steps"][0]["status"] == "confirmed"
 
 
+def test_trace_store_searches_trace_rca_and_runbook_knowledge(tmp_path):
+    db_path = tmp_path / "traces.sqlite3"
+    store = TraceStore(db_path=str(db_path))
+    run_id = store.create_run("chat-1", "Developer", "debug")
+    store.add_span(run_id, "tool", "get_logs", summary="gateway timeout", status="error")
+    store.save_rca_report(
+        "hermes-1",
+        {
+            "category": "network",
+            "root_cause": "Gateway timeout",
+            "confidence": 0.8,
+            "evidence": [{"detail": "gateway timeout"}],
+            "next_actions": ["检查 Gateway"],
+        },
+        run_id=run_id,
+    )
+    store.save_runbook(
+        "hermes-1",
+        {"title": "Gateway Runbook", "summary": "gateway timeout repair", "checklist": [], "markdown": "gateway timeout"},
+        run_id=run_id,
+    )
+
+    results = store.search_knowledge("gateway")
+    sources = {item["source"] for item in results}
+
+    assert {"trace", "rca", "runbook"}.issubset(sources)
+    assert results[0]["title"]
+
+
 def test_trace_store_eval_summary_counts_runs_and_spans(tmp_path):
     db_path = tmp_path / "traces.sqlite3"
     store = TraceStore(db_path=str(db_path))

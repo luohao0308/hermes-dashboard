@@ -27,6 +27,7 @@ pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py ba
 - Override with `TRACE_DB_PATH=/path/to/agent_traces.sqlite3`.
 - RCA reports and generated runbooks are stored in the same trace database.
 - Read them with `GET /api/sessions/{session_id}/rca` and `GET /api/sessions/{session_id}/runbook`.
+- Search trace/RCA/runbook records with `GET /api/agent/knowledge/search?q=...`.
 - Confirm runbook steps with `POST /api/sessions/{session_id}/runbook/steps/{step_id}/confirm`, then run the conservative action runner with `/execute`.
 - Agent run metrics can be read with `GET /api/agent/evals/summary`.
 - Offline eval samples can be read with `GET /api/agent/evals/samples`.

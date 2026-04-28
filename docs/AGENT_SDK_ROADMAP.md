@@ -228,4 +228,4 @@ OpenAI Agents SDK 的关键能力包括：
 - [x] 新增 guardrail 策略配置文件 `backend/agent/guardrails.yaml`
 - [x] 为危险工具调用增加 confirm/approve API
 - [x] 增加单元测试：trace store、tool schema、guardrail deny、RCA analyzer
-- [ ] 增加 E2E：打开失败 session，查看 trace，触发 RCA
+- [x] 增加 E2E：打开失败 session，查看 trace，触发 RCA

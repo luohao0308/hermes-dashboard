@@ -117,6 +117,7 @@
 
 ## Verification
 
+- `npx vitest run tests/e2e/test_failed_session_rca_flow.spec.ts`
 - `npx vue-tsc --noEmit`
 - `npm run test:unit`
 - `npm run build`

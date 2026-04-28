@@ -135,9 +135,17 @@
         </div>
         <pre>{{ runbookReport.markdown }}</pre>
         <div class="runbook-steps">
-          <div v-for="(step, idx) in runbookReport.checklist" :key="step" class="runbook-step">
+          <div v-for="(step, idx) in runbookSteps" :key="step.step_id" class="runbook-step">
             <span>{{ idx + 1 }}</span>
-            <p>{{ step }}</p>
+            <p>{{ step.label }}</p>
+            <button
+              v-if="step.requires_confirmation"
+              class="confirm-step-btn"
+              :disabled="step.status === 'confirmed'"
+              @click="emit('confirm-runbook-step', step.step_id)"
+            >
+              {{ step.status === 'confirmed' ? '已确认' : '确认执行' }}
+            </button>
           </div>
         </div>
       </div>
@@ -270,10 +278,19 @@ interface RunbookReport {
   severity: string
   summary: string
   checklist: string[]
+  execution_steps?: RunbookStep[]
   evidence_count: number
   markdown: string
   generated_at: string
   generator: string
+}
+
+interface RunbookStep {
+  step_id: string
+  label: string
+  action_type: string
+  requires_confirmation: boolean
+  status: string
 }
 
 const props = defineProps<{
@@ -297,6 +314,7 @@ const emit = defineEmits<{
   refresh: []
   'analyze-rca': []
   'generate-runbook': []
+  'confirm-runbook-step': [stepId: string]
   'export-markdown': []
   'open-chat': []
 }>()
@@ -390,6 +408,18 @@ const runbookSubtitle = computed(() => {
   if (props.runbookLoading) return '正在整理复盘摘要、证据和处理步骤'
   if (props.runbookReport) return `${props.runbookReport.severity} / ${props.runbookReport.checklist.length} 个待办`
   return '生成可复制到 issue、PR 或 Notion 的执行清单'
+})
+
+const runbookSteps = computed<RunbookStep[]>(() => {
+  if (!props.runbookReport) return []
+  if (props.runbookReport.execution_steps?.length) return props.runbookReport.execution_steps
+  return props.runbookReport.checklist.map((label, idx) => ({
+    step_id: `step-${idx + 1}`,
+    label,
+    action_type: 'manual_check',
+    requires_confirmation: false,
+    status: 'pending',
+  }))
 })
 
 const timeRange = computed(() => {
@@ -794,7 +824,7 @@ function copyRunbook() {
 
 .runbook-step {
   display: grid;
-  grid-template-columns: 28px 1fr;
+  grid-template-columns: 28px 1fr auto;
   gap: 10px;
   align-items: start;
 }
@@ -817,6 +847,24 @@ function copyRunbook() {
   font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+.confirm-step-btn {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--warning-color);
+  border-radius: var(--radius-md);
+  background: var(--warning-soft);
+  color: var(--warning-color);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.confirm-step-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .rca-result.cautious {

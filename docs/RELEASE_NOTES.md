@@ -88,6 +88,7 @@
 - Added `GET /api/exports` for export directory status and recent Markdown files.
 - System page now displays the Markdown sync/export target and recent files.
 - Session replay pages now render runbook checklist steps as an execution timeline.
+- Runbooks now include semi-automatic execution steps that require dashboard confirmation before repair actions.
 
 ### Handoff Topology
 

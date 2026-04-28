@@ -150,6 +150,15 @@ describe('SessionDetail', () => {
           severity: 'high',
           summary: '工具失败',
           checklist: ['重放工具调用'],
+          execution_steps: [
+            {
+              step_id: 'step-1',
+              label: '重放工具调用',
+              action_type: 'confirm_then_execute',
+              requires_confirmation: true,
+              status: 'needs_confirmation',
+            },
+          ],
           evidence_count: 1,
           markdown: '# 复盘 Runbook\n\n- [ ] 重放工具调用',
           generated_at: '2026-04-28T08:00:00Z',
@@ -163,10 +172,13 @@ describe('SessionDetail', () => {
     expect(wrapper.text()).toContain('get_logs failed')
     expect(wrapper.text()).toContain('复盘 Runbook')
     expect(wrapper.find('.runbook-step').exists()).toBe(true)
+    expect(wrapper.find('.confirm-step-btn').exists()).toBe(true)
 
     await wrapper.find('.primary-btn').trigger('click')
+    await wrapper.find('.confirm-step-btn').trigger('click')
     await wrapper.findAll('.runbook-panel .secondary-btn')[1].trigger('click')
     expect(wrapper.emitted('analyze-rca')).toHaveLength(1)
+    expect(wrapper.emitted('confirm-runbook-step')?.[0]).toEqual(['step-1'])
     expect(wrapper.emitted('export-markdown')).toHaveLength(1)
   })
 })

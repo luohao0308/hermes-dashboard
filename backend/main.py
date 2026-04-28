@@ -875,6 +875,48 @@ async def generate_session_runbook(session_id: str):
     return {"runbook": saved}
 
 
+@app.post("/api/sessions/{session_id}/runbook/steps/{step_id}/confirm")
+async def confirm_runbook_step(session_id: str, step_id: str, body: dict | None = None):
+    """Confirm a semi-automatic runbook step before any repair action can run."""
+    payload = body or {}
+    if payload.get("confirmed") is not True:
+        raise HTTPException(status_code=400, detail="Runbook step confirmation is required")
+    runbook = trace_store.get_latest_runbook(session_id)
+    if not runbook:
+        raise HTTPException(status_code=404, detail="Runbook not found")
+
+    steps = runbook.get("execution_steps") or []
+    step = next((item for item in steps if item.get("step_id") == step_id), None)
+    if not step:
+        raise HTTPException(status_code=404, detail="Runbook step not found")
+    if not step.get("requires_confirmation"):
+        return {"step": {**step, "status": "confirmation_not_required"}, "executed": False}
+
+    confirmed_step = {
+        **step,
+        "status": "confirmed",
+        "confirmed_by": payload.get("confirmed_by") or "dashboard",
+        "confirmed_at": datetime.now().isoformat(),
+    }
+    trace_store.add_span(
+        runbook.get("run_id") or runbook.get("runbook_id"),
+        span_type="runbook",
+        title="Runbook step confirmed",
+        summary=confirmed_step["label"],
+        status="completed",
+        metadata={
+            "runbook_id": runbook.get("runbook_id"),
+            "step": confirmed_step,
+            "execution": "confirmation_recorded",
+        },
+    )
+    return {
+        "step": confirmed_step,
+        "executed": False,
+        "message": "Confirmation recorded. Repair execution remains gated by the runbook action runner.",
+    }
+
+
 def _agent_config_evaluation() -> dict[str, Any] | None:
     try:
         cfg = load_config()

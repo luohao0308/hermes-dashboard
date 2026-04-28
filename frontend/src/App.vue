@@ -166,6 +166,7 @@
             @refresh="refreshSessionDetail"
             @analyze-rca="analyzeSessionRca"
             @generate-runbook="generateSessionRunbook"
+            @confirm-runbook-step="confirmRunbookStep"
             @export-markdown="exportSessionMarkdown"
             @open-chat="openLinkedChat"
           />
@@ -473,6 +474,13 @@ interface RunbookReport {
   severity: string
   summary: string
   checklist: string[]
+  execution_steps?: Array<{
+    step_id: string
+    label: string
+    action_type: string
+    requires_confirmation: boolean
+    status: string
+  }>
   evidence_count: number
   markdown: string
   generated_at: string
@@ -769,6 +777,30 @@ async function exportSessionMarkdown() {
     addToast('error', 'Markdown 导出失败')
   } finally {
     exportingMarkdown.value = false
+  }
+}
+
+async function confirmRunbookStep(stepId: string) {
+  if (!selectedSessionId.value || !selectedRunbook.value) return
+  try {
+    const data = await fetchJSON<{ step: { step_id: string; status: string } }>(
+      `${API_BASE}/api/sessions/${encodeURIComponent(selectedSessionId.value)}/runbook/steps/${encodeURIComponent(stepId)}/confirm`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmed: true, confirmed_by: 'dashboard' }),
+      }
+    )
+    selectedRunbook.value = {
+      ...selectedRunbook.value,
+      execution_steps: (selectedRunbook.value.execution_steps || []).map(step =>
+        step.step_id === stepId ? { ...step, status: data.step.status } : step
+      ),
+    }
+    await fetchLatestTrace(selectedSessionId.value)
+    addToast('success', 'Runbook 步骤已确认')
+  } catch (e) {
+    addToast('error', 'Runbook 步骤确认失败')
   }
 }
 

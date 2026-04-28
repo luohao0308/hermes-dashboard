@@ -20,6 +20,7 @@ def generate_runbook(
     next_actions = rca.get("next_actions", []) if rca else []
     severity = _severity(session, rca)
     checklist = _checklist(next_actions, severity)
+    execution_steps = _execution_steps(checklist)
     markdown = _markdown(
         title=title,
         session=session,
@@ -37,6 +38,7 @@ def generate_runbook(
         "severity": severity,
         "summary": f"{root_cause}，置信度 {round(confidence * 100)}%。",
         "checklist": checklist,
+        "execution_steps": execution_steps,
         "evidence_count": len(evidence),
         "markdown": markdown,
         "generated_at": datetime.now().isoformat(),
@@ -61,6 +63,40 @@ def _checklist(next_actions: list[str], severity: str) -> list[str]:
         result.append("完成修复后重新运行同类 session，确认 trace 不再出现同类错误")
     result.append("把 runbook、RCA 和关键日志链接到 issue/PR/Notion")
     return _dedupe(result)
+
+
+def _execution_steps(checklist: list[str]) -> list[dict[str, Any]]:
+    steps = []
+    for idx, item in enumerate(checklist, start=1):
+        requires_confirmation = _requires_confirmation(item)
+        steps.append({
+            "step_id": f"step-{idx}",
+            "label": item,
+            "action_type": "confirm_then_execute" if requires_confirmation else "manual_check",
+            "requires_confirmation": requires_confirmation,
+            "status": "needs_confirmation" if requires_confirmation else "pending",
+        })
+    return steps
+
+
+def _requires_confirmation(text: str) -> bool:
+    normalized = text.lower()
+    keywords = (
+        "执行",
+        "修复",
+        "重启",
+        "删除",
+        "写入",
+        "覆盖",
+        "部署",
+        "rollback",
+        "restart",
+        "delete",
+        "write",
+        "deploy",
+        "execute",
+    )
+    return any(keyword in normalized for keyword in keywords)
 
 
 def _markdown(

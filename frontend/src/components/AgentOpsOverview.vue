@@ -40,6 +40,12 @@
         <strong>{{ tokenTotal }}</strong>
         <span>近 {{ usageDays }} 天</span>
       </div>
+
+      <div class="metric-block">
+        <span class="metric-label">Agent 成功率</span>
+        <strong>{{ evalSuccessRate }}</strong>
+        <span>{{ evalRunText }}</span>
+      </div>
     </div>
 
     <div class="ops-details">
@@ -95,6 +101,7 @@ interface OverviewHistoryItem {
 interface OverviewSnapshot {
   health?: Record<string, any> | null
   analytics?: Record<string, any> | null
+  evalSummary?: Record<string, any> | null
   modelInfo?: Record<string, any> | null
   config?: Record<string, any> | null
   skills?: Record<string, any> | any[] | null
@@ -150,6 +157,19 @@ const usageDays = computed(() => {
   if (typeof analytics.days === 'number') return analytics.days
   const data = analytics.usage || analytics.data
   return Array.isArray(data) && data.length > 0 ? data.length : 7
+})
+
+const evalSuccessRate = computed(() => {
+  const summary = props.snapshot.evalSummary || {}
+  const rate = typeof summary.success_rate === 'number' ? summary.success_rate : 0
+  return `${Math.round(rate * 100)}%`
+})
+
+const evalRunText = computed(() => {
+  const summary = props.snapshot.evalSummary || {}
+  const total = summary.total_runs || 0
+  const errors = summary.error_runs || 0
+  return `${total} runs / ${errors} errors`
 })
 
 const healthScore = computed(() => {
@@ -313,7 +333,7 @@ function formatNumber(value: number): string {
 
 .overview-grid {
   display: grid;
-  grid-template-columns: minmax(240px, 1.2fr) repeat(3, minmax(150px, 1fr));
+  grid-template-columns: minmax(240px, 1.2fr) repeat(4, minmax(140px, 1fr));
   border-bottom: 1px solid var(--border-subtle);
 }
 

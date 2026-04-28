@@ -13,6 +13,7 @@ describe('AgentOpsOverview', () => {
         history: [{ input_tokens: 100, output_tokens: 50 }],
         snapshot: {
           health: { service: 'hermes-bridge', hermes_reachable: true },
+          evalSummary: { success_rate: 0.75, total_runs: 4, error_runs: 1 },
           modelInfo: { model: 'MiniMax-M2.7-highspeed', provider: 'MiniMax' },
           skills: { skills: [{ name: 'review' }] },
           plugins: { plugins: [{ name: 'notion' }] },
@@ -25,6 +26,8 @@ describe('AgentOpsOverview', () => {
     expect(wrapper.text()).toContain('稳定')
     expect(wrapper.text()).toContain('MiniMax-M2.7-highspeed')
     expect(wrapper.text()).toContain('1 Skills / 1 Plugins')
+    expect(wrapper.text()).toContain('75%')
+    expect(wrapper.text()).toContain('4 runs / 1 errors')
   })
 
   it('emits refresh when sync button is clicked', async () => {

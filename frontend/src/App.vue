@@ -480,6 +480,7 @@ interface RunbookReport {
 interface OverviewSnapshot {
   health?: Record<string, any> | null
   analytics?: Record<string, any> | null
+  evalSummary?: Record<string, any> | null
   modelInfo?: Record<string, any> | null
   config?: Record<string, any> | null
   skills?: Record<string, any> | any[] | null
@@ -613,6 +614,7 @@ async function fetchOverviewSnapshot() {
   const [
     health,
     analytics,
+    evalSummary,
     modelInfo,
     config,
     skills,
@@ -621,6 +623,7 @@ async function fetchOverviewSnapshot() {
   ] = await Promise.all([
     fetchOptional<Record<string, any>>(`${API_BASE}/health`),
     fetchOptional<Record<string, any>>(`${API_BASE}/api/analytics/usage?days=7`),
+    fetchOptional<Record<string, any>>(`${API_BASE}/api/agent/evals/summary`),
     fetchOptional<Record<string, any>>(`${API_BASE}/api/model/info`),
     fetchOptional<Record<string, any>>(`${API_BASE}/api/config`),
     fetchOptional<Record<string, any>>(`${API_BASE}/api/skills`),
@@ -630,6 +633,7 @@ async function fetchOverviewSnapshot() {
   overviewSnapshot.value = {
     health,
     analytics,
+    evalSummary,
     modelInfo,
     config,
     skills,

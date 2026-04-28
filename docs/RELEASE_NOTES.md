@@ -94,6 +94,7 @@
 - Agent configuration page displays score, grade, and actionable findings.
 - Added aggregate Agent run metrics at `GET /api/agent/evals/summary`.
 - Agent configuration page now displays total runs, success rate, average duration, handoffs, tools, and guardrails.
+- AgentOps overview now surfaces Agent success rate and run/error counts.
 
 ## Verification
 

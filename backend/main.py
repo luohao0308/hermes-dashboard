@@ -1324,6 +1324,7 @@ from typing import Optional
 from agent.config_loader import load_config, save_config
 from agent.agent_manager import reload_agents
 from agent.config_evaluator import evaluate_agent_config
+from agent.config_history import config_history
 
 
 class AgentToggle(BaseModel):
@@ -1353,10 +1354,17 @@ async def get_agent_config():
     }
 
 
+@app.get("/api/agent/config/history")
+async def get_agent_config_history(limit: int = Query(20, ge=1, le=100)):
+    """Return local Agent config change history."""
+    return {"events": config_history.list_events(limit=limit)}
+
+
 @app.put("/api/agent/config/enabled")
 async def toggle_agent(name: str, body: AgentToggle):
     """Enable or disable an agent."""
     cfg = load_config()
+    before = json.loads(json.dumps(cfg))
     if name in cfg["agents"]:
         cfg["agents"][name]["enabled"] = body.enabled
     else:
@@ -1367,6 +1375,7 @@ async def toggle_agent(name: str, body: AgentToggle):
         else:
             raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
     save_config(cfg)
+    config_history.record("toggle_agent", before, cfg, target=name)
     reload_agents()
     return {"ok": True, "agent": name, "enabled": body.enabled}
 
@@ -1375,6 +1384,7 @@ async def toggle_agent(name: str, body: AgentToggle):
 async def set_main_agent(body: SetMainRequest):
     """Set the main (entry) agent."""
     cfg = load_config()
+    before = json.loads(json.dumps(cfg))
     key = body.main_agent
     if key not in cfg["agents"] and not any(
         c["name"].lower().replace(" ", "_") == key for c in cfg.get("custom_agents", [])
@@ -1382,6 +1392,7 @@ async def set_main_agent(body: SetMainRequest):
         raise HTTPException(status_code=404, detail=f"Agent '{key}' not found")
     cfg["main_agent"] = key
     save_config(cfg)
+    config_history.record("set_main_agent", before, cfg, target=key)
     reload_agents()
     return {"ok": True, "main_agent": key}
 
@@ -1390,6 +1401,7 @@ async def set_main_agent(body: SetMainRequest):
 async def add_custom_agent(body: CustomAgentCreate):
     """Add a custom agent."""
     cfg = load_config()
+    before = json.loads(json.dumps(cfg))
     key = body.name.lower().replace(" ", "_")
     if key in cfg["agents"] or any(
         c["name"].lower().replace(" ", "_") == key for c in cfg.get("custom_agents", [])
@@ -1402,6 +1414,7 @@ async def add_custom_agent(body: CustomAgentCreate):
         "enabled": body.enabled,
     })
     save_config(cfg)
+    config_history.record("add_custom_agent", before, cfg, target=key)
     reload_agents()
     return {"ok": True, "agent": key}
 
@@ -1410,6 +1423,7 @@ async def add_custom_agent(body: CustomAgentCreate):
 async def delete_custom_agent(agent_key: str):
     """Delete a custom agent by key."""
     cfg = load_config()
+    before = json.loads(json.dumps(cfg))
     original_len = len(cfg.get("custom_agents", []))
     cfg["custom_agents"] = [
         c for c in cfg.get("custom_agents", [])
@@ -1418,6 +1432,7 @@ async def delete_custom_agent(agent_key: str):
     if len(cfg["custom_agents"]) == original_len:
         raise HTTPException(status_code=404, detail=f"Custom agent '{agent_key}' not found")
     save_config(cfg)
+    config_history.record("delete_custom_agent", before, cfg, target=agent_key)
     reload_agents()
     return {"ok": True}
 

@@ -47,6 +47,25 @@
       </div>
     </div>
 
+    <!-- Config Change History -->
+    <div class="config-section">
+      <div class="section-label">配置变更记录</div>
+      <div v-if="configHistory.length" class="history-list">
+        <div v-for="event in configHistory" :key="event.event_id" class="history-item">
+          <div>
+            <strong>{{ actionLabel(event.action) }}</strong>
+            <span>{{ event.target || 'agent config' }} / {{ formatDate(event.created_at) }}</span>
+          </div>
+          <div class="history-score">
+            <span>{{ event.before.grade }} {{ event.before.score }}</span>
+            <span>→</span>
+            <strong>{{ event.after.grade }} {{ event.after.score }}</strong>
+          </div>
+        </div>
+      </div>
+      <div v-else class="history-empty">暂无配置变更记录</div>
+    </div>
+
     <!-- Runtime Evaluation -->
     <div class="config-section">
       <div class="section-label">运行指标</div>
@@ -216,6 +235,26 @@ interface EvalSummary {
   guardrail_count: number
 }
 
+interface ConfigHistorySummary {
+  main_agent: string
+  agent_count: number
+  enabled_count: number
+  enabled_agents: string[]
+  score: number
+  grade: string
+  finding_count: number
+}
+
+interface ConfigHistoryEvent {
+  event_id: string
+  action: string
+  target?: string
+  actor: string
+  created_at: string
+  before: ConfigHistorySummary
+  after: ConfigHistorySummary
+}
+
 const config = ref<Config>({ main_agent: 'dispatcher', agents: [] })
 const evaluation = ref<ConfigEvaluation>({ score: 0, grade: 'D', summary: '未评估', findings: [] })
 const evalSummary = ref<EvalSummary>({
@@ -227,6 +266,7 @@ const evalSummary = ref<EvalSummary>({
   tool_count: 0,
   guardrail_count: 0,
 })
+const configHistory = ref<ConfigHistoryEvent[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const lastSaved = ref(false)
@@ -244,6 +284,8 @@ async function fetchConfig() {
     const data = await res.json()
     const evalRes = await fetch(`${API_BASE}/api/agent/evals/summary`)
     const evalData = evalRes.ok ? await evalRes.json() : null
+    const historyRes = await fetch(`${API_BASE}/api/agent/config/history?limit=6`)
+    const historyData = historyRes.ok ? await historyRes.json() : null
     // Transform dict of agents to array format
     const agentsArray = Object.entries(data.agents || {}).map(([id, cfg]: [string, any]) => ({
       id,
@@ -270,6 +312,7 @@ async function fetchConfig() {
     }
     evaluation.value = data.evaluation || { score: 0, grade: 'D', summary: '未评估', findings: [] }
     if (evalData) evalSummary.value = evalData
+    configHistory.value = historyData?.events || []
   } catch (e) {
     console.error('Failed to fetch agent config:', e)
     saveError.value = '加载配置失败'
@@ -314,6 +357,27 @@ function isHandoffTargetEnabled(target: string): boolean {
     agent.enabled &&
     (agent.id === normalized || agent.name.toLowerCase() === target.toLowerCase())
   )
+}
+
+function actionLabel(action: string): string {
+  const map: Record<string, string> = {
+    toggle_agent: '切换 Agent',
+    set_main_agent: '修改主 Agent',
+    add_custom_agent: '新增自定义 Agent',
+    delete_custom_agent: '删除自定义 Agent',
+  }
+  return map[action] || action
+}
+
+function formatDate(timestamp: string): string {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return timestamp
+  return date.toLocaleString('zh-CN', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 const newAgent = ref({
@@ -475,6 +539,45 @@ onMounted(() => {
   color: var(--text-secondary);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.history-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.history-item strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.history-item span,
+.history-empty {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.history-score {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.history-score strong {
+  color: var(--accent-color);
 }
 
 .metric-grid {
@@ -771,6 +874,10 @@ onMounted(() => {
   }
 
   .eval-finding {
+    grid-template-columns: 1fr;
+  }
+
+  .history-item {
     grid-template-columns: 1fr;
   }
 }

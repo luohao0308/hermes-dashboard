@@ -15,8 +15,8 @@ npm run test:unit
 npm run build
 
 cd ..
-python -m py_compile backend/main.py backend/agent/chat_manager.py backend/agent/tracing_store.py backend/agent/tools/hermes_tools.py backend/agent/guardrails.py backend/agent/rca.py backend/agent/runbook.py backend/agent/config_evaluator.py backend/agent/exporter.py
-pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py backend/tests/test_rca.py backend/tests/test_runbook.py backend/tests/test_config_evaluator.py backend/tests/test_exporter.py backend/tests/test_agent_switch.py::TestChatManagerAPI -q
+python -m py_compile backend/main.py backend/agent/chat_manager.py backend/agent/tracing_store.py backend/agent/tools/hermes_tools.py backend/agent/guardrails.py backend/agent/rca.py backend/agent/runbook.py backend/agent/config_evaluator.py backend/agent/config_history.py backend/agent/exporter.py
+pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py backend/tests/test_rca.py backend/tests/test_runbook.py backend/tests/test_config_evaluator.py backend/tests/test_config_history.py backend/tests/test_exporter.py backend/tests/test_agent_switch.py::TestChatManagerAPI -q
 ```
 
 ## Runtime Data
@@ -28,6 +28,7 @@ pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py ba
 - RCA reports and generated runbooks are stored in the same trace database.
 - Read them with `GET /api/sessions/{session_id}/rca` and `GET /api/sessions/{session_id}/runbook`.
 - Agent run metrics can be read with `GET /api/agent/evals/summary`.
+- Agent config changes are appended to `backend/data/agent_config_history.jsonl` by default.
 - Markdown exports are written to `backend/data/exports` by default. Override with `HERMES_EXPORT_DIR=/path/to/export`.
 - Point `HERMES_EXPORT_DIR` to an Obsidian vault folder to turn session runbooks into local notes.
 - Runtime database files and PID files are ignored by git.

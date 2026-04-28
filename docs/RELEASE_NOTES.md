@@ -95,11 +95,13 @@
 - Added aggregate Agent run metrics at `GET /api/agent/evals/summary`.
 - Agent configuration page now displays total runs, success rate, average duration, handoffs, tools, and guardrails.
 - AgentOps overview now surfaces Agent success rate and run/error counts.
+- Added local Agent config change history at `GET /api/agent/config/history`.
+- Agent configuration page now shows recent before/after score changes.
 
 ## Verification
 
 - `npx vue-tsc --noEmit`
 - `npm run test:unit`
 - `npm run build`
-- `python -m py_compile backend/main.py backend/agent/chat_manager.py backend/agent/tracing_store.py backend/agent/tools/hermes_tools.py backend/agent/guardrails.py backend/agent/rca.py backend/agent/runbook.py backend/agent/config_evaluator.py backend/agent/exporter.py`
-- `pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py backend/tests/test_rca.py backend/tests/test_runbook.py backend/tests/test_config_evaluator.py backend/tests/test_exporter.py backend/tests/test_agent_switch.py::TestChatManagerAPI -q`
+- `python -m py_compile backend/main.py backend/agent/chat_manager.py backend/agent/tracing_store.py backend/agent/tools/hermes_tools.py backend/agent/guardrails.py backend/agent/rca.py backend/agent/runbook.py backend/agent/config_evaluator.py backend/agent/config_history.py backend/agent/exporter.py`
+- `pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py backend/tests/test_rca.py backend/tests/test_runbook.py backend/tests/test_config_evaluator.py backend/tests/test_config_history.py backend/tests/test_exporter.py backend/tests/test_agent_switch.py::TestChatManagerAPI -q`

@@ -6,8 +6,10 @@ import asyncio
 import json
 import uuid
 import os
+import shlex
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Dict, Any
 from fastapi import FastAPI, Request, Query, HTTPException, WebSocket, WebSocketDisconnect, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,6 +54,7 @@ _agent_orchestrator: AgentOrchestrator | None = None
 # session dict: {pid, master_fd, alive, is_attached, pending_messages, lock, attach_count}
 _terminal_sessions: dict[str, dict] = {}
 _pty_lock = asyncio.Lock()
+TERMINAL_OUTPUT_BUFFER_LIMIT = 200_000
 
 # Hermès Agent Dashboard API base URL (override with HERMES_API_URL env var)
 HERMES_API_BASE = os.environ.get("HERMES_API_URL", "http://127.0.0.1:9119")
@@ -1042,8 +1045,10 @@ async def _load_session_detail(task_id: str) -> dict[str, Any]:
         if not session:
             raise HTTPException(status_code=404, detail="Task not found")
 
-        # Get messages for this session
-        messages = await hermes_get(f"/api/sessions/{task_id}/messages")
+        try:
+            messages = await hermes_get(f"/api/sessions/{task_id}/messages")
+        except Exception:
+            messages = {"messages": []}
 
         return {
             "task_id": task_id,
@@ -1130,11 +1135,6 @@ async def broadcast_task_update(task_id: str):
 async def _create_pty_session(session_id: str):
     """Create a new PTY session and store it. Caller must hold _pty_lock."""
     import pty
-    import select as _select
-    import fcntl
-    import struct
-    import termios
-    import signal
 
     env = os.environ.copy()
     env['HUSHLOGIN'] = '/dev/null'  # suppress "Last login" banner
@@ -1142,12 +1142,30 @@ async def _create_pty_session(session_id: str):
     env['CLICOLOR'] = '1'          # enable ls color output
     env['COLORTERM'] = 'truecolor'  # true color (24-bit)
     env['LSCOLORS'] = 'ExGxBxDxCxEgEdxbxgxcxd'  # macOS ls colors
-    # Use zsh as login shell to match local terminal
+    env['BASH_SILENCE_DEPRECATION_WARNING'] = '1'
+    env.setdefault('PS1', r'\u@\h \W \$ ')
+
+    shell_cmd = os.environ.get("HERMES_TERMINAL_SHELL", "/bin/bash --noprofile --norc -i")
+    shell_args = shlex.split(shell_cmd)
+    if not shell_args:
+        shell_args = ["/bin/bash", "--noprofile", "--norc", "-i"]
+
+    cwd = os.environ.get(
+        "HERMES_TERMINAL_CWD",
+        str(Path(__file__).resolve().parents[1]),
+    )
+
     pid, master_fd = pty.fork()
 
     if pid == 0:
-        # Child: exec zsh as login shell (sources /etc/zprofile, ~/.zshrc)
-        os.execvp("zsh", ["zsh", "-l"])
+        # Child: start a clean interactive shell. Login zsh can block on local
+        # startup files in embedded PTYs, which makes the browser terminal echo
+        # input without executing commands.
+        try:
+            os.chdir(cwd)
+        except Exception:
+            pass
+        os.execvpe(shell_args[0], shell_args, env)
         os._exit(1)
 
     session = {
@@ -1155,6 +1173,7 @@ async def _create_pty_session(session_id: str):
         "master_fd": master_fd,
         "alive": True,
         "is_attached": False,
+        "output_buffer": "",
         "input_buffer": "",
         "pending_dangerous_command": None,
     }
@@ -1285,24 +1304,28 @@ async def terminal_websocket(
             session = existing
             session["is_attached"] = True
             session["attach_count"] = session.get("attach_count", 0) + 1
-            await websocket.send_text(json.dumps({"type": "session", "status": "reconnect"}))
+            await websocket.send_text(json.dumps({
+                "type": "session",
+                "status": "reconnect",
+                "session_id": session_id,
+            }))
+            if session.get("output_buffer"):
+                await websocket.send_text(session["output_buffer"])
         else:
             # Create new session
             session = await _create_pty_session(session_id)
             session["is_attached"] = True
             session["attach_count"] = 1
-            await websocket.send_text(json.dumps({"type": "session", "status": "new"}))
+            await websocket.send_text(json.dumps({
+                "type": "session",
+                "status": "new",
+                "session_id": session_id,
+            }))
 
     master_fd = session["master_fd"]
     pid = session["pid"]
     loop = asyncio.get_running_loop()
     pending_tasks: list = []
-
-    # For new sessions, send initial prompt directly (zsh -l doesn't auto-output on fresh PTY).
-    # For reconnects, the PTY buffer already has content — no extra prompt needed.
-    # Both paths: PTY output loop handles all subsequent I/O.
-    if not existing or not existing.get("alive"):
-        await websocket.send_text("\r\nluohao@192 backend % ")
 
     async def send_pty_output():
         """Called by loop.add_reader when master_fd is readable."""
@@ -1334,6 +1357,7 @@ async def terminal_websocket(
             return
         try:
             text = data.decode("utf-8", errors="replace")
+            session["output_buffer"] = (session.get("output_buffer", "") + text)[-TERMINAL_OUTPUT_BUFFER_LIMIT:]
             await websocket.send_text(text)
         except Exception:
             pass

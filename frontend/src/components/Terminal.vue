@@ -10,7 +10,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { nextTick, ref, watch, onMounted, onUnmounted } from 'vue'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -18,6 +18,7 @@ import { WS_BASE } from '../config'
 
 const props = defineProps<{
   sessionId?: string
+  active?: boolean
 }>()
 
 const containerRef = ref<HTMLElement | null>(null)
@@ -48,6 +49,17 @@ function flushBuffer() {
   const all = msgBuffer.splice(0)
   for (const chunk of all) {
     term.write(chunk)
+  }
+}
+
+function fitTerminal() {
+  if (!props.active && props.active !== undefined) return
+  const el = containerRef.value
+  if (!el || el.clientWidth === 0 || el.clientHeight === 0) return
+  try {
+    fitAddon?.fit()
+  } catch (e) {
+    console.error('[Terminal] fit error:', e)
   }
 }
 
@@ -103,22 +115,13 @@ function initTerminal() {
   // Wait for DOM to paint, then fit
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      try {
-        fitAddon?.fit()
-        console.log('[Terminal] xterm fitted, rows:', term?.rows, 'cols:', term?.cols)
-      } catch (e) {
-        console.error('[Terminal] fit error:', e)
-      }
+      fitTerminal()
     })
   })
 
   // Watch for container size changes
   resizeObserver = new ResizeObserver(() => {
-    try {
-      fitAddon?.fit()
-    } catch (e) {
-      // ignore
-    }
+    fitTerminal()
   })
   if (containerRef.value) {
     resizeObserver.observe(containerRef.value)
@@ -199,12 +202,17 @@ function connectWebSocket() {
 }
 
 function handleResize() {
-  try {
-    fitAddon?.fit()
-  } catch (e) {
-    // ignore
-  }
+  fitTerminal()
 }
+
+watch(
+  () => props.active,
+  async (active) => {
+    if (!active) return
+    await nextTick()
+    requestAnimationFrame(() => fitTerminal())
+  }
+)
 
 onMounted(() => {
   // Small delay to ensure parent has laid out the container
@@ -214,6 +222,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   resizeObserver?.disconnect()
+  ws?.close()
   ws = null
   xtermReady = false
   msgBuffer.length = 0

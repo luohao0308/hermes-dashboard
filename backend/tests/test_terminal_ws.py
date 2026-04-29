@@ -13,8 +13,8 @@ import pytest
 import asyncio
 import json
 import websockets
-import os
-import signal
+import socket
+import threading
 import time
 import uuid
 
@@ -22,6 +22,53 @@ import uuid
 BACKEND_URL = "ws://localhost:8000/ws/terminal"
 BACKEND_HTTP = "http://localhost:8000"
 SESSION_TIMEOUT = 5.0  # seconds
+
+
+@pytest.fixture(scope="module", autouse=True)
+def backend_server():
+    """Run the FastAPI app in-process so WS tests are self-contained."""
+    global BACKEND_URL, BACKEND_HTTP
+
+    import urllib.request
+    import uvicorn
+    from main import app
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+
+    BACKEND_URL = f"ws://127.0.0.1:{port}/ws/terminal"
+    BACKEND_HTTP = f"http://127.0.0.1:{port}"
+
+    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(BACKEND_HTTP + "/health", timeout=0.5) as response:
+                if response.status == 200:
+                    break
+        except Exception:
+            time.sleep(0.1)
+    else:
+        server.should_exit = True
+        pytest.fail("Backend test server did not start")
+
+    yield
+
+    server.should_exit = True
+    thread.join(timeout=5)
+
+
+def _is_session_message(msg: str) -> bool:
+    try:
+        parsed = json.loads(msg)
+    except json.JSONDecodeError:
+        return False
+    return parsed.get("type") == "session"
 
 
 async def wait_for_pty_output(uri: str, expected: str, timeout: float = 5.0) -> str:
@@ -32,6 +79,8 @@ async def wait_for_pty_output(uri: str, expected: str, timeout: float = 5.0) -> 
         while time.monotonic() - start < timeout:
             try:
                 msg = await asyncio.wait_for(ws.recv(), timeout=timeout)
+                if _is_session_message(msg):
+                    continue
                 output += msg
                 if expected in msg:
                     break
@@ -48,6 +97,8 @@ async def collect_all_output(uri: str, timeout: float = 3.0) -> str:
         while time.monotonic() - start < timeout:
             try:
                 msg = await asyncio.wait_for(ws.recv(), timeout=0.5)
+                if _is_session_message(msg):
+                    continue
                 output += msg + "\n"
             except asyncio.TimeoutError:
                 break
@@ -59,16 +110,14 @@ class TestNewSessionPrompt:
 
     @pytest.mark.asyncio
     async def test_new_session_shows_prompt(self):
-        """Backend must send initial prompt for new session (zsh -l doesn't auto-output)."""
+        """Backend must show a real shell prompt for a new session."""
         sid = f"test-new-{uuid.uuid4().hex[:8]}"
         uri = f"{BACKEND_URL}?session_id={sid}"
 
-        output = await wait_for_pty_output(uri, "luohao@192 backend %", timeout=5.0)
+        output = await wait_for_pty_output(uri, "$ ", timeout=5.0)
 
         # Should contain the prompt
-        assert "luohao@192 backend %" in output, (
-            f"Expected prompt 'luohao@192 backend %' in output, got: {output!r}"
-        )
+        assert "$ " in output, f"Expected shell prompt in output, got: {output!r}"
 
         # Should NOT contain JSON session type message as raw text
         # (it's consumed by frontend via JSON.parse)
@@ -85,7 +134,7 @@ class TestNewSessionPrompt:
         sid = f"test-json-{uuid.uuid4().hex[:8]}"
         uri = f"{BACKEND_URL}?session_id={sid}"
 
-        output = await wait_for_pty_output(uri, "luohao@192 backend %", timeout=5.0)
+        output = await wait_for_pty_output(uri, "$ ", timeout=5.0)
 
         # No JSON objects should appear as terminal text
         for line in output.split("\n"):
@@ -119,7 +168,7 @@ class TestSessionTypeMessage:
                     msg = await asyncio.wait_for(ws.recv(), timeout=2.0)
                     all_output.append(msg)
                     # Once we see the prompt, we have enough
-                    if "luohao@192" in msg:
+                    if "$ " in msg:
                         break
                 except asyncio.TimeoutError:
                     break
@@ -174,7 +223,10 @@ class TestReconnectBuffer:
             assert json.loads(init1).get("type") == "session"
 
             # Wait for prompt
-            await asyncio.wait_for(ws1.recv(), timeout=3.0)
+            while True:
+                prompt = await asyncio.wait_for(ws1.recv(), timeout=3.0)
+                if not _is_session_message(prompt):
+                    break
 
             # Send a command that produces output
             await ws1.send("echo HELLO_TERMINAL_TEST\r")
@@ -189,6 +241,16 @@ class TestReconnectBuffer:
             assert parsed.get("status") == "reconnect", (
                 f"Expected reconnect, got: {parsed}"
             )
+            replay = ""
+            start = time.monotonic()
+            while time.monotonic() - start < 5.0:
+                msg = await asyncio.wait_for(ws2.recv(), timeout=1.0)
+                if _is_session_message(msg):
+                    continue
+                replay += msg
+                if "HELLO_TERMINAL_TEST" in replay:
+                    break
+            assert "HELLO_TERMINAL_TEST" in replay
 
 
 class TestNoAutoReconnect:
@@ -240,7 +302,7 @@ class TestNoArtificialMessages:
         sid = f"test-noann-{uuid.uuid4().hex[:8]}"
         uri = f"{BACKEND_URL}?session_id={sid}"
 
-        output = await wait_for_pty_output(uri, "luohao@192 backend %", timeout=5.0)
+        output = await wait_for_pty_output(uri, "$ ", timeout=5.0)
 
         assert "[Session:" not in output, f"Unexpected [Session:] in output: {output!r}"
         assert "✓" not in output, f"Unexpected checkmark in output: {output!r}"
@@ -252,7 +314,7 @@ class TestNoArtificialMessages:
         sid = f"test-nologin-{uuid.uuid4().hex[:8]}"
         uri = f"{BACKEND_URL}?session_id={sid}"
 
-        output = await wait_for_pty_output(uri, "luohao@192 backend %", timeout=5.0)
+        output = await wait_for_pty_output(uri, "$ ", timeout=5.0)
 
         assert "Last login:" not in output, f"Unexpected login banner in output: {output!r}"
 

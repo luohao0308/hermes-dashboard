@@ -110,12 +110,18 @@
               </button>
               <button class="terminal-tab-add" @click="addTerminal">+ 新终端</button>
             </div>
-            <Terminal
-              v-if="activeTerminalId"
-              :key="activeTerminalId"
-              :session-id="terminalTabs.find(t => t.id === activeTerminalId)?.sessionId || ''"
-              @connected="onTerminalConnected"
-            />
+            <div
+              v-for="tab in terminalTabs"
+              :key="tab.id"
+              v-show="activeTerminalId === tab.id"
+              class="terminal-pane"
+            >
+              <Terminal
+                :session-id="tab.sessionId"
+                :active="activeTerminalId === tab.id"
+                @connected="onTerminalConnected"
+              />
+            </div>
           </div>
         </template>
 
@@ -1216,6 +1222,12 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid #3c3c3c;
+}
+
+.terminal-pane {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 
 .terminal-tab-bar {

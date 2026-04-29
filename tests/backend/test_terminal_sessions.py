@@ -1,14 +1,7 @@
-"""Tests for terminal session persistence (Phase 8)
+"""Tests for browser terminal session persistence."""
 
-Verifies:
-1. Server announces session id on connect: [Session: <id>]
-2. Same session_id reuses same PTY PID
-3. Different session_ids get separate PTY PIDs
-4. Disconnect does NOT kill PTY (session persists)
-5. No session_id creates a new random session each time
-6. Reconnect shows '✓ 会话已恢复'
-"""
-
+import json
+import os
 import pytest
 import uuid
 import time
@@ -49,8 +42,25 @@ def receive_until(ws, condition, timeout=5.0, poll_interval=0.1):
             if condition(msg):
                 return messages
         except TimeoutError:
-            break
+            continue
     return messages
+
+
+def receive_session_status(ws, expected_status=None):
+    msg = receive_text_with_timeout(ws, timeout=5.0)
+    parsed = json.loads(msg)
+    assert parsed["type"] == "session"
+    assert "session_id" in parsed
+    if expected_status is not None:
+        assert parsed["status"] == expected_status
+    return parsed
+
+
+def run_command(ws, command, expected, timeout=5.0):
+    ws.send_text(f"{command}\r")
+    msgs = receive_until(ws, lambda m: expected in m, timeout=timeout)
+    assert any(expected in m for m in msgs), f"Expected {expected!r}, got: {msgs!r}"
+    return msgs
 
 
 @pytest.fixture
@@ -64,73 +74,47 @@ class TestTerminalSessionPersistence:
     """Test terminal session store and routing."""
 
     def test_session_info_broadcast_on_connect(self, client):
-        """Server should broadcast [Session: <session_id>] on connect."""
+        """Server should send structured session metadata on connect."""
         session_id = str(uuid.uuid4())[:8]
         with client.websocket_connect(f"/ws/terminal?session_id={session_id}") as ws:
-            msg = receive_text_with_timeout(ws, timeout=5.0)
-            assert msg.startswith("[Session:"), f"Expected session announcement, got: {msg!r}"
+            status = receive_session_status(ws, "new")
+            assert status["session_id"] == session_id
 
     def test_same_session_id_reuses_pty(self, client):
         """Two connections with same session_id should share one PTY process."""
-        import tempfile, os
+        import tempfile
         session_id = str(uuid.uuid4())[:8]
         tmp = os.path.join(tempfile.gettempdir(), f"hermes_test_{session_id}")
 
-        # Connection 1: create session and write PID to temp file
         with client.websocket_connect(f"/ws/terminal?session_id={session_id}") as ws1:
-            receive_text_with_timeout(ws1, timeout=5.0)
-            # Write PID directly to file (no bash echo/parsing needed)
-            ws1.send_text(f"echo $$ > {tmp}\r")
-            # Wait for bash prompt to return (signals command completed)
-            for _ in range(30):
-                try:
-                    receive_text_with_timeout(ws1, timeout=2.0)
-                except TimeoutError:
-                    break
+            receive_session_status(ws1, "new")
+            run_command(ws1, f"echo $$ > {tmp}; echo PID_WRITTEN", "PID_WRITTEN")
 
-        # Read PID from file
         pid1 = open(tmp).read().strip() if os.path.exists(tmp) else ""
+        assert pid1
 
-        # Connection 2: same session_id — should reuse PTY
         with client.websocket_connect(f"/ws/terminal?session_id={session_id}") as ws2:
-            msg2 = receive_text_with_timeout(ws2, timeout=5.0)
-            assert msg2.startswith("[Session:")
-            # Write PID again
-            ws2.send_text(f"echo $$ > {tmp}2\r")
-            for _ in range(30):
-                try:
-                    receive_text_with_timeout(ws2, timeout=2.0)
-                except TimeoutError:
-                    break
+            receive_session_status(ws2, "reconnect")
+            run_command(ws2, f"echo $$ > {tmp}2; echo PID_WRITTEN_2", "PID_WRITTEN_2")
 
         pid2 = open(f"{tmp}2").read().strip() if os.path.exists(f"{tmp}2") else ""
         assert pid1 == pid2, f"PTY PID should be same: {pid1} vs {pid2}"
 
     def test_different_session_ids_get_separate_ptys(self, client):
         """Different session_ids should get separate PTY processes."""
-        import tempfile, os
+        import tempfile
         session1 = str(uuid.uuid4())[:8]
         session2 = str(uuid.uuid4())[:8]
         tmp1 = os.path.join(tempfile.gettempdir(), f"hermes_test_{session1}")
         tmp2 = os.path.join(tempfile.gettempdir(), f"hermes_test_{session2}")
 
         with client.websocket_connect(f"/ws/terminal?session_id={session1}") as ws1:
-            receive_text_with_timeout(ws1, timeout=5.0)
-            ws1.send_text(f"echo $$ > {tmp1}\r")
-            for _ in range(30):
-                try:
-                    receive_text_with_timeout(ws1, timeout=2.0)
-                except TimeoutError:
-                    break
+            receive_session_status(ws1, "new")
+            run_command(ws1, f"echo $$ > {tmp1}; echo PID1_WRITTEN", "PID1_WRITTEN")
 
         with client.websocket_connect(f"/ws/terminal?session_id={session2}") as ws2:
-            receive_text_with_timeout(ws2, timeout=5.0)
-            ws2.send_text(f"echo $$ > {tmp2}\r")
-            for _ in range(30):
-                try:
-                    receive_text_with_timeout(ws2, timeout=2.0)
-                except TimeoutError:
-                    break
+            receive_session_status(ws2, "new")
+            run_command(ws2, f"echo $$ > {tmp2}; echo PID2_WRITTEN", "PID2_WRITTEN")
 
         pid1 = open(tmp1).read().strip() if os.path.exists(tmp1) else ""
         pid2 = open(tmp2).read().strip() if os.path.exists(tmp2) else ""
@@ -142,45 +126,37 @@ class TestTerminalSessionPersistence:
         session_id = str(uuid.uuid4())[:8]
 
         with client.websocket_connect(f"/ws/terminal?session_id={session_id}") as ws:
-            receive_text_with_timeout(ws, timeout=5.0)  # session announcement
-            ws.send_text("echo KEEPAlive\r")
-            receive_text_with_timeout(ws, timeout=3.0)
+            receive_session_status(ws, "new")
+            run_command(ws, "echo KEEPAlive", "KEEPAlive")
 
         # Short delay
         time.sleep(0.5)
 
         # Reconnect: PTY should still be alive
         with client.websocket_connect(f"/ws/terminal?session_id={session_id}") as ws2:
-            receive_text_with_timeout(ws2, timeout=5.0)  # session announcement
-            ws2.send_text("echo STILL_ALIVE\r")
-            msgs = receive_until(ws2, lambda m: "STILL_ALIVE" in m, timeout=5.0)
-            assert any("STILL_ALIVE" in m for m in msgs), \
-                f"PTY should be alive after disconnect-reconnect, got: {msgs}"
+            receive_session_status(ws2, "reconnect")
+            run_command(ws2, "echo STILL_ALIVE", "STILL_ALIVE")
 
     def test_no_session_id_creates_new_session(self, client):
         """Connecting without session_id should create a new session each time."""
         with client.websocket_connect("/ws/terminal") as ws1:
-            msg1 = receive_text_with_timeout(ws1, timeout=5.0)
-            assert msg1.startswith("[Session:")
+            status1 = receive_session_status(ws1, "new")
 
         with client.websocket_connect("/ws/terminal") as ws2:
-            msg2 = receive_text_with_timeout(ws2, timeout=5.0)
-            assert msg2.startswith("[Session:")
+            status2 = receive_session_status(ws2, "new")
 
-        assert msg1 != msg2, "No session_id should create separate sessions"
+        assert status1["session_id"] != status2["session_id"]
 
-    def test_reconnect_shows_session_restored_message(self, client):
-        """Reconnecting to an existing session should receive '✓ 会话已恢复'."""
+    def test_reconnect_reports_reconnect_status(self, client):
+        """Reconnecting to an existing session should receive reconnect metadata."""
         session_id = str(uuid.uuid4())[:8]
 
         with client.websocket_connect(f"/ws/terminal?session_id={session_id}") as ws:
-            receive_text_with_timeout(ws, timeout=5.0)
-            ws.send_text("echo HELLO\r")
-            receive_text_with_timeout(ws, timeout=3.0)
+            receive_session_status(ws, "new")
+            run_command(ws, "echo HELLO", "HELLO")
 
-        # Reconnect
         with client.websocket_connect(f"/ws/terminal?session_id={session_id}") as ws2:
-            receive_text_with_timeout(ws2, timeout=5.0)  # session announcement
-            msgs = receive_until(ws2, lambda m: "会话已恢复" in m, timeout=5.0)
-            assert any("会话已恢复" in m for m in msgs), \
-                f"Expected '✓ 会话已恢复' in reconnect messages, got: {msgs}"
+            status = receive_session_status(ws2, "reconnect")
+            assert status["session_id"] == session_id
+            replay = receive_until(ws2, lambda m: "HELLO" in m, timeout=5.0)
+            assert any("HELLO" in m for m in replay), f"Expected replayed output, got: {replay!r}"

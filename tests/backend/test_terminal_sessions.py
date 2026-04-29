@@ -1,7 +1,6 @@
 """Tests for browser terminal session persistence."""
 
 import json
-import os
 import pytest
 import uuid
 import time
@@ -82,42 +81,40 @@ class TestTerminalSessionPersistence:
 
     def test_same_session_id_reuses_pty(self, client):
         """Two connections with same session_id should share one PTY process."""
-        import tempfile
         session_id = str(uuid.uuid4())[:8]
-        tmp = os.path.join(tempfile.gettempdir(), f"hermes_test_{session_id}")
 
         with client.websocket_connect(f"/ws/terminal?session_id={session_id}") as ws1:
             receive_session_status(ws1, "new")
-            run_command(ws1, f"echo $$ > {tmp}; echo PID_WRITTEN", "PID_WRITTEN")
+            run_command(ws1, "echo FIRST_ATTACH", "FIRST_ATTACH")
 
-        pid1 = open(tmp).read().strip() if os.path.exists(tmp) else ""
-        assert pid1
+        sessions = client.get("/api/terminal/sessions").json()["sessions"]
+        pid1 = next(s["pid"] for s in sessions if s["session_id"] == session_id)
 
         with client.websocket_connect(f"/ws/terminal?session_id={session_id}") as ws2:
             receive_session_status(ws2, "reconnect")
-            run_command(ws2, f"echo $$ > {tmp}2; echo PID_WRITTEN_2", "PID_WRITTEN_2")
+            run_command(ws2, "echo SECOND_ATTACH", "SECOND_ATTACH")
 
-        pid2 = open(f"{tmp}2").read().strip() if os.path.exists(f"{tmp}2") else ""
+        sessions = client.get("/api/terminal/sessions").json()["sessions"]
+        pid2 = next(s["pid"] for s in sessions if s["session_id"] == session_id)
         assert pid1 == pid2, f"PTY PID should be same: {pid1} vs {pid2}"
 
     def test_different_session_ids_get_separate_ptys(self, client):
         """Different session_ids should get separate PTY processes."""
-        import tempfile
         session1 = str(uuid.uuid4())[:8]
         session2 = str(uuid.uuid4())[:8]
-        tmp1 = os.path.join(tempfile.gettempdir(), f"hermes_test_{session1}")
-        tmp2 = os.path.join(tempfile.gettempdir(), f"hermes_test_{session2}")
 
         with client.websocket_connect(f"/ws/terminal?session_id={session1}") as ws1:
             receive_session_status(ws1, "new")
-            run_command(ws1, f"echo $$ > {tmp1}; echo PID1_WRITTEN", "PID1_WRITTEN")
+            run_command(ws1, "echo SESSION_ONE_READY", "SESSION_ONE_READY")
 
         with client.websocket_connect(f"/ws/terminal?session_id={session2}") as ws2:
             receive_session_status(ws2, "new")
-            run_command(ws2, f"echo $$ > {tmp2}; echo PID2_WRITTEN", "PID2_WRITTEN")
+            run_command(ws2, "echo SESSION_TWO_READY", "SESSION_TWO_READY")
 
-        pid1 = open(tmp1).read().strip() if os.path.exists(tmp1) else ""
-        pid2 = open(tmp2).read().strip() if os.path.exists(tmp2) else ""
+        sessions = client.get("/api/terminal/sessions").json()["sessions"]
+        pid_by_session = {s["session_id"]: s["pid"] for s in sessions}
+        pid1 = pid_by_session.get(session1)
+        pid2 = pid_by_session.get(session2)
         assert pid1 and pid2, f"Should get PIDs for both sessions: pid1={pid1!r}, pid2={pid2!r}"
         assert pid1 != pid2, f"Different sessions should have different PTY PIDs: {pid1} == {pid2}"
 

@@ -293,6 +293,35 @@ class TestNoAutoReconnect:
                 assert json.loads(msg2).get("type") == "session"
 
 
+class TestManyTerminalSessions:
+    """Opening several terminal tabs should not starve the backend event loop."""
+
+    @pytest.mark.asyncio
+    async def test_many_sessions_keep_health_responsive(self):
+        import urllib.request
+
+        sockets = []
+        try:
+            for idx in range(8):
+                sid = f"test-many-{idx}-{uuid.uuid4().hex[:8]}"
+                ws = await websockets.connect(
+                    f"{BACKEND_URL}?session_id={sid}",
+                    ping_interval=None,
+                    proxy=None,
+                )
+                sockets.append(ws)
+                status_msg = await asyncio.wait_for(ws.recv(), timeout=3.0)
+                assert json.loads(status_msg).get("type") == "session"
+
+            def _health():
+                with urllib.request.urlopen(BACKEND_HTTP + "/health", timeout=2.0) as response:
+                    return response.status
+
+            assert await asyncio.to_thread(_health) == 200
+        finally:
+            await asyncio.gather(*(ws.close() for ws in sockets), return_exceptions=True)
+
+
 class TestNoArtificialMessages:
     """No artificial [Session: xxx] or ✓ 会话已恢复 messages."""
 

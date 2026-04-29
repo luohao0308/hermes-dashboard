@@ -1135,6 +1135,7 @@ async def broadcast_task_update(task_id: str):
 async def _create_pty_session(session_id: str):
     """Create a new PTY session and store it. Caller must hold _pty_lock."""
     import pty
+    import fcntl
 
     env = os.environ.copy()
     env['HUSHLOGIN'] = '/dev/null'  # suppress "Last login" banner
@@ -1167,6 +1168,9 @@ async def _create_pty_session(session_id: str):
             pass
         os.execvpe(shell_args[0], shell_args, env)
         os._exit(1)
+
+    flags = fcntl.fcntl(master_fd, fcntl.F_GETFL)
+    fcntl.fcntl(master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
 
     session = {
         "pid": pid,
@@ -1283,7 +1287,6 @@ async def terminal_websocket(
     Disconnect does NOT kill PTY — session persists for reconnects.
     EOF marks session as dead, PTY kept for 30s for potential reconnect.
     """
-    import select as _select
     import fcntl
     import struct
     import termios
@@ -1296,6 +1299,7 @@ async def terminal_websocket(
         session_id = str(uuid.uuid4())
     # (no debug print — keep PTY clean)
 
+    replay_output = ""
     async with _pty_lock:
         existing = _terminal_sessions.get(session_id)
 
@@ -1304,67 +1308,70 @@ async def terminal_websocket(
             session = existing
             session["is_attached"] = True
             session["attach_count"] = session.get("attach_count", 0) + 1
-            await websocket.send_text(json.dumps({
-                "type": "session",
-                "status": "reconnect",
-                "session_id": session_id,
-            }))
-            if session.get("output_buffer"):
-                await websocket.send_text(session["output_buffer"])
+            session_status = "reconnect"
+            replay_output = session.get("output_buffer", "")
         else:
             # Create new session
             session = await _create_pty_session(session_id)
             session["is_attached"] = True
             session["attach_count"] = 1
-            await websocket.send_text(json.dumps({
-                "type": "session",
-                "status": "new",
-                "session_id": session_id,
-            }))
+            session_status = "new"
+
+    await websocket.send_text(json.dumps({
+        "type": "session",
+        "status": session_status,
+        "session_id": session_id,
+    }))
+    if replay_output:
+        await websocket.send_text(replay_output)
 
     master_fd = session["master_fd"]
     pid = session["pid"]
     loop = asyncio.get_running_loop()
     pending_tasks: list = []
+    read_task: asyncio.Task | None = None
 
     async def send_pty_output():
         """Called by loop.add_reader when master_fd is readable."""
-        try:
-            r, _, _ = _select.select([master_fd], [], [], 0.05)
-        except Exception:
-            return
-        if not r:
-            return
-        try:
-            data = os.read(master_fd, 4096)
-        except OSError:
-            # master_fd was closed (e.g. process died) — unregister ourselves
+        while True:
             try:
-                loop.remove_reader(master_fd)
-            except Exception:
-                pass
-            return
-        if not data:
-            # EOF — bash exited
-            async with _pty_lock:
-                session["alive"] = False
-                session["is_attached"] = False
+                data = os.read(master_fd, 4096)
+            except BlockingIOError:
+                return
+            except OSError:
+                # master_fd was closed (e.g. process died) — unregister ourselves
+                try:
+                    loop.remove_reader(master_fd)
+                except Exception:
+                    pass
+                return
+            if not data:
+                # EOF — shell exited
+                async with _pty_lock:
+                    session["alive"] = False
+                    session["is_attached"] = False
+                try:
+                    await websocket.send_text("\r\n\x1b[33m[进程已退出]\x1b[0m\r\n")
+                except Exception:
+                    pass
+                asyncio.ensure_future(_expire_session(session_id))
+                return
             try:
-                await websocket.send_text("\r\n\x1b[33m[进程已退出]\x1b[0m\r\n")
+                text = data.decode("utf-8", errors="replace")
+                session["output_buffer"] = (session.get("output_buffer", "") + text)[-TERMINAL_OUTPUT_BUFFER_LIMIT:]
+                await websocket.send_text(text)
             except Exception:
-                pass
-            asyncio.ensure_future(_expire_session(session_id))
-            return
-        try:
-            text = data.decode("utf-8", errors="replace")
-            session["output_buffer"] = (session.get("output_buffer", "") + text)[-TERMINAL_OUTPUT_BUFFER_LIMIT:]
-            await websocket.send_text(text)
-        except Exception:
-            pass
+                return
+            if len(data) < 4096:
+                return
 
     def _on_master_readable():
         """Synchronous callback from loop.add_reader — schedule async task."""
+        nonlocal read_task
+        if read_task and not read_task.done():
+            return
         t = asyncio.create_task(send_pty_output())
+        read_task = t
         pending_tasks.append(t)
         t.add_done_callback(lambda t: _maybe_remove(t))
 

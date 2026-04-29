@@ -31,6 +31,7 @@ let term: XTerm | null = null
 let fitAddon: FitAddon | null = null
 let ws: WebSocket | null = null
 let resizeObserver: ResizeObserver | null = null
+let dataDisposable: { dispose: () => void } | null = null
 
 // Message buffer: accumulates WS data before xterm is ready
 const msgBuffer: string[] = []
@@ -112,6 +113,12 @@ function initTerminal() {
   // Flush any buffered messages that arrived before xterm was ready
   flushBuffer()
 
+  dataDisposable = term.onData((data) => {
+    if (ws?.readyState !== WebSocket.OPEN) return
+    const payload = data === '\r\n' ? '\r' : data
+    ws.send(payload)
+  })
+
   // Wait for DOM to paint, then fit
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -128,17 +135,16 @@ function initTerminal() {
   }
 
   // Connect WebSocket
-  connState.value = 'connecting'
-  connectWebSocket()
+  if (props.active !== false) {
+    connState.value = 'connecting'
+    connectWebSocket()
+  }
 
   window.addEventListener('resize', handleResize)
 }
 
 function connectWebSocket() {
-  if (ws) {
-    ws.close()
-    ws = null
-  }
+  disconnectWebSocket()
 
   const sid = props.sessionId || Math.random().toString(36).substring(2, 10)
   const url = buildWsUrl(sid)
@@ -189,16 +195,21 @@ function connectWebSocket() {
       connState.value = 'error'
     }
 
-    term?.onData((data) => {
-      if (ws?.readyState !== WebSocket.OPEN) return
-      const payload = data === '\r\n' ? '\r' : data
-      ws.send(payload)
-    })
   } catch (err) {
     console.error('[Terminal] Connection error:', err)
     connState.value = 'error'
     term?.writeln(`\x1b[31m✗ 连接失败: ${err}\x1b[0m`)
   }
+}
+
+function disconnectWebSocket() {
+  if (!ws) return
+  ws.onopen = null
+  ws.onmessage = null
+  ws.onerror = null
+  ws.onclose = null
+  ws.close()
+  ws = null
 }
 
 function handleResize() {
@@ -208,9 +219,17 @@ function handleResize() {
 watch(
   () => props.active,
   async (active) => {
-    if (!active) return
+    if (!active) {
+      disconnectWebSocket()
+      connState.value = 'disconnected'
+      return
+    }
     await nextTick()
     requestAnimationFrame(() => fitTerminal())
+    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+      connState.value = 'connecting'
+      connectWebSocket()
+    }
   }
 )
 
@@ -222,8 +241,9 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   resizeObserver?.disconnect()
-  ws?.close()
-  ws = null
+  dataDisposable?.dispose()
+  dataDisposable = null
+  disconnectWebSocket()
   xtermReady = false
   msgBuffer.length = 0
   term?.dispose()

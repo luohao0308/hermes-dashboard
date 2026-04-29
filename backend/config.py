@@ -1,4 +1,4 @@
-"""Configuration settings for Hermès Bridge Service"""
+"""Configuration settings for AI Code Review Pipeline"""
 
 from pydantic_settings import BaseSettings
 from typing import Optional

@@ -198,6 +198,26 @@
         <template v-else-if="currentNav === 'chat'">
           <AgentChat />
         </template>
+
+        <!-- Pull Requests 审查列表 -->
+        <template v-else-if="currentNav === 'pr-list'">
+          <ReviewDashboard />
+        </template>
+
+        <!-- Providers 多模型管理 -->
+        <template v-else-if="currentNav === 'providers'">
+          <ProviderPanel />
+        </template>
+
+        <!-- 成本追踪 -->
+        <template v-else-if="currentNav === 'costs'">
+          <CostDashboard />
+        </template>
+
+        <!-- Guardrails 审查规则 -->
+        <template v-else-if="currentNav === 'guardrails'">
+          <GuardrailsPanel />
+        </template>
       </main>
     </div>
 
@@ -227,6 +247,10 @@ import SessionDetail from './components/SessionDetail.vue'
 import AlertsPanel from './components/AlertsPanel.vue'
 import SystemConfigPanel from './components/SystemConfigPanel.vue'
 import KnowledgeSearch from './components/KnowledgeSearch.vue'
+import ReviewDashboard from './components/ReviewDashboard.vue'
+import ProviderPanel from './components/ProviderPanel.vue'
+import CostDashboard from './components/CostDashboard.vue'
+import GuardrailsPanel from './components/GuardrailsPanel.vue'
 import { API_BASE } from './config'
 
 // Navigation state
@@ -241,7 +265,11 @@ const navTitleMap: Record<string, string> = {
   knowledge: '知识库',
   chat: '聊天',
   agents: '配置',
-  system: '系统'
+  system: '系统',
+  'pr-list': 'Pull Requests',
+  providers: 'Providers',
+  costs: '成本追踪',
+  guardrails: 'Guardrails',
 }
 
 function handleNavChange(navId: string) {
@@ -256,6 +284,10 @@ function handleNavChange(navId: string) {
     chat: '#/chat',
     agents: '#/agents',
     system: '#/system',
+    'pr-list': '#/pr-list',
+    providers: '#/providers',
+    costs: '#/costs',
+    guardrails: '#/guardrails',
   }
   if (navToHash[navId]) window.location.hash = navToHash[navId]
 }
@@ -1050,6 +1082,10 @@ onMounted(async () => {
     '#/chat': 'chat',
     '#/agents': 'agents',
     '#/system': 'system',
+    '#/pr-list': 'pr-list',
+    '#/providers': 'providers',
+    '#/costs': 'costs',
+    '#/guardrails': 'guardrails',
     '#/': 'dashboard',
     '': 'dashboard',
   }

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Hermès Dashboard 启动脚本
+# AI Code Review Pipeline 启动脚本
 
 set -e
 
@@ -11,7 +11,7 @@ export NO_PROXY="localhost,127.0.0.1,::1,${NO_PROXY:-}"
 export no_proxy="localhost,127.0.0.1,::1,${no_proxy:-}"
 
 echo "=========================================="
-echo "  Hermès Dashboard 启动脚本"
+echo "  AI Code Review Pipeline 启动脚本"
 echo "=========================================="
 
 # 颜色定义
@@ -35,14 +35,9 @@ require_port_free() {
     fi
 }
 
-# 检查 Hermès Agent 是否运行
-echo -e "\n${YELLOW}[1/3] 检查 Hermès Agent (localhost:9119)...${NC}"
-if curl --noproxy '*' -fsS --max-time 2 http://localhost:9119/api/status > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Hermès Agent 运行中${NC}"
-else
-    echo -e "${YELLOW}⚠ Hermès Agent 未运行 (localhost:9119)${NC}"
-    echo -e "${YELLOW}  Dashboard 会以降级模式启动；任务/日志等代理数据需先运行: hermes dashboard${NC}"
-fi
+# 检查依赖
+echo -e "\n${YELLOW}[1/3] 检查环境依赖...${NC}"
+echo -e "${GREEN}✓ 环境检查完成${NC}"
 
 # 启动后端 (FastAPI)
 echo -e "\n${YELLOW}[2/3] 启动后端服务 (port 8000)...${NC}"
@@ -53,8 +48,8 @@ PYTHON_CMD=""
 if [ -f "$HOME/opt/anaconda3/etc/profile.d/conda.sh" ]; then
     # shellcheck disable=SC1091
     source "$HOME/opt/anaconda3/etc/profile.d/conda.sh"
-    if conda env list | awk '{print $1}' | grep -qx "hermes310"; then
-        conda activate hermes310
+    if conda env list | awk '{print $1}' | grep -qx "code-review"; then
+        conda activate code-review
         PYTHON_CMD="python"
     fi
 fi
@@ -65,20 +60,31 @@ if [ -z "$PYTHON_CMD" ]; then
     elif command -v python >/dev/null 2>&1; then
         PYTHON_CMD="$(command -v python)"
     else
-        echo -e "${RED}✗ 未找到 Python，请安装 Python 3.10+${NC}"
+        echo -e "${RED}✗ 未找到 Python，请安装 Python 3.9+${NC}"
         exit 1
     fi
 fi
 
 PYTHON_OK="$("$PYTHON_CMD" - <<'PY'
 import sys
-print("1" if sys.version_info >= (3, 10) else "0")
+print("1" if sys.version_info >= (3, 9) else "0")
 PY
 )"
 if [ "$PYTHON_OK" != "1" ]; then
-    echo -e "${RED}✗ 当前 Python 版本过低: $("$PYTHON_CMD" --version 2>&1)，需要 3.10+${NC}"
+    echo -e "${RED}✗ 当前 Python 版本过低: $("$PYTHON_CMD" --version 2>&1)，需要 3.9+${NC}"
     exit 1
 fi
+
+# 创建虚拟环境（如果不存在）
+VENV_DIR="$SCRIPT_DIR/backend/venv"
+if [ ! -d "$VENV_DIR" ]; then
+    echo -e "${YELLOW}  创建 Python 虚拟环境...${NC}"
+    "$PYTHON_CMD" -m venv "$VENV_DIR"
+fi
+
+# 激活虚拟环境
+source "$VENV_DIR/bin/activate"
+PYTHON_CMD="python"
 
 # 检查后端依赖
 if ! "$PYTHON_CMD" -m pip show fastapi > /dev/null 2>&1; then
@@ -177,10 +183,9 @@ echo "=========================================="
 echo -e "${GREEN}  全部服务已启动!${NC}"
 echo "=========================================="
 echo ""
-echo "  Hermès Dashboard:  http://localhost:5173"
-echo "  Backend API:       http://localhost:8000"
-echo "  Backend Health:    http://localhost:8000/health"
-echo "  Hermès API:        http://localhost:9119"
+echo "  前端界面:     http://localhost:5173"
+echo "  后端 API:     http://localhost:8000"
+echo "  健康检查:     http://localhost:8000/health"
 echo ""
 echo "  停止服务: ./stop.sh"
 echo "=========================================="

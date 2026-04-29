@@ -1,5 +1,5 @@
 #!/bin/bash
-# Hermès Dashboard 停止脚本
+# AI Code Review Pipeline 停止脚本
 
 set -e
 
@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "=========================================="
-echo "  Hermès Dashboard 停止脚本"
+echo "  AI Code Review Pipeline 停止脚本"
 echo "=========================================="
 
 # 颜色定义

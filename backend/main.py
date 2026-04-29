@@ -1,5 +1,5 @@
-"""Hermès Bridge Service - FastAPI + SSE Backend
-Proxies requests to real Hermès Agent Dashboard API (localhost:9119)
+"""AI Code Review Pipeline - FastAPI + SSE Backend
+Multi-model consensus code review platform.
 """
 
 import asyncio
@@ -23,6 +23,18 @@ import httpx
 from sse_manager import sse_manager
 from config import settings
 from agent import AgentOrchestrator
+from provider.registry import ProviderRegistry
+from provider.adapters import (
+    create_openai_provider,
+    create_anthropic_provider,
+    create_ollama_provider,
+    create_openai_compat_provider,
+)
+from review.github_adapter import GitHubAdapter
+from review.pipeline import ReviewPipeline
+from review.consensus import ConsensusEngine
+from review.review_store import ReviewStore
+from cost_tracker import CostTracker
 from agent.chat_manager import chat_manager
 from agent.tracing_store import trace_store
 from agent.tools import execute_tool, list_tool_specs
@@ -123,57 +135,26 @@ async def hermes_get_raw(endpoint: str, params: dict = None) -> str:
 
 
 # ============================================================================
-# SSE Event Generator - Real-time data from Hermès
+# SSE Event Generator
 # ============================================================================
 
 async def generate_events():
-    """Generate events by polling Hermès Agent API periodically"""
+    """Generate periodic SSE events for system status."""
     counter = 0
     while True:
         try:
             await asyncio.sleep(settings.event_generation_interval)
             counter += 1
 
-            # Poll Hermès status every cycle
-            try:
-                status = await hermes_get("/api/status")
-                sessions = await hermes_get("/api/sessions", {"limit": 5, "offset": 0})
-            except Exception as e:
-                # Hermes not running, broadcast simulated status
-                event_type = "system_status"
-                data = {
-                    "status": "hermes_offline",
-                    "message": "Hermès Agent 未运行或 Dashboard 未启动",
-                    "timestamp": datetime.now().isoformat(),
-                    "error": str(e),
-                    "active_connections": sse_manager.get_connection_count()
-                }
-                await sse_manager.broadcast(event_type, data)
-                continue
-
             # Every 3 cycles: send system status
             if counter % 3 == 0:
                 event_type = "system_status"
                 data = {
-                    "status": "healthy" if status.get("gateway_running") else "gateway_stopped",
-                    "version": status.get("version"),
-                    "release_date": status.get("release_date"),
-                    "gateway_running": status.get("gateway_running"),
-                    "gateway_pid": status.get("gateway_pid"),
-                    "active_sessions": status.get("active_sessions"),
-                    "gateway_platforms": status.get("gateway_platforms"),
+                    "status": "healthy",
+                    "version": "2.0.0",
+                    "providers": len(_provider_registry.list_providers()),
                     "timestamp": datetime.now().isoformat(),
                     "active_connections": sse_manager.get_connection_count()
-                }
-                await sse_manager.broadcast(event_type, data)
-
-            # Every 5 cycles: send session update
-            if counter % 5 == 0:
-                event_type = "sessions_update"
-                data = {
-                    "sessions": sessions.get("sessions", [])[:5],
-                    "total": sessions.get("total", 0),
-                    "timestamp": datetime.now().isoformat()
                 }
                 await sse_manager.broadcast(event_type, data)
 
@@ -182,7 +163,6 @@ async def generate_events():
                 event_type = "heartbeat"
                 data = {
                     "timestamp": datetime.now().isoformat(),
-                    "hermes_version": status.get("version")
                 }
                 await sse_manager.broadcast(event_type, data)
 
@@ -190,7 +170,6 @@ async def generate_events():
             break
         except Exception as e:
             print(f"Error generating events: {e}")
-            # Send error event
             try:
                 await sse_manager.broadcast("error", {
                     "message": str(e),
@@ -208,6 +187,13 @@ async def generate_events():
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events"""
     global _agent_orchestrator
+
+    # Startup: initialize providers
+    import logging
+    logger = logging.getLogger("uvicorn")
+    logger.info("Initializing providers...")
+    _init_providers()
+    logger.info(f"Registered providers: {list(_provider_registry._providers.keys())}")
 
     # Startup: start the event generator
     event_task = asyncio.create_task(generate_events())
@@ -232,9 +218,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Hermès Bridge Service",
-    description="SSE-based bridge service that proxies to Hermès Agent Dashboard API",
-    version="1.1.0",
+    title="AI Code Review Pipeline",
+    description="Multi-model consensus code review platform",
+    version="2.0.0",
     lifespan=lifespan
 )
 
@@ -258,7 +244,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE", "PATCH"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -335,24 +321,12 @@ async def sse_endpoint(request: Request):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    # Try to reach Hermès API
-    hermes_reachable = False
-    hermes_status = {}
-    try:
-        hermes_status = await hermes_get("/api/status")
-        hermes_reachable = True
-    except Exception:
-        pass
-
     return {
         "status": "healthy",
-        "service": "hermes-bridge",
-        "version": "1.1.0",
+        "service": "ai-code-review-pipeline",
+        "version": "2.0.0",
         "active_connections": sse_manager.get_connection_count(),
-        "hermes_reachable": hermes_reachable,
-        "hermes_api_base": HERMES_API_BASE,
-        "hermes_version": hermes_status.get("version") if hermes_reachable else None,
-        "gateway_running": hermes_status.get("gateway_running") if hermes_reachable else None
+        "providers": len(_provider_registry.list_providers()),
     }
 
 
@@ -2333,6 +2307,259 @@ async def root():
         }
     }
 
+
+# ============================================================================
+# Code Review Pipeline - Provider, Review, Cost APIs
+# ============================================================================
+
+# Initialize provider registry and register available providers
+_provider_registry = ProviderRegistry()
+_review_store = ReviewStore()
+_cost_tracker = CostTracker()
+
+
+def _init_providers():
+    """注册所有已配置的 Provider。"""
+    for name, config in _provider_registry._config.get("providers", {}).items():
+        if not config.get("enabled", True):
+            continue
+        provider = None
+        if name == "openai":
+            provider = create_openai_provider(config)
+        elif name == "anthropic":
+            provider = create_anthropic_provider(config)
+        elif name == "ollama":
+            provider = create_ollama_provider(config)
+        else:
+            # 使用 OpenAI 兼容适配器支持 xiaomi/minimax/deepseek 等
+            provider = create_openai_compat_provider(name, config)
+        if provider:
+            _provider_registry.register(provider)
+
+
+@app.on_event("startup")
+async def startup_providers():
+    import logging
+    logger = logging.getLogger("uvicorn")
+    logger.info("Initializing providers...")
+    logger.info(f"XIAOMI_API_KEY set: {bool(os.environ.get('XIAOMI_API_KEY'))}")
+    _init_providers()
+    logger.info(f"Registered providers: {list(_provider_registry._providers.keys())}")
+
+
+# --- Provider API ---
+
+@app.get("/api/providers")
+async def list_providers():
+    """List all configured LLM providers."""
+    return {"providers": _provider_registry.list_providers()}
+
+
+@app.post("/api/providers/{name}/test")
+async def test_provider(name: str):
+    """Test a provider connection."""
+    provider = _provider_registry.get(name)
+    if not provider:
+        raise HTTPException(status_code=404, detail=f"Provider '{name}' not found")
+    ok = await provider.health_check()
+    return {"name": name, "ok": ok}
+
+
+@app.put("/api/providers/{name}")
+async def update_provider(name: str, body: dict):
+    """Update provider configuration."""
+    _provider_registry.update_provider_config(name, body)
+    return {"ok": True, "provider": name}
+
+
+@app.post("/api/providers/custom")
+async def add_custom_provider(body: dict):
+    """添加自定义 OpenAI 兼容 Provider。"""
+    name = body.get("name")
+    base_url = body.get("base_url")
+    api_key = body.get("api_key")
+    default_model = body.get("default_model")
+    models = body.get("models", [])
+
+    if not name or not base_url or not api_key:
+        raise HTTPException(400, "name, base_url, api_key 必填")
+
+    config = {
+        "enabled": True,
+        "base_url": base_url,
+        "api_key": api_key,
+        "default_model": default_model,
+        "models": [{"id": m, "display_name": m} for m in models],
+    }
+
+    provider = create_openai_compat_provider(name, config)
+    if provider:
+        _provider_registry.register(provider)
+        _provider_registry.update_provider_config(name, config)
+    return {"ok": True, "provider": name}
+
+
+# --- GitHub PR API ---
+
+@app.get("/api/github/prs")
+async def list_github_prs(
+    repo: str = Query(..., description="GitHub repo, e.g. owner/repo"),
+    state: str = Query("open", description="open/closed/all"),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """List pull requests from a GitHub repository."""
+    github = GitHubAdapter()
+    try:
+        pulls = await github.list_pulls(repo=repo, state=state, limit=limit)
+        return {
+            "repo": repo,
+            "pulls": [
+                {
+                    "number": pr["number"],
+                    "title": pr["title"],
+                    "author": pr["user"]["login"],
+                    "state": pr["state"],
+                    "created_at": pr["created_at"],
+                    "updated_at": pr["updated_at"],
+                    "html_url": pr["html_url"],
+                    "draft": pr.get("draft", False),
+                }
+                for pr in pulls
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"GitHub API error: {e}")
+    finally:
+        await github.close()
+
+
+# --- Review API ---
+
+@app.get("/api/reviews")
+async def list_reviews(
+    repo: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """List review history."""
+    reviews = _review_store.list_reviews(repo=repo, status=status, limit=limit, offset=offset)
+    return {"reviews": [r.model_dump() for r in reviews], "total": len(reviews)}
+
+
+@app.get("/api/reviews/stats")
+async def get_review_stats():
+    """Get review statistics."""
+    return _review_store.get_stats()
+
+
+@app.get("/api/reviews/{review_id}")
+async def get_review(review_id: str):
+    """Get a specific review by ID."""
+    review = _review_store.get(review_id)
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    return review.model_dump()
+
+
+@app.post("/api/reviews/trigger")
+async def trigger_review(body: dict):
+    """Manually trigger a code review for a PR."""
+    repo = body.get("repo")
+    pr_number = body.get("pr_number")
+    if not repo or not pr_number:
+        raise HTTPException(status_code=400, detail="repo and pr_number required")
+
+    github = GitHubAdapter()
+    consensus = ConsensusEngine(min_agreement=2)
+    # 默认使用所有已注册的 provider
+    available = list(_provider_registry._providers.keys())
+    models = body.get("models", available)
+    pipeline = ReviewPipeline(
+        _provider_registry, github, consensus,
+        review_models=models, cost_tracker=_cost_tracker,
+    )
+
+    try:
+        review = await pipeline.review_pr(repo, int(pr_number))
+        _review_store.save(review)
+        return review.model_dump()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Review failed: {e}")
+    finally:
+        await github.close()
+
+
+# --- GitHub Webhook API ---
+
+@app.post("/api/webhooks/github")
+async def github_webhook(request: Request):
+    """Receive GitHub webhook events for PR reviews."""
+    body = await request.json()
+    action = body.get("action")
+    pr = body.get("pull_request")
+
+    if action not in ("opened", "synchronize") or not pr:
+        return {"status": "ignored", "action": action}
+
+    repo = body.get("repository", {}).get("full_name", "")
+    pr_number = pr.get("number", 0)
+
+    github = GitHubAdapter()
+    consensus = ConsensusEngine(min_agreement=2)
+    pipeline = ReviewPipeline(_provider_registry, github, consensus)
+
+    try:
+        review = await pipeline.review_pr(repo, pr_number)
+        _review_store.save(review)
+        return {"status": "completed", "review_id": review.id}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+    finally:
+        await github.close()
+
+
+# --- Cost API ---
+
+@app.get("/api/cost/summary")
+async def get_cost_summary(period: str = Query("daily")):
+    """Get cost summary for a period."""
+    return _cost_tracker.get_summary(period)
+
+
+@app.get("/api/cost/breakdown")
+async def get_cost_breakdown(days: int = Query(30)):
+    """Get cost breakdown by provider/model."""
+    return _cost_tracker.get_breakdown(days)
+
+
+@app.get("/api/cost/trend")
+async def get_cost_trend(days: int = Query(30)):
+    """Get daily cost trend."""
+    return _cost_tracker.get_trend(days)
+
+
+@app.post("/api/cost/budget")
+async def set_budget(body: dict):
+    """Set a budget limit."""
+    _cost_tracker.set_budget(
+        scope=body.get("scope", "monthly"),
+        limit_usd=body.get("limit_usd", 100),
+        provider=body.get("provider"),
+        alert_threshold=body.get("alert_threshold", 0.8),
+    )
+    return {"ok": True}
+
+
+@app.get("/api/cost/alerts")
+async def get_cost_alerts():
+    """Get budget alerts."""
+    return _cost_tracker.check_alerts()
+
+
+# ============================================================================
+# Entrypoint
+# ============================================================================
 
 if __name__ == "__main__":
     import uvicorn

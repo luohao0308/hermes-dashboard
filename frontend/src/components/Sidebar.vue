@@ -2,8 +2,8 @@
   <aside class="sidebar">
     <!-- Logo -->
     <div class="sidebar-logo">
-      <div class="logo-icon">H</div>
-      <span class="logo-text">Hermès</span>
+      <div class="logo-icon">CR</div>
+      <span class="logo-text">Code Review</span>
     </div>
 
     <!-- 导航菜单 -->
@@ -48,13 +48,17 @@ const emit = defineEmits<{
 
 const navItems: NavItem[] = [
   { id: 'dashboard', label: '概览', icon: '◈' },
+  { id: 'pr-list', label: '代码审查', icon: '🔀' },
+  { id: 'providers', label: '模型管理', icon: '🧠' },
+  { id: 'costs', label: '成本', icon: '💰' },
+  { id: 'guardrails', label: '审查规则', icon: '🛡' },
+  { id: 'tasks', label: '任务', icon: '▦' },
   { id: 'terminal', label: '终端', icon: '▸' },
-  { id: 'tasks', label: '任务', icon: '◎' },
-  { id: 'logs', label: '日志', icon: '☰' },
-  { id: 'history', label: '历史', icon: '◷' },
+  { id: 'logs', label: '日志', icon: '▤' },
+  { id: 'history', label: '历史', icon: '↻' },
   { id: 'knowledge', label: '知识库', icon: '◇' },
   { id: 'chat', label: '聊天', icon: '💬' },
-  { id: 'agents', label: '配置', icon: '🤖' },
+  { id: 'agents', label: '配置', icon: '◎' },
   { id: 'system', label: '系统', icon: '⚙' },
 ]
 

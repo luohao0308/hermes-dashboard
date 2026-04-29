@@ -2387,6 +2387,40 @@ async def add_custom_provider(body: dict):
     return {"ok": True, "provider": name}
 
 
+# --- GitHub PR API ---
+
+@app.get("/api/github/prs")
+async def list_github_prs(
+    repo: str = Query(..., description="GitHub repo, e.g. owner/repo"),
+    state: str = Query("open", description="open/closed/all"),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """List pull requests from a GitHub repository."""
+    github = GitHubAdapter()
+    try:
+        pulls = await github.list_pulls(repo=repo, state=state, limit=limit)
+        return {
+            "repo": repo,
+            "pulls": [
+                {
+                    "number": pr["number"],
+                    "title": pr["title"],
+                    "author": pr["user"]["login"],
+                    "state": pr["state"],
+                    "created_at": pr["created_at"],
+                    "updated_at": pr["updated_at"],
+                    "html_url": pr["html_url"],
+                    "draft": pr.get("draft", False),
+                }
+                for pr in pulls
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"GitHub API error: {e}")
+    finally:
+        await github.close()
+
+
 # --- Review API ---
 
 @app.get("/api/reviews")

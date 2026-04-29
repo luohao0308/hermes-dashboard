@@ -23,6 +23,17 @@ class GitHubAdapter:
             timeout=30.0,
         )
 
+    async def list_pulls(
+        self, repo: str, state: str = "open", limit: int = 20
+    ) -> list[dict]:
+        """List pull requests for a repo."""
+        resp = await self._client.get(
+            f"/repos/{repo}/pulls",
+            params={"state": state, "per_page": limit, "sort": "updated", "direction": "desc"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     async def get_pr_info(self, repo: str, pr_number: int) -> dict:
         """Get PR metadata."""
         resp = await self._client.get(f"/repos/{repo}/pulls/{pr_number}")

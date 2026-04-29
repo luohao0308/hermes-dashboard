@@ -8,6 +8,7 @@
       </div>
     </div>
 
+    <!-- 添加自定义模型表单 -->
     <div v-if="showAddForm" class="add-form">
       <h4>添加自定义模型</h4>
       <div class="form-grid">
@@ -38,6 +39,33 @@
       </div>
     </div>
 
+    <!-- 编辑配置表单 -->
+    <div v-if="editingProvider" class="add-form">
+      <h4>编辑 {{ editingProvider.name }} 配置</h4>
+      <div class="form-grid">
+        <div class="form-item">
+          <label>API 地址</label>
+          <input v-model="editConfig.base_url" />
+        </div>
+        <div class="form-item">
+          <label>API 密钥</label>
+          <input v-model="editConfig.api_key" type="password" placeholder="留空表示不修改" />
+        </div>
+        <div class="form-item full-width">
+          <label>默认模型</label>
+          <select v-model="editConfig.default_model" class="model-select">
+            <option v-for="m in editingProvider.models" :key="m.id" :value="m.id">
+              {{ m.display_name || m.id }}
+            </option>
+          </select>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-cancel" @click="editingProvider = null">取消</button>
+        <button class="btn-submit" @click="saveProviderConfig">保存</button>
+      </div>
+    </div>
+
     <div v-if="loading" class="loading">加载中...</div>
     <div v-else class="provider-grid">
       <div v-for="p in providers" :key="p.name" class="provider-card">
@@ -47,17 +75,34 @@
             {{ p.enabled ? '已启用' : '已禁用' }}
           </span>
         </div>
-        <div class="provider-model">默认模型: {{ p.default_model || 'N/A' }}</div>
+        <div class="provider-model">
+          默认模型:
+          <select
+            :value="p.default_model"
+            class="inline-select"
+            @change="changeDefaultModel(p.name, ($event.target as HTMLSelectElement).value)"
+          >
+            <option v-for="m in p.models" :key="m.id" :value="m.id">
+              {{ m.display_name || m.id }}
+            </option>
+          </select>
+        </div>
         <div class="provider-features">
           <span v-for="f in p.supported_features" :key="f" class="feature-tag">{{ f }}</span>
         </div>
         <div class="provider-models">
           <div v-for="m in p.models" :key="m.id" class="model-item">
-            <span class="model-name">{{ m.display_name || m.id }}</span>
-            <span class="model-cost">${{ m.cost_per_1k_input }}/1k tokens</span>
+            <span class="model-name" :class="{ 'is-default': m.id === p.default_model }">
+              {{ m.display_name || m.id }}
+            </span>
+            <span v-if="m.id === p.default_model" class="default-badge">默认</span>
+            <span class="model-cost">${{ m.cost_per_1k_input || 0 }}/1k tokens</span>
           </div>
         </div>
-        <button class="btn-test" @click="testProvider(p.name)">测试连接</button>
+        <div class="provider-actions">
+          <button class="btn-test" @click="testProvider(p.name)">测试连接</button>
+          <button class="btn-edit" @click="startEdit(p)">编辑配置</button>
+        </div>
       </div>
     </div>
   </div>
@@ -78,6 +123,8 @@ interface ProviderInfo {
 const providers = ref<ProviderInfo[]>([])
 const loading = ref(false)
 const showAddForm = ref(false)
+const editingProvider = ref<ProviderInfo | null>(null)
+const editConfig = ref({ base_url: '', api_key: '', default_model: '' })
 const newProvider = ref({
   name: '',
   base_url: '',
@@ -108,6 +155,56 @@ async function testProvider(name: string) {
     alert(data.ok ? `${name} 连接成功` : `${name} 连接失败`)
   } catch {
     alert(`测试 ${name} 失败`)
+  }
+}
+
+async function changeDefaultModel(name: string, modelId: string) {
+  try {
+    const res = await fetch(`${API_BASE}/api/providers/${name}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ default_model: modelId }),
+    })
+    if (res.ok) {
+      await fetchProviders()
+    }
+  } catch {
+    alert('修改失败')
+  }
+}
+
+function startEdit(p: ProviderInfo) {
+  editingProvider.value = p
+  editConfig.value = {
+    base_url: '',
+    api_key: '',
+    default_model: p.default_model,
+  }
+}
+
+async function saveProviderConfig() {
+  if (!editingProvider.value) return
+  const name = editingProvider.value.name
+  const updates: Record<string, any> = {
+    default_model: editConfig.value.default_model,
+  }
+  if (editConfig.value.base_url) updates.base_url = editConfig.value.base_url
+  if (editConfig.value.api_key) updates.api_key = editConfig.value.api_key
+
+  try {
+    const res = await fetch(`${API_BASE}/api/providers/${name}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    })
+    if (res.ok) {
+      editingProvider.value = null
+      await fetchProviders()
+    } else {
+      alert('保存失败')
+    }
+  } catch {
+    alert('保存失败')
   }
 }
 
@@ -171,12 +268,19 @@ onMounted(fetchProviders)
 .provider-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
 .enabled { background: rgba(80, 250, 123, 0.15); color: #50fa7b; }
 .disabled { background: rgba(255, 85, 85, 0.15); color: #ff5555; }
-.provider-model { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+.provider-model { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.inline-select { padding: 2px 6px; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-primary); font-size: 12px; }
 .provider-features { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .feature-tag { font-size: 10px; padding: 2px 6px; background: var(--bg-tertiary); border-radius: 4px; color: var(--text-secondary); }
 .provider-models { margin-bottom: 12px; }
-.model-item { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; color: var(--text-secondary); }
+.model-item { display: flex; align-items: center; font-size: 12px; padding: 4px 0; color: var(--text-secondary); }
+.model-name { flex: 1; }
+.model-name.is-default { color: var(--accent-color); font-weight: 600; }
+.default-badge { font-size: 10px; padding: 1px 6px; background: var(--accent-soft); color: var(--accent-color); border-radius: 4px; margin-left: 6px; }
 .model-cost { color: var(--text-muted); }
-.btn-test { width: 100%; padding: 8px; background: var(--accent-soft); color: var(--accent-color); border: none; border-radius: var(--radius-md); font-size: 12px; cursor: pointer; }
+.provider-actions { display: flex; gap: 8px; }
+.btn-test { flex: 1; padding: 8px; background: var(--accent-soft); color: var(--accent-color); border: none; border-radius: var(--radius-md); font-size: 12px; cursor: pointer; }
+.btn-edit { flex: 1; padding: 8px; background: var(--bg-tertiary); color: var(--text-secondary); border: none; border-radius: var(--radius-md); font-size: 12px; cursor: pointer; }
+.model-select { padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-primary); font-size: 13px; width: 100%; }
 .loading { text-align: center; padding: 40px; color: var(--text-muted); }
 </style>

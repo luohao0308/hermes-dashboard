@@ -96,7 +96,7 @@ providers:
   xiaomi:
     api_key_env: XIAOMI_API_KEY
     base_url: https://token-plan-cn.xiaomimimo.com/v1
-    default_model: mimo-v2-pro
+    default_model: MiMo-V2.5-Pro
     enabled: true
     models:
     - capabilities:
@@ -106,22 +106,42 @@ providers:
       context_window: 1048576
       cost_per_1k_input: 0.0
       cost_per_1k_output: 0.0
-      display_name: 小米 MiMo V2 Pro
-      id: mimo-v2-pro
+      display_name: MiMo-V2.5-Pro
+      id: MiMo-V2.5-Pro
     - capabilities:
       - chat
       - streaming
       context_window: 262144
       cost_per_1k_input: 0.0
       cost_per_1k_output: 0.0
-      display_name: 小米 MiMo V2 Flash
-      id: mimo-v2-flash
+      display_name: MiMo-V2.5
+      id: MiMo-V2.5
     - capabilities:
       - chat
       - streaming
-      - vision
+      - tts
       context_window: 262144
       cost_per_1k_input: 0.0
       cost_per_1k_output: 0.0
-      display_name: 小米 MiMo V2 Omni
-      id: mimo-v2-omni
+      display_name: MiMo-V2.5-TTS
+      id: MiMo-V2.5-TTS
+    - capabilities:
+      - chat
+      - streaming
+      - tts
+      - voice_clone
+      context_window: 262144
+      cost_per_1k_input: 0.0
+      cost_per_1k_output: 0.0
+      display_name: MiMo-V2.5-TTS-VoiceClone
+      id: MiMo-V2.5-TTS-VoiceClone
+    - capabilities:
+      - chat
+      - streaming
+      - tts
+      - voice_design
+      context_window: 262144
+      cost_per_1k_input: 0.0
+      cost_per_1k_output: 0.0
+      display_name: MiMo-V2.5-TTS-VoiceDesign
+      id: MiMo-V2.5-TTS-VoiceDesign

@@ -1317,6 +1317,7 @@ def _update_terminal_input_buffer(session: dict, data: str) -> None:
 async def terminal_websocket(
     websocket: WebSocket,
     session_id: str | None = None,
+    replay: str = "1",
 ):
     """WebSocket endpoint for terminal emulation using PTY.
 
@@ -1340,6 +1341,7 @@ async def terminal_websocket(
         session_id = str(uuid.uuid4())
     # (no debug print — keep PTY clean)
 
+    should_replay = replay.lower() not in ("0", "false", "no")
     replay_output = ""
     async with _pty_lock:
         existing = _terminal_sessions.get(session_id)
@@ -1350,7 +1352,8 @@ async def terminal_websocket(
             session["is_attached"] = True
             session["attach_count"] = session.get("attach_count", 0) + 1
             session_status = "reconnect"
-            replay_output = session.get("output_buffer", "")
+            if should_replay:
+                replay_output = session.get("output_buffer", "")
         else:
             # Create new session
             session = await _create_pty_session(session_id)

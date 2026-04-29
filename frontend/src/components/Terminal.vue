@@ -36,11 +36,16 @@ let dataDisposable: { dispose: () => void } | null = null
 // Message buffer: accumulates WS data before xterm is ready
 const msgBuffer: string[] = []
 let xtermReady = false
+let hasConnectedOnce = false
 
 const BASE_WS_URL = `${WS_BASE}/ws/terminal`
 
-function buildWsUrl(sid: string): string {
-  return `${BASE_WS_URL}?session_id=${sid}`
+function buildWsUrl(sid: string, replay: boolean): string {
+  const params = new URLSearchParams({
+    session_id: sid,
+    replay: replay ? '1' : '0',
+  })
+  return `${BASE_WS_URL}?${params.toString()}`
 }
 
 function flushBuffer() {
@@ -147,7 +152,7 @@ function connectWebSocket() {
   disconnectWebSocket()
 
   const sid = props.sessionId || Math.random().toString(36).substring(2, 10)
-  const url = buildWsUrl(sid)
+  const url = buildWsUrl(sid, !hasConnectedOnce)
   console.log('[Terminal] Connecting to', url)
 
   try {
@@ -155,6 +160,7 @@ function connectWebSocket() {
 
     ws.onopen = () => {
       console.log('[Terminal] WebSocket connected')
+      hasConnectedOnce = true
       connState.value = 'connected'
       // Backend will send {"type":"session","status":"new"|"reconnect"}
       // We handle the replay trigger in onmessage

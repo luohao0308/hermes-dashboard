@@ -188,6 +188,13 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events"""
     global _agent_orchestrator
 
+    # Startup: initialize providers
+    import logging
+    logger = logging.getLogger("uvicorn")
+    logger.info("Initializing providers...")
+    _init_providers()
+    logger.info(f"Registered providers: {list(_provider_registry._providers.keys())}")
+
     # Startup: start the event generator
     event_task = asyncio.create_task(generate_events())
 
@@ -2332,7 +2339,12 @@ def _init_providers():
 
 @app.on_event("startup")
 async def startup_providers():
+    import logging
+    logger = logging.getLogger("uvicorn")
+    logger.info("Initializing providers...")
+    logger.info(f"XIAOMI_API_KEY set: {bool(os.environ.get('XIAOMI_API_KEY'))}")
     _init_providers()
+    logger.info(f"Registered providers: {list(_provider_registry._providers.keys())}")
 
 
 # --- Provider API ---

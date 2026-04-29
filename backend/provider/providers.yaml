@@ -30,14 +30,6 @@ providers:
       cost_per_1k_output: 0.005
       display_name: Claude Haiku 4.5
       id: claude-haiku-4-5-20251001
-  mimo:
-    api_key: tp-czq5gqiqkc08gkng85krweexqibb5cvkwtiaecw1z6n6chud
-    base_url: https://token-plan-cn.xiaomimimo.com/v1
-    default_model: mimo-v2.5-pro
-    enabled: true
-    models:
-    - display_name: mimo-v2.5-pro
-      id: mimo-v2.5-pro
   minimax:
     api_key_env: MINIMAX_API_KEY
     base_url: https://api.minimax.io/v1
@@ -103,7 +95,7 @@ providers:
       id: gpt-4o-mini
   xiaomi:
     api_key_env: XIAOMI_API_KEY
-    base_url: https://api.xiaomimimo.com/v1
+    base_url: https://token-plan-cn.xiaomimimo.com/v1
     default_model: mimo-v2-pro
     enabled: true
     models:

@@ -48,6 +48,7 @@ class ProviderRegistry:
                 "name": name,
                 "enabled": provider_config.get("enabled", True),
                 "default_model": provider_config.get("default_model", ""),
+                "base_url": provider_config.get("base_url", ""),
                 "models": provider_config.get("models", []),
                 "supported_features": provider.supported_features,
             })

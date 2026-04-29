@@ -176,7 +176,7 @@ async function changeDefaultModel(name: string, modelId: string) {
 function startEdit(p: ProviderInfo) {
   editingProvider.value = p
   editConfig.value = {
-    base_url: '',
+    base_url: (p as any).base_url || '',
     api_key: '',
     default_model: p.default_model,
   }

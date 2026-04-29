@@ -134,6 +134,23 @@ class TestTerminalSessionPersistence:
             receive_session_status(ws2, "reconnect")
             run_command(ws2, "echo STILL_ALIVE", "STILL_ALIVE")
 
+    def test_delete_session_returns_quickly(self, client):
+        """Closing a terminal tab should not block the API while the PTY exits."""
+        session_id = str(uuid.uuid4())[:8]
+
+        with client.websocket_connect(f"/ws/terminal?session_id={session_id}") as ws:
+            receive_session_status(ws, "new")
+            run_command(ws, "echo CLOSE_READY", "CLOSE_READY")
+
+        start = time.monotonic()
+        response = client.delete(f"/api/terminal/sessions/{session_id}")
+        elapsed = time.monotonic() - start
+
+        assert response.status_code == 200
+        assert elapsed < 1.0
+        sessions = client.get("/api/terminal/sessions").json()["sessions"]
+        assert all(s["session_id"] != session_id for s in sessions)
+
     def test_no_session_id_creates_new_session(self, client):
         """Connecting without session_id should create a new session each time."""
         with client.websocket_connect("/ws/terminal") as ws1:

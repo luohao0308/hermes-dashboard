@@ -344,20 +344,27 @@ function switchTerminal(id: string) {
   activeTerminalId.value = id
 }
 
-async function closeTerminal(idx: number) {
+function closeTerminal(idx: number) {
   if (terminalTabs.value.length === 1) return // Keep at least one
   const tab = terminalTabs.value[idx]
-  try {
-    await fetch(`${API_BASE}/api/terminal/sessions/${encodeURIComponent(tab.sessionId)}`, {
+  if (!tab) return
+
+  if (activeTerminalId.value === tab.id) {
+    const nextTab = terminalTabs.value[idx + 1] || terminalTabs.value[idx - 1]
+    if (nextTab) activeTerminalId.value = nextTab.id
+  }
+
+  terminalTabs.value.splice(idx, 1)
+  if (localStorage.getItem(SESSION_KEY) === tab.sessionId && terminalTabs.value[0]) {
+    localStorage.setItem(SESSION_KEY, terminalTabs.value[0].sessionId)
+  }
+
+  void fetch(`${API_BASE}/api/terminal/sessions/${encodeURIComponent(tab.sessionId)}`, {
       method: 'DELETE',
     })
-  } catch (e) {
-    addToast('warning', `终端会话关闭请求失败，本地标签已移除`)
-  }
-  terminalTabs.value.splice(idx, 1)
-  if (activeTerminalId.value === tab.id) {
-    activeTerminalId.value = terminalTabs.value[Math.max(0, idx - 1)].id
-  }
+    .catch(() => {
+      addToast('warning', `终端会话关闭请求失败，本地标签已移除`)
+    })
 }
 
 function onTerminalConnected() {

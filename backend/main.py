@@ -1185,21 +1185,62 @@ async def _create_pty_session(session_id: str):
     return session
 
 
-def _close_pty_session(session: dict):
-    """Close PTY files and kill process. Called without lock."""
+def _close_pty_session(session: dict) -> bool:
+    """Close PTY files and ask the process to exit without blocking the event loop."""
+    import os as _os
     import signal
     pid = session["pid"]
     master_fd = session["master_fd"]
+    session["alive"] = False
+    session["is_attached"] = False
     try:
-        import os as _os
         _os.close(master_fd)
     except Exception:
         pass
     try:
         _os.kill(pid, signal.SIGTERM)
-        _os.waitpid(pid, 0)
+    except Exception:
+        return True
+    try:
+        waited_pid, _ = _os.waitpid(pid, _os.WNOHANG)
+        return waited_pid != 0
+    except ChildProcessError:
+        return True
+    except Exception:
+        return False
+
+
+async def _force_reap_pty_process(pid: int):
+    """Reap or kill a PTY child after a grace period without blocking requests."""
+    import os as _os
+    import signal
+
+    await asyncio.sleep(0.5)
+    try:
+        waited_pid, _ = await asyncio.to_thread(_os.waitpid, pid, _os.WNOHANG)
+        if waited_pid:
+            return
+    except ChildProcessError:
+        return
     except Exception:
         pass
+
+    try:
+        _os.kill(pid, signal.SIGKILL)
+    except Exception:
+        return
+
+    try:
+        await asyncio.to_thread(_os.waitpid, pid, 0)
+    except Exception:
+        pass
+
+
+def _close_pty_session_later(session: dict):
+    pid = session.get("pid")
+    closed = _close_pty_session(session)
+    if pid and not closed:
+        asyncio.create_task(_force_reap_pty_process(pid))
 
 
 async def _expire_session(session_id: str):
@@ -1208,7 +1249,7 @@ async def _expire_session(session_id: str):
     async with _pty_lock:
         session = _terminal_sessions.get(session_id)
         if session and not session["alive"] and not session["is_attached"]:
-            _close_pty_session(session)
+            _close_pty_session_later(session)
             del _terminal_sessions[session_id]
             print(f"[TERMINAL] Session {session_id} expired and cleaned up", flush=True)
 
@@ -1238,7 +1279,7 @@ async def close_terminal_session(session_id: str):
         session = _terminal_sessions.pop(session_id, None)
     if not session:
         raise HTTPException(status_code=404, detail="Terminal session not found")
-    _close_pty_session(session)
+    _close_pty_session_later(session)
     return {"ok": True, "session_id": session_id}
 
 

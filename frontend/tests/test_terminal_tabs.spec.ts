@@ -22,6 +22,7 @@ function createTabs() {
     name: 'Terminal 1',
     sessionId: createTerminalSession(),
   }]
+  let activeId = tabs[0].id
   let counter = 1
 
   function addTerminal() {
@@ -29,17 +30,25 @@ function createTabs() {
     const tabId = `terminal-${counter}`
     const sessionId = createTerminalSession()
     tabs.push({ id: tabId, name: `Terminal ${counter}`, sessionId })
+    activeId = tabId
     return tabId
   }
 
   function closeTerminal(idx: number) {
     if (tabs.length === 1) return
     const tab = tabs[idx]
+    if (activeId === tab.id) {
+      activeId = (tabs[idx + 1] || tabs[idx - 1]).id
+    }
     tabs.splice(idx, 1)
     return tab.id
   }
 
-  return { tabs, addTerminal, closeTerminal }
+  function getActiveId() {
+    return activeId
+  }
+
+  return { tabs, addTerminal, closeTerminal, getActiveId }
 }
 
 describe('Terminal tab session isolation', () => {
@@ -69,6 +78,19 @@ describe('Terminal tab session isolation', () => {
     closeTerminal(0) // close first tab
 
     expect(tabs[0].sessionId).toBe(tab2Session)
+  })
+
+  it('closing active tab selects a remaining tab immediately', () => {
+    const { tabs, addTerminal, closeTerminal, getActiveId } = createTabs()
+    addTerminal()
+    addTerminal()
+    const activeBeforeClose = getActiveId()
+
+    closeTerminal(2)
+
+    expect(activeBeforeClose).toBe('terminal-3')
+    expect(getActiveId()).toBe('terminal-2')
+    expect(tabs.map(t => t.id)).toEqual(['terminal-1', 'terminal-2'])
   })
 
   it('tab switch does not modify sessionIds', () => {

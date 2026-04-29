@@ -2475,7 +2475,10 @@ async def trigger_review(body: dict):
     # 默认使用所有已注册的 provider
     available = list(_provider_registry._providers.keys())
     models = body.get("models", available)
-    pipeline = ReviewPipeline(_provider_registry, github, consensus, review_models=models)
+    pipeline = ReviewPipeline(
+        _provider_registry, github, consensus,
+        review_models=models, cost_tracker=_cost_tracker,
+    )
 
     try:
         review = await pipeline.review_pr(repo, int(pr_number))

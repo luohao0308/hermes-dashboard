@@ -33,8 +33,8 @@ providers:
   minimax:
     api_key_env: MINIMAX_API_KEY
     base_url: https://api.minimax.io/v1
-    default_model: MiniMax-M2.7
-    enabled: true
+    default_model: MiniMax-M2.7-highspeed
+    enabled: false
     models:
     - capabilities:
       - chat
@@ -96,7 +96,7 @@ providers:
   xiaomi:
     api_key_env: XIAOMI_API_KEY
     base_url: https://token-plan-cn.xiaomimimo.com/v1
-    default_model: MiMo-V2.5-Pro
+    default_model: mimo-v2.5-pro
     enabled: true
     models:
     - capabilities:
@@ -107,7 +107,7 @@ providers:
       cost_per_1k_input: 0.0
       cost_per_1k_output: 0.0
       display_name: MiMo-V2.5-Pro
-      id: MiMo-V2.5-Pro
+      id: mimo-v2.5-pro
     - capabilities:
       - chat
       - streaming
@@ -115,7 +115,7 @@ providers:
       cost_per_1k_input: 0.0
       cost_per_1k_output: 0.0
       display_name: MiMo-V2.5
-      id: MiMo-V2.5
+      id: mimo-v2.5
     - capabilities:
       - chat
       - streaming
@@ -124,7 +124,7 @@ providers:
       cost_per_1k_input: 0.0
       cost_per_1k_output: 0.0
       display_name: MiMo-V2.5-TTS
-      id: MiMo-V2.5-TTS
+      id: mimo-v2.5-tts
     - capabilities:
       - chat
       - streaming
@@ -134,7 +134,7 @@ providers:
       cost_per_1k_input: 0.0
       cost_per_1k_output: 0.0
       display_name: MiMo-V2.5-TTS-VoiceClone
-      id: MiMo-V2.5-TTS-VoiceClone
+      id: mimo-v2.5-tts-voiceclone
     - capabilities:
       - chat
       - streaming
@@ -144,4 +144,4 @@ providers:
       cost_per_1k_input: 0.0
       cost_per_1k_output: 0.0
       display_name: MiMo-V2.5-TTS-VoiceDesign
-      id: MiMo-V2.5-TTS-VoiceDesign
+      id: mimo-v2.5-tts-voicedesign

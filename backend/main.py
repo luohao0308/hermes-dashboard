@@ -2472,7 +2472,9 @@ async def trigger_review(body: dict):
 
     github = GitHubAdapter()
     consensus = ConsensusEngine(min_agreement=2)
-    models = body.get("models", ["openai", "anthropic"])
+    # 默认使用所有已注册的 provider
+    available = list(_provider_registry._providers.keys())
+    models = body.get("models", available)
     pipeline = ReviewPipeline(_provider_registry, github, consensus, review_models=models)
 
     try:

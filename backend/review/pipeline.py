@@ -1,9 +1,12 @@
 """Review pipeline: orchestrates multi-model review of a PR."""
 
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+
+logger = logging.getLogger("uvicorn")
 
 from provider.interface import ChatMessage, LLMProvider
 from provider.registry import ProviderRegistry
@@ -116,22 +119,26 @@ class ReviewPipeline:
         async def _run_provider(name: str) -> tuple[str, list[ReviewFinding]]:
             provider = self._registry.get(name)
             if provider is None:
+                logger.warning(f"[Review] Provider '{name}' not found, skipping")
                 return name, []
             config = self._registry.get_provider_config(name)
             model = config.get("default_model", "")
+            logger.info(f"[Review] Running review with {name} (model={model})")
             try:
                 findings = await self._review_with_provider(provider, diff, model)
+                logger.info(f"[Review] {name} returned {len(findings)} findings")
                 return name, findings
-            except Exception:
+            except Exception as e:
+                logger.error(f"[Review] {name} failed: {e}")
                 return name, []
 
         tasks = [_run_provider(name) for name in self._review_models]
         results = await asyncio.gather(*tasks)
 
         for name, findings in results:
+            models_used.append(name)
             if findings:
                 model_results[name] = findings
-                models_used.append(name)
 
         # Run consensus
         consensus_findings = self._consensus.find_consensus(model_results)

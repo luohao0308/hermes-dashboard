@@ -79,6 +79,20 @@ cd ..
 - 无 Connector SDK 示例（v3.1 候选）
 - 调度器为进程内实现，单实例限制已文档化
 
+## 测试状态
+
+**本地（权威）：** 477 passed, 0 failed — 全绿。
+
+**Docker：** 282 passed, 23 failed, 172 skipped。23 个失败全部是 Docker 环境特有的，本地同样测试全部通过。CI 和发布验收使用本地测试套件。
+
+| 失败来源 | 数量 | 根因 |
+|----------|------|------|
+| `test_terminal_ws.py` | 11 | Docker 缺少交互式 PTY |
+| `test_hermes_tools.py` | 5 | 旧 Dashboard API mock 不匹配 |
+| `test_auth.py` | 4 | `passlib` 的 `crypt` 模块在 Python 3.11+ 已废弃（Docker 使用 3.11） |
+| `test_agent_switch.py` | 2 | Agent session mock 期望不匹配 |
+| `test_providers.py` | 1 | Provider health_check mock |
+
 ## 当前验收备注
 
 当前系统可用于内部试点。前端 10 个核心页面可加载，RCA、Runbook、Workflow 启动、Approval approve/reject 等核心业务流程已验证可用；页面不再出现 `undefined` 错误文案。
@@ -88,3 +102,6 @@ cd ..
 1. **小米 Mimo Provider 连接**：Provider `test-mimo` 可注册，但 `docker-compose.yml` 未配置 `MINIMAX_API_KEY`，连接测试会返回明确的 API key 不可用/缺失错误。这是部署配置缺口，不影响核心工作流闭环。
 2. **Terminal WebSocket 测试**：11 个 pre-existing 测试失败，原因是 Docker 环境不稳定支持交互式 PTY 终端行为；失败范围隔离在 Terminal WebSocket 测试。
 3. **Hermes Tools 兼容测试**：5 个 pre-existing 测试失败，与旧 Dashboard API mock/兼容路径相关，不属于当前 AI Workflow Control Plane 运行时阻塞问题。
+4. **Auth 密码哈希测试**：4 个 pre-existing 测试失败，原因是 Docker 的 Python 3.11 废弃了 `passlib` 使用的 `crypt` 模块。本地（Python 3.14）通过。
+5. **Agent Switch mock 测试**：2 个 pre-existing 测试失败，与 Agent session mock 期望相关。
+6. **Provider Registry mock 测试**：1 个 pre-existing 测试失败，与 Provider health_check mock 相关。

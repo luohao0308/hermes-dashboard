@@ -94,6 +94,12 @@ class TestChatManagerAPI:
         assert [m.content for m in restored_session.messages] == ['hello', 'world']
 
 
+@pytest.fixture(autouse=True)
+def _mock_minimax_key(monkeypatch):
+    """Provide a dummy MINIMAX_API_KEY so agent loading doesn't fail."""
+    monkeypatch.setenv("MINIMAX_API_KEY", "test-key-for-ci")
+
+
 class TestRunChatAgentLogic:
     """Test _run_chat_agent uses session.agent_id."""
 

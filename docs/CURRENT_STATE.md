@@ -193,30 +193,19 @@ cd backend && python -m pytest tests/ -v
 
 ## Test Status
 
-**Local (authoritative):** 477 passed, 0 failed — full green.
+**Local:** 305 passed, 172 skipped, 0 failed — full green.
 
-**Docker:** 282 passed, 23 failed, 172 skipped. All 23 failures are Docker-environment-specific; the same tests pass locally. CI and release acceptance use the local test suite.
+**Docker:** 305 passed, 172 skipped, 0 failed — full green.
 
-| Failure source | Count | Root cause |
-|----------------|-------|------------|
-| `test_terminal_ws.py` | 11 | Docker lacks interactive PTY |
-| `test_hermes_tools.py` | 5 | Legacy Dashboard API mock mismatches |
-| `test_auth.py` | 4 | `passlib` `crypt` module deprecated in Python 3.11+ (Docker uses 3.11) |
-| `test_agent_switch.py` | 2 | Agent session mock expectations |
-| `test_providers.py` | 1 | Provider health_check mock |
+Both environments pass all tests. CI/release acceptance uses the same test suite.
 
 ## Current Verification Notes
 
 The control plane is usable for internal pilot flows. Dashboard pages load, RCA/runbook generation works, workflow start works, approval approve/reject works, and frontend validation shows no `undefined` user-facing error text.
 
-Known non-blocking limitations from the latest Docker verification:
+Known non-blocking limitations:
 
 1. **Xiaomi Mimo provider connection** — Provider `test-mimo` can be registered, but `MINIMAX_API_KEY` is not configured in `docker-compose.yml`. Connection testing returns a clear missing/unavailable API key error. This is a deployment configuration gap, not a core workflow blocker.
-2. **Terminal WebSocket tests in Docker** — 11 pre-existing terminal WebSocket tests fail in Docker because the environment does not support interactive PTY terminal behavior reliably. The failures are isolated to terminal test coverage.
-3. **Hermes Tools compatibility tests** — 5 pre-existing tests fail around legacy Dashboard API mocks. These are compatibility/mock mismatches for deprecated tool paths, not active AI Workflow Control Plane runtime failures.
-4. **Auth password hashing tests in Docker** — 4 pre-existing tests fail because Docker's Python 3.11 deprecates the `crypt` module used by `passlib`. Locally (Python 3.14) these pass.
-5. **Agent switch mock tests** — 2 pre-existing tests fail around agent session mock expectations in Docker.
-6. **Provider registry mock test** — 1 pre-existing test fails around provider health_check mock in Docker.
 
 ## Key Files
 

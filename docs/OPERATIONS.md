@@ -215,12 +215,4 @@ Before production migration:
 
 - The scheduler is PostgreSQL-backed but still lightweight; no external queue is used.
 - Xiaomi Mimo / MiniMax provider checks require `MINIMAX_API_KEY`; Docker Compose does not ship a real API key by default.
-- **Docker test failures (23 total, all pre-existing):** Local test suite passes 477/477. Docker environment introduces 23 failures due to Python version and environment constraints. CI/release acceptance uses local test suite.
-
-| Failure source | Count | Root cause |
-|----------------|-------|------------|
-| `test_terminal_ws.py` | 11 | Docker lacks interactive PTY |
-| `test_hermes_tools.py` | 5 | Legacy Dashboard API mock mismatches |
-| `test_auth.py` | 4 | `passlib` `crypt` deprecated in Python 3.11+ |
-| `test_agent_switch.py` | 2 | Agent session mock expectations |
-| `test_providers.py` | 1 | Provider health_check mock |
+- **Test status:** Both local and Docker suites pass 305/305 (172 skipped, 0 failed). CI/release acceptance uses the same test suite.

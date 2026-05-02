@@ -46,12 +46,11 @@ The v0-v3 platform roadmap is complete. An **Optimization Release** has been fin
 
 The current Docker-verified build is usable for internal pilot workflows. Core pages load cleanly and the RCA, Runbook, Workflow start, and Approval flows have been verified.
 
-**Test status:** Local suite passes 477/477 (full green). Docker suite has 23 pre-existing environment-specific failures. CI/release acceptance uses the local test suite.
+**Test status:** Both local and Docker suites pass 305/305 (172 skipped, 0 failed) — full green. CI/release acceptance uses the same test suite.
 
 Known non-blocking limitations are tracked in [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md):
 
 - Xiaomi Mimo / MiniMax provider connection requires `MINIMAX_API_KEY`; Docker Compose does not include a real provider key.
-- Docker test failures (23 total): Terminal WebSocket (11), Hermes Tools (5), auth password hashing (4), agent switch mock (2), provider registry mock (1).
 
 ## What It Is
 

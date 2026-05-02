@@ -36,7 +36,7 @@ CATEGORY_RULES = [
         re.compile(r"timeout|timed out|connection|refused|unreachable|502|503|504|网络|超时|不可达", re.IGNORECASE),
         "网络或上游服务不可达",
         [
-            "确认 Hermès Dashboard API、Gateway 和本地代理端口状态",
+            "确认上游 Runtime API、Gateway 和本地代理端口状态",
             "检查最近日志里的 HTTP 状态码和连接错误",
             "重试前先确认上游服务恢复，避免重复失败",
         ],

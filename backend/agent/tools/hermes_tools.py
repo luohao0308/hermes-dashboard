@@ -1,15 +1,15 @@
-"""SDK-ready Hermès read-only tool specs and executors."""
+"""SDK-ready control-plane read-only tool specs and executors."""
 
 from typing import Any, Awaitable, Callable, Optional
 
-HermesGet = Callable[[str, Optional[dict[str, Any]]], Awaitable[dict[str, Any]]]
+LegacyGet = Callable[[str, Optional[dict[str, Any]]], Awaitable[dict[str, Any]]]
 DashboardGet = Callable[[str, Optional[dict[str, Any]]], Awaitable[dict[str, Any]]]
 
 
 TOOL_SPECS: dict[str, dict[str, Any]] = {
     "get_status": {
         "name": "get_status",
-        "description": "Read Hermès gateway and runtime status.",
+        "description": "Read control-plane health and runtime status.",
         "risk": "read",
         "input_schema": {
             "type": "object",
@@ -19,7 +19,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
     },
     "search_sessions": {
         "name": "search_sessions",
-        "description": "Search Hermès sessions by text query.",
+        "description": "Search legacy sessions by text query. Returns empty data when legacy sessions are disabled.",
         "risk": "read",
         "input_schema": {
             "type": "object",
@@ -32,7 +32,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
     },
     "get_session_messages": {
         "name": "get_session_messages",
-        "description": "Read messages for a Hermès session.",
+        "description": "Read messages for a legacy session. Returns empty data when legacy sessions are disabled.",
         "risk": "read",
         "input_schema": {
             "type": "object",
@@ -45,7 +45,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
     },
     "get_logs": {
         "name": "get_logs",
-        "description": "Read recent Hermès logs.",
+        "description": "Read recent control-plane log summaries.",
         "risk": "read",
         "input_schema": {
             "type": "object",
@@ -69,7 +69,7 @@ TOOL_SPECS: dict[str, dict[str, Any]] = {
     },
     "create_alert_summary": {
         "name": "create_alert_summary",
-        "description": "Create a compact summary of current Hermès alerts for Monitor Agent triage.",
+        "description": "Create a compact summary of current control-plane alerts for Monitor Agent triage.",
         "risk": "read",
         "input_schema": {
             "type": "object",
@@ -99,7 +99,7 @@ def list_tool_specs() -> list[dict[str, Any]]:
 async def execute_tool(
     name: str,
     params: dict[str, Any],
-    hermes_get: HermesGet,
+    hermes_get: LegacyGet,
     dashboard_get: Optional[DashboardGet] = None,
 ) -> dict[str, Any]:
     if name not in TOOL_SPECS:
@@ -107,21 +107,17 @@ async def execute_tool(
     _validate_params(name, params)
 
     if name == "get_status":
-        return await hermes_get("/api/status", None)
+        if dashboard_get is None:
+            raise ValueError("Dashboard API access is required for get_status")
+        return await dashboard_get("/health", None)
     if name == "search_sessions":
-        return await hermes_get("/api/sessions/search", {"q": params["q"]})
+        return {"sessions": [], "total": 0, "legacy_disabled": True}
     if name == "get_session_messages":
-        return await hermes_get(f"/api/sessions/{params['session_id']}/messages", None)
+        return {"messages": [], "legacy_disabled": True}
     if name == "get_logs":
-        query = {
-            "lines": params.get("lines", 100),
-            "level": params.get("level", "INFO"),
-        }
-        if params.get("component"):
-            query["component"] = params["component"]
-        return await hermes_get("/api/logs", query)
+        return {"logs": [], "legacy_disabled": True}
     if name == "get_model_info":
-        return await hermes_get("/api/model/info", None)
+        return {"model": None, "legacy_disabled": True}
     if name == "create_alert_summary":
         if dashboard_get is None:
             raise ValueError("Dashboard API access is required for create_alert_summary")

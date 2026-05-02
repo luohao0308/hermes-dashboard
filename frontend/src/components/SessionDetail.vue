@@ -1,42 +1,42 @@
 <template>
   <section class="session-detail">
     <div class="detail-header">
-      <button class="back-btn" @click="emit('back')">返回</button>
+      <button class="back-btn" @click="emit('back')">{{ t('common.back') }}</button>
       <div class="title-block">
-        <span class="eyebrow">Session 复盘</span>
+        <span class="eyebrow">{{ t('session.title') }}</span>
         <h2>{{ title }}</h2>
         <span class="session-id">#{{ taskId }}</span>
       </div>
       <button class="refresh-btn" :disabled="loading" @click="emit('refresh')">
         <span v-if="loading" class="spinner"></span>
-        {{ loading ? '加载中' : '刷新' }}
+        {{ loading ? t('common.loading') : t('common.refresh') }}
       </button>
-      <button class="refresh-btn" @click="emit('open-chat')">继续对话</button>
+      <button class="refresh-btn" @click="emit('open-chat')">{{ t('session.continueChat') }}</button>
     </div>
 
     <div v-if="error" class="error-box">
-      <strong>详情加载失败</strong>
+      <strong>{{ t('session.loadFailed') }}</strong>
       <span>{{ error }}</span>
     </div>
 
     <div class="summary-grid">
       <div class="summary-card">
-        <span>状态</span>
+        <span>{{ t('session.status') }}</span>
         <strong>{{ statusText }}</strong>
         <small>{{ diagnosis }}</small>
       </div>
       <div class="summary-card">
-        <span>消息数</span>
+        <span>{{ t('session.messageCount') }}</span>
         <strong>{{ messageCount }}</strong>
         <small>{{ modelText }}</small>
       </div>
       <div class="summary-card">
-        <span>耗时</span>
+        <span>{{ t('session.duration') }}</span>
         <strong>{{ formatDuration(duration) }}</strong>
         <small>{{ timeRange }}</small>
       </div>
       <div class="summary-card">
-        <span>Token</span>
+        <span>{{ t('session.token') }}</span>
         <strong>{{ formatNumber(tokenTotal) }}</strong>
         <small>{{ inputTokens }} in / {{ outputTokens }} out</small>
       </div>
@@ -44,7 +44,7 @@
 
     <div class="analysis-row">
       <div class="analysis-panel">
-        <div class="panel-title">复盘判断</div>
+        <div class="panel-title">{{ t('session.reviewDiagnosis') }}</div>
         <div class="diagnosis-card" :class="diagnosisTone">
           <span class="diagnosis-dot"></span>
           <div>
@@ -58,28 +58,28 @@
       </div>
 
       <div class="analysis-panel">
-        <div class="panel-title">关联日志</div>
+        <div class="panel-title">{{ t('session.relatedLogs') }}</div>
         <div v-if="relatedLogs.length > 0" class="related-logs">
           <div v-for="(log, idx) in relatedLogs" :key="idx" class="related-log" :class="log.type">
             <span>{{ log.type }}</span>
             <p>{{ log.message }}</p>
           </div>
         </div>
-        <div v-else class="empty-block">当前抓取的日志中没有匹配到该 session</div>
+        <div v-else class="empty-block">{{ t('session.noMatchingLogs') }}</div>
       </div>
     </div>
 
     <div class="rca-panel">
       <div class="rca-header">
         <div>
-          <div class="panel-title">AI 失败原因分析</div>
+          <div class="panel-title">{{ t('session.rcaAnalysis') }}</div>
           <p>{{ rcaSubtitle }}</p>
         </div>
         <div class="rca-actions">
-          <button v-if="rcaReport" class="secondary-btn" @click="copyRcaReport">复制复盘</button>
+          <button v-if="rcaReport" class="secondary-btn" @click="copyRcaReport">{{ t('session.copyRca') }}</button>
           <button class="primary-btn" :disabled="rcaLoading" @click="emit('analyze-rca')">
             <span v-if="rcaLoading" class="spinner"></span>
-            {{ rcaLoading ? '分析中' : '一键分析失败原因' }}
+            {{ rcaLoading ? t('session.analyzing') : t('session.analyzeFailure') }}
           </button>
         </div>
       </div>
@@ -88,11 +88,11 @@
         <div class="rca-cause">
           <span>{{ categoryLabel(rcaReport.category) }}</span>
           <strong>{{ rcaReport.root_cause }}</strong>
-          <small>置信度 {{ rcaConfidenceText }}</small>
+          <small>{{ t('session.confidence') }} {{ rcaConfidenceText }}</small>
         </div>
         <div class="rca-columns">
           <div>
-            <h4>证据链</h4>
+            <h4>{{ t('session.evidenceChain') }}</h4>
             <article v-for="(item, idx) in rcaReport.evidence" :key="idx" class="evidence-item" :class="item.severity">
               <span>{{ item.source }}</span>
               <strong>{{ item.title }}</strong>
@@ -100,30 +100,30 @@
             </article>
           </div>
           <div>
-            <h4>下一步动作</h4>
+            <h4>{{ t('session.nextActions') }}</h4>
             <ol class="action-list">
               <li v-for="action in rcaReport.next_actions" :key="action">{{ action }}</li>
             </ol>
           </div>
         </div>
       </div>
-      <div v-else class="empty-block">尚未生成 RCA，点击按钮后会聚合 session、日志和 trace 证据。</div>
+      <div v-else class="empty-block">{{ t('session.noRca') }}</div>
     </div>
 
     <div class="runbook-panel">
       <div class="rca-header">
         <div>
-          <div class="panel-title">Runbook 自动化</div>
+          <div class="panel-title">{{ t('session.runbook') }}</div>
           <p>{{ runbookSubtitle }}</p>
         </div>
         <div class="rca-actions">
-          <button v-if="runbookReport" class="secondary-btn" @click="copyRunbook">复制 Runbook</button>
+          <button v-if="runbookReport" class="secondary-btn" @click="copyRunbook">{{ t('session.copyRunbook') }}</button>
           <button v-if="runbookReport" class="secondary-btn" :disabled="exportLoading" @click="emit('export-markdown')">
-            {{ exportLoading ? '导出中' : '导出 Markdown' }}
+            {{ exportLoading ? t('session.exporting') : t('session.exportMarkdown') }}
           </button>
           <button class="primary-btn" :disabled="runbookLoading" @click="emit('generate-runbook')">
             <span v-if="runbookLoading" class="spinner"></span>
-            {{ runbookLoading ? '生成中' : '生成 Runbook' }}
+            {{ runbookLoading ? t('session.generating') : t('session.generateRunbook') }}
           </button>
         </div>
       </div>
@@ -149,13 +149,13 @@
           </div>
         </div>
       </div>
-      <div v-else class="empty-block">尚未生成 Runbook，会基于 RCA、trace 和 session 摘要生成复盘清单。</div>
+      <div v-else class="empty-block">{{ t('session.noRunbook') }}</div>
     </div>
 
     <TraceTimeline :run="traceRun" :spans="traceSpans" />
 
     <div class="timeline-panel">
-      <div class="panel-title">消息时间线</div>
+      <div class="panel-title">{{ t('session.messageTimeline') }}</div>
       <div v-if="loading" class="skeleton-list">
         <div v-for="i in 4" :key="i" class="skeleton-row"></div>
       </div>
@@ -171,7 +171,7 @@
           </div>
         </article>
       </div>
-      <div v-else class="empty-block">暂无消息记录</div>
+      <div v-else class="empty-block">{{ t('session.noMessages') }}</div>
     </div>
   </section>
 </template>
@@ -179,120 +179,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import TraceTimeline from './TraceTimeline.vue'
+import type { HistoryItem, LogItem, SessionDetailData, TraceRun, TraceSpan, RcaReport, RunbookReport, RunbookStep } from '../types'
+import { useI18n } from "vue-i18n"
+import { formatDate, formatDuration, formatNumber } from '../composables/useFormatters'
 
-interface HistoryItem {
-  task_id: string
-  name: string
-  completed_at: string
-  duration: number
-  status: 'success' | 'failed' | 'cancelled'
-  message_count?: number
-  model?: string
-  input_tokens?: number
-  output_tokens?: number
-}
-
-interface LogItem {
-  timestamp: string
-  message: string
-  type: 'info' | 'warning' | 'error' | 'debug'
-}
-
-interface MessageItem {
-  role?: string
-  content?: string
-  text?: string
-  message?: string
-  timestamp?: string
-  created_at?: string
-}
-
-interface SessionDetailData {
-  task_id?: string
-  name?: string
-  status?: string
-  messages?: MessageItem[]
-  message_count?: number
-  model?: string
-  started_at?: string
-  completed_at?: string
-  duration?: number
-  input_tokens?: number
-  output_tokens?: number
-  end_reason?: string
-}
-
-interface TraceRun {
-  run_id: string
-  session_id: string
-  agent_id: string
-  linked_session_id?: string | null
-  input_summary?: string
-  status: string
-  started_at: string
-  completed_at?: string | null
-}
-
-interface TraceSpan {
-  span_id: string
-  run_id: string
-  span_type: string
-  title: string
-  summary?: string
-  agent_name?: string | null
-  status: string
-  started_at: string
-  completed_at?: string | null
-  metadata?: Record<string, any>
-}
-
-interface RcaEvidence {
-  source: string
-  title: string
-  detail: string
-  severity: 'high' | 'medium' | 'low'
-  timestamp?: string | null
-  ref?: string | null
-}
-
-interface RcaReport {
-  report_id: string
-  session_id: string
-  run_id?: string | null
-  category: string
-  root_cause: string
-  confidence: number
-  evidence: RcaEvidence[]
-  next_actions: string[]
-  low_confidence: boolean
-  generated_at: string
-  analyzer: string
-}
-
-interface RunbookReport {
-  runbook_id: string
-  session_id: string
-  run_id?: string | null
-  rca_report_id?: string | null
-  title: string
-  severity: string
-  summary: string
-  checklist: string[]
-  execution_steps?: RunbookStep[]
-  evidence_count: number
-  markdown: string
-  generated_at: string
-  generator: string
-}
-
-interface RunbookStep {
-  step_id: string
-  label: string
-  action_type: string
-  requires_confirmation: boolean
-  status: string
-}
-
+const { t } = useI18n()
 const props = defineProps<{
   taskId: string
   item: HistoryItem | null
@@ -324,11 +215,11 @@ const title = computed(() => props.detail?.name || props.item?.name || `Session 
 const status = computed(() => props.detail?.status || props.item?.status || 'completed')
 const statusText = computed(() => {
   const map: Record<string, string> = {
-    running: '运行中',
-    completed: '已完成',
-    success: '成功',
-    failed: '失败',
-    cancelled: '已取消',
+    running: t('common.running'),
+    completed: t('common.success'),
+    success: t('common.success'),
+    failed: t('common.error'),
+    cancelled: t('common.disabled'),
   }
   return map[status.value] || status.value
 })
@@ -336,7 +227,7 @@ const statusText = computed(() => {
 const messageCount = computed(() =>
   props.detail?.message_count ?? props.detail?.messages?.length ?? props.item?.message_count ?? 0
 )
-const modelText = computed(() => props.detail?.model || props.item?.model || '模型未确认')
+const modelText = computed(() => props.detail?.model || props.item?.model || t('session.modelUnconfirmed'))
 const duration = computed(() => props.detail?.duration ?? props.item?.duration ?? 0)
 const inputTokens = computed(() => props.detail?.input_tokens ?? props.item?.input_tokens ?? 0)
 const outputTokens = computed(() => props.detail?.output_tokens ?? props.item?.output_tokens ?? 0)
@@ -369,28 +260,28 @@ const hasErrorSignal = computed(() =>
 )
 
 const diagnosis = computed(() => {
-  if (status.value === 'running') return '任务仍在运行'
-  if (props.detail?.end_reason && props.detail.end_reason !== 'completed') return `结束原因：${props.detail.end_reason}`
-  if (hasErrorSignal.value) return '发现错误信号'
-  if (messageCount.value === 0) return '缺少消息记录'
-  return '未发现明显失败信号'
+  if (status.value === 'running') return t('session.taskRunning')
+  if (props.detail?.end_reason && props.detail.end_reason !== 'completed') return t('session.endReason') + '：' + props.detail.end_reason
+  if (hasErrorSignal.value) return t('session.errorSignal')
+  if (messageCount.value === 0) return t('session.noMessages_')
+  return t('session.noFailure')
 })
 
 const diagnosisHint = computed(() => {
-  if (status.value === 'running') return '建议观察最近输出时间，必要时打开终端或日志确认是否卡住。'
-  if (hasErrorSignal.value) return '建议优先查看关联日志和最后几条消息，确认失败发生在模型、工具还是网络层。'
-  if (messageCount.value === 0) return 'Hermès 没有返回消息，可能是刚启动、会话被清理，或 API 未返回明细。'
-  return '该 session 看起来正常，可以继续查看消息时间线做人工复盘。'
+  if (status.value === 'running') return t('session.runningHint')
+  if (hasErrorSignal.value) return t('session.errorHint')
+  if (messageCount.value === 0) return t('session.noMessageHint')
+  return t('session.normalHint')
 })
 
 const signals = computed(() => {
   const result = []
-  if (modelText.value !== '模型未确认') result.push(`模型：${modelText.value}`)
-  if (messageCount.value > 0) result.push(`${messageCount.value} 条消息`)
+  if (modelText.value !== t('session.modelUnconfirmed')) result.push(t('trace.model') + '：' + modelText.value)
+  if (messageCount.value > 0) result.push(messageCount.value + ' ' + t('session.messages'))
   if (tokenTotal.value > 0) result.push(`${formatNumber(tokenTotal.value)} tokens`)
-  if (relatedLogs.value.length > 0) result.push(`${relatedLogs.value.length} 条关联日志`)
+  if (relatedLogs.value.length > 0) result.push(`${relatedLogs.value.length} ${t('session.relatedLogs_')}`)
   if (props.detail?.end_reason) result.push(`end_reason=${props.detail.end_reason}`)
-  return result.length > 0 ? result : ['暂无额外信号']
+  return result.length > 0 ? result : [t('session.noExtraSignals')]
 })
 
 const rcaConfidenceText = computed(() => {
@@ -399,16 +290,16 @@ const rcaConfidenceText = computed(() => {
 })
 
 const rcaSubtitle = computed(() => {
-  if (props.rcaLoading) return '正在聚合 session、日志和 trace'
-  if (props.rcaReport?.low_confidence) return '当前证据不足，建议人工核对原始 trace'
-  if (props.rcaReport) return `由 ${props.rcaReport.analyzer} 生成`
-  return '生成可复制的 root cause、证据链和后续动作'
+  if (props.rcaLoading) return t('session.rcaAggregating')
+  if (props.rcaReport?.low_confidence) return t('session.rcaLowConfidence')
+  if (props.rcaReport) return t('session.rcaGenerated', { analyzer: props.rcaReport.analyzer })
+  return t('session.rcaDefault')
 })
 
 const runbookSubtitle = computed(() => {
-  if (props.runbookLoading) return '正在整理复盘摘要、证据和处理步骤'
-  if (props.runbookReport) return `${props.runbookReport.severity} / ${props.runbookReport.checklist.length} 个待办`
-  return '生成可复制到 issue、PR 或 Notion 的执行清单'
+  if (props.runbookLoading) return t('session.runbookAggregating')
+  if (props.runbookReport) return t('session.runbookTodos', { severity: props.runbookReport.severity, count: props.runbookReport.checklist.length })
+  return t('session.runbookDefault')
 })
 
 const runbookSteps = computed<RunbookStep[]>(() => {
@@ -424,18 +315,18 @@ const runbookSteps = computed<RunbookStep[]>(() => {
 })
 
 function stepButtonLabel(step: RunbookStep): string {
-  if (step.status === 'confirmed') return '执行动作'
-  if (step.status === 'completed') return '已完成'
-  if (step.status === 'blocked_unsafe') return '已阻止'
-  return '确认执行'
+  if (step.status === 'confirmed') return t('session.stepExecute')
+  if (step.status === 'completed') return t('session.stepCompleted')
+  if (step.status === 'blocked_unsafe') return t('session.stepBlocked')
+  return t('session.stepConfirm')
 }
 
 const timeRange = computed(() => {
   const start = props.detail?.started_at
   const end = props.detail?.completed_at || props.item?.completed_at
-  if (!start && !end) return '时间未确认'
-  if (!start) return `完成 ${formatDate(end)}`
-  if (!end) return `开始 ${formatDate(start)}`
+  if (!start && !end) return t('session.timeUnconfirmed')
+  if (!start) return t('session.completedAt', { date: formatDate(end) })
+  if (!end) return t('session.startedAt', { date: formatDate(start) })
   return `${formatDate(start)} - ${formatDate(end)}`
 })
 
@@ -449,50 +340,22 @@ function normalizeRole(role?: string): string {
 
 function roleLabel(role: string): string {
   const map: Record<string, string> = {
-    user: '用户',
-    assistant: 'Agent',
-    system: '系统',
-    tool: '工具',
+    user: t('session.roleUser'),
+    assistant: t('session.roleAssistant'),
+    system: t('session.roleSystem'),
+    tool: t('session.roleTool'),
   }
   return map[role] || role
 }
 
-function formatDate(timestamp?: string): string {
-  if (!timestamp) return '时间未知'
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return timestamp
-  return date.toLocaleString('zh-CN', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function formatDuration(seconds: number): string {
-  if (!seconds) return '0s'
-  if (seconds < 60) return `${seconds}s`
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  if (mins < 60) return `${mins}m ${secs}s`
-  const hours = Math.floor(mins / 60)
-  return `${hours}h ${mins % 60}m`
-}
-
-function formatNumber(value: number): string {
-  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`
-  return String(value)
-}
-
 function categoryLabel(category: string): string {
   const map: Record<string, string> = {
-    tool: '工具',
-    network: '网络',
-    model: '模型',
-    config: '配置',
-    data: '数据',
-    unknown: '未知',
+    tool: t('session.roleTool'),
+    network: t('session.catNetwork'),
+    model: t('session.catModel'),
+    config: t('session.catConfig'),
+    data: t('session.catData'),
+    unknown: t('session.catUnknown'),
   }
   return map[category] || category
 }

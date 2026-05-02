@@ -31,6 +31,15 @@ CREATE INDEX IF NOT EXISTS idx_reviews_started ON reviews(started_at);
 """
 
 
+_review_repo = None
+
+
+def configure_review_repository(repo) -> None:
+    """Configure PG repository for read and write operations."""
+    global _review_repo
+    _review_repo = repo
+
+
 class ReviewStore:
     """Persists PR review results to SQLite."""
 
@@ -45,6 +54,9 @@ class ReviewStore:
 
     def save(self, review: PRReview) -> None:
         """Insert or update a review."""
+        if _review_repo is not None:
+            _review_repo.save(review)
+            return
         with sqlite3.connect(str(self._db_path)) as conn:
             conn.execute(
                 """INSERT OR REPLACE INTO reviews
@@ -70,6 +82,10 @@ class ReviewStore:
 
     def get(self, review_id: str) -> Optional[PRReview]:
         """Get a review by ID."""
+        if _review_repo is not None:
+            result = _review_repo.get(review_id)
+            if result is not None:
+                return result
         with sqlite3.connect(str(self._db_path)) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
@@ -87,6 +103,10 @@ class ReviewStore:
         offset: int = 0,
     ) -> list[PRReview]:
         """List reviews with optional filters."""
+        if _review_repo is not None:
+            result = _review_repo.list_reviews(repo, status, limit, offset)
+            if result:
+                return result
         query = "SELECT * FROM reviews WHERE 1=1"
         params: list = []
         if repo:
@@ -105,6 +125,8 @@ class ReviewStore:
 
     def get_stats(self) -> dict:
         """Get aggregate review statistics."""
+        if _review_repo is not None:
+            return _review_repo.get_stats()
         with sqlite3.connect(str(self._db_path)) as conn:
             total = conn.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]
             completed = conn.execute(

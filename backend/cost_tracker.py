@@ -37,6 +37,15 @@ CREATE INDEX IF NOT EXISTS idx_usage_review ON api_usage(review_id);
 """
 
 
+_cost_repo = None
+
+
+def configure_cost_repository(repo) -> None:
+    """Configure PG repository for read and write operations."""
+    global _cost_repo
+    _cost_repo = repo
+
+
 class CostTracker:
     """Tracks API usage costs and budget limits."""
 
@@ -62,6 +71,12 @@ class CostTracker:
         status: str = "success",
     ) -> str:
         """Record a single API usage event. Returns usage_id."""
+        if _cost_repo is not None:
+            return _cost_repo.record_usage(
+                provider, model, input_tokens, output_tokens,
+                cost_per_1k_input, cost_per_1k_output,
+                review_id, latency_ms, status,
+            )
         cost = (input_tokens / 1000 * cost_per_1k_input) + (
             output_tokens / 1000 * cost_per_1k_output
         )
@@ -89,6 +104,8 @@ class CostTracker:
 
     def get_summary(self, period: str = "daily") -> dict:
         """Get cost summary for a period: daily, weekly, monthly."""
+        if _cost_repo is not None:
+            return _cost_repo.get_summary(period)
         days = {"daily": 1, "weekly": 7, "monthly": 30}.get(period, 1)
         with sqlite3.connect(str(self._db_path)) as conn:
             row = conn.execute(
@@ -110,6 +127,8 @@ class CostTracker:
 
     def get_breakdown(self, days: int = 30) -> list[dict]:
         """Get cost breakdown by provider and model."""
+        if _cost_repo is not None:
+            return _cost_repo.get_breakdown(days)
         with sqlite3.connect(str(self._db_path)) as conn:
             rows = conn.execute(
                 """SELECT provider, model,
@@ -128,6 +147,8 @@ class CostTracker:
 
     def get_trend(self, days: int = 30) -> list[dict]:
         """Get daily cost trend."""
+        if _cost_repo is not None:
+            return _cost_repo.get_trend(days)
         with sqlite3.connect(str(self._db_path)) as conn:
             rows = conn.execute(
                 """SELECT date(timestamp) as day, SUM(total_cost_usd) as cost
@@ -144,6 +165,9 @@ class CostTracker:
         alert_threshold: float = 0.8,
     ) -> None:
         """Set a budget limit."""
+        if _cost_repo is not None:
+            _cost_repo.set_budget(scope, limit_usd, provider, alert_threshold)
+            return
         with sqlite3.connect(str(self._db_path)) as conn:
             conn.execute(
                 "DELETE FROM budget_limits WHERE scope = ? AND COALESCE(provider, '') = COALESCE(?, '')",
@@ -157,6 +181,8 @@ class CostTracker:
 
     def check_alerts(self) -> list[dict]:
         """Check if any budget thresholds are exceeded."""
+        if _cost_repo is not None:
+            return _cost_repo.check_alerts()
         alerts = []
         with sqlite3.connect(str(self._db_path)) as conn:
             budgets = conn.execute(

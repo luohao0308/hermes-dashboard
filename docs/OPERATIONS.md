@@ -1,61 +1,219 @@
-# Hermès Dashboard Operations
+# Operations Guide
 
 ## Runtime Requirements
 
-- Node.js 20+ for frontend development and production builds.
-- Python 3.11 for backend development, tests, and Docker parity.
-- Hermès Dashboard API reachable at `HERMES_API_URL` (default `http://localhost:9119`).
+- Python 3.9+
+- Node.js 20+
+- PostgreSQL 14+ recommended, PostgreSQL 16 used by local Docker Compose
+- `ENCRYPTION_KEY` required when `ENVIRONMENT=production`
 
-## Local Verification
+## Local Development
+
+```bash
+cp .env.example .env
+docker compose up -d postgres
+
+cd backend
+alembic upgrade head
+
+cd ..
+./start.sh
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Backend:
+
+```bash
+cd backend
+uvicorn main:app --reload --port 8000
+```
+
+## Database Operations
+
+Run migrations:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+Create a migration:
+
+```bash
+cd backend
+alembic revision --autogenerate -m "description"
+```
+
+Check current migration:
+
+```bash
+cd backend
+alembic current
+```
+
+Rollback one migration:
+
+```bash
+cd backend
+alembic downgrade -1
+```
+
+## Background Workers
+
+Workflow scheduler:
+
+```bash
+cd backend
+python -m workers.workflow_worker --poll-interval 2 --stale-lock-seconds 300
+```
+
+Retention worker:
+
+```bash
+cd backend
+python -m workers.retention_worker --dry-run
+python -m workers.retention_worker
+```
+
+## Security Operations
+
+Generate encryption key:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Production must set:
+
+```bash
+ENVIRONMENT=production
+ENCRYPTION_KEY=<fernet-key>
+DATABASE_URL=<postgresql-url>
+```
+
+Provider connection tests that require hosted model APIs also need their
+provider-specific keys in the runtime environment. For example, Xiaomi Mimo /
+MiniMax providers require:
+
+```bash
+MINIMAX_API_KEY=<provider-api-key>
+```
+
+If `test-mimo` is registered without `MINIMAX_API_KEY`, the Provider connection
+test is expected to fail with a clear missing/unavailable key error.
+
+Connector webhooks should use HMAC-SHA256 signatures documented in `docs/CONNECTOR_PROTOCOL.md`.
+
+## Verification
+
+Frontend:
 
 ```bash
 cd frontend
 npx vue-tsc --noEmit
 npm run test:unit
 npm run build
-
-cd ..
-python -m py_compile backend/main.py backend/agent/chat_manager.py backend/agent/tracing_store.py backend/agent/tools/hermes_tools.py backend/agent/guardrails.py backend/agent/rca.py backend/agent/runbook.py backend/agent/config_evaluator.py backend/agent/config_history.py backend/agent/exporter.py
-pytest backend/tests/test_hermes_tools.py backend/tests/test_tracing_store.py backend/tests/test_rca.py backend/tests/test_runbook.py backend/tests/test_config_evaluator.py backend/tests/test_config_history.py backend/tests/test_exporter.py backend/tests/test_agent_switch.py::TestChatManagerAPI -q
 ```
 
-## Runtime Data
+Backend without PostgreSQL integration database:
 
-- Chat sessions persist to SQLite at `backend/data/chat_sessions.sqlite3` by default.
-- Override with `CHAT_DB_PATH=/path/to/chat.sqlite3`.
-- Agent run traces persist to SQLite at `backend/data/agent_traces.sqlite3` by default.
-- Override with `TRACE_DB_PATH=/path/to/agent_traces.sqlite3`.
-- RCA reports and generated runbooks are stored in the same trace database.
-- Read them with `GET /api/sessions/{session_id}/rca` and `GET /api/sessions/{session_id}/runbook`.
-- Search trace/RCA/runbook records with `GET /api/agent/knowledge/search?q=...`.
-- Confirm runbook steps with `POST /api/sessions/{session_id}/runbook/steps/{step_id}/confirm`, then run the conservative action runner with `/execute`.
-- Agent run metrics can be read with `GET /api/agent/evals/summary`.
-- Offline eval samples can be read with `GET /api/agent/evals/samples`.
-- Offline eval samples can be scored with `POST /api/agent/evals/run`.
-- Chat input and RCA output are validated by Pydantic guardrails before Agent execution or report persistence.
-- Guardrail approval events persist to `backend/data/guardrail_approval_events.json` by default. Override with `GUARDRAIL_EVENTS_PATH=/path/to/events.json`.
-- Agent config changes are appended to `backend/data/agent_config_history.jsonl` by default.
-- Markdown exports are written to `backend/data/exports` by default. Override with `HERMES_EXPORT_DIR=/path/to/export`.
-- Point `HERMES_EXPORT_DIR` to an Obsidian vault folder to turn session runbooks into local notes.
-- Runtime database files and PID files are ignored by git.
+```bash
+cd backend
+python -m pytest tests/ -v
+```
 
-## Security Notes
+Backend with PostgreSQL integration database:
 
-- Never commit real `.env` files or Notion/API tokens.
-- Browser terminal high-risk commands are blocked before execution unless re-entered with `confirm `.
-- Agent tool calls with `confirm` policy create dashboard approval events and require `POST /api/agent/guardrails/{event_id}/approve` before execution.
-- The terminal session API supports listing and explicit PTY shutdown:
-  - `GET /api/terminal/sessions`
-  - `DELETE /api/terminal/sessions/{session_id}`
+```bash
+createdb ai_workflow_test
+cd backend
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ai_workflow_test \
+  python -m pytest tests/ -v
+```
 
-## Feature Smoke Test
+Migration smoke test:
 
-1. Open the Dashboard and confirm AgentOps overview renders.
-2. Confirm Alerts panel renders and actions navigate to logs/session/terminal.
-3. Open History, click details, and verify `#/sessions/{id}` loads a replay page.
-4. On a session replay page, click "一键分析失败原因" and confirm an RCA report appears.
-5. Click "生成 Runbook" and confirm a Markdown runbook appears.
-6. Click "导出 Markdown" and confirm the export toast shows a local path.
-7. On the same replay page, click "继续对话" and confirm Agent Chat opens with the session linked.
-8. Open Agent Chat, create a session, send a message, restart backend, and confirm the session appears again.
-9. Open System and confirm model/config/skills/plugins/guardrail approvals/cron sections render.
+```bash
+createdb ai_workflow_migration_check
+cd backend
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ai_workflow_migration_check \
+  alembic upgrade head
+```
+
+## Health Checks
+
+| Component | Check |
+|---|---|
+| API | `GET /health` returns `status: healthy` |
+| SSE | `GET /sse` connects |
+| PostgreSQL | `/health` → `database.status == "connected"` and `migration_version` present |
+| Scheduler worker | `/health` → `workers["scheduler-worker"].status == "alive"` |
+| Retention worker | `/health` → `workers["retention-worker"].status == "alive"` |
+| Connector ingestion | signed test event accepted and audit logged |
+| Metrics | `GET /api/metrics` returns run/approval/task/worker stats |
+
+### Worker Heartbeat Files
+
+Workers write UTC ISO-8601 timestamps to `/tmp` after each cycle. The `/health` and `/api/metrics` endpoints read these files to determine worker liveness.
+
+| Worker | Heartbeat File Path | Config Env Var |
+|---|---|---|
+| Scheduler worker | `/tmp/hermes_scheduler_worker_heartbeat` | `SCHEDULER_HEARTBEAT_PATH` |
+| Retention worker | `/tmp/hermes_retention_worker_heartbeat` | `RETENTION_HEARTBEAT_PATH` |
+
+Stale threshold: `WORKER_HEARTBEAT_STALE_SECONDS` (default: 120).
+
+Heartbeat status classification:
+
+| Status | Meaning |
+|---|---|
+| `alive` | File exists and was written less than 120 seconds ago |
+| `stale` | File exists but was written 120+ seconds ago |
+| `unknown` / `missing` | File does not exist (worker never started or was cleaned up) |
+| `error` | File exists but could not be read (permissions, etc.) |
+
+The `/health` endpoint returns `status: degraded` when `database.status != "connected"` or any worker has `status: "error"`.
+
+## Data Storage
+
+Primary runtime data belongs in PostgreSQL.
+
+Legacy SQLite files may still exist under `backend/data/` for compatibility with old session/chat/cost/review flows. New platform features must not introduce new SQLite primary stores.
+
+## Backup and Restore
+
+**Detailed runbook:** [BACKUP_RESTORE_RUNBOOK.md](BACKUP_RESTORE_RUNBOOK.md)
+
+Quick backup:
+
+```bash
+pg_dump "$DATABASE_URL" --format=custom --compress=9 --file=backup_$(date +%Y%m%d).dump
+```
+
+Quick restore:
+
+```bash
+pg_restore "$DATABASE_URL" --no-owner backup.dump
+```
+
+Before production migration:
+
+1. Take a fresh backup.
+2. Run `alembic upgrade head` in staging.
+3. Run smoke tests.
+4. Apply migration in production.
+5. Verify API, workers, connector ingestion, and approval flow.
+
+## Known Operational Gaps
+
+- The scheduler is PostgreSQL-backed but still lightweight; no external queue is used.
+- Xiaomi Mimo / MiniMax provider checks require `MINIMAX_API_KEY`; Docker Compose does not ship a real API key by default.
+- Terminal WebSocket test coverage has 11 pre-existing Docker/PTTY-related failures; this does not block the core control-plane flows.
+- Legacy Hermes Tools compatibility tests have 5 pre-existing Dashboard API mock failures; active runtime paths no longer depend on the old Dashboard bridge.

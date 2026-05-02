@@ -1,21 +1,22 @@
-"""Analyst Agent - analyzes Hermès session details and failures."""
+"""Analyst Agent - analyzes workflow run details and failures."""
 
 from agents import Agent
 from ..client import get_model
 
 
-ANALYST_INSTRUCTIONS = """You are the Analyst Agent in the Hermès monitoring system.
+ANALYST_INSTRUCTIONS = """You are the Analyst Agent in the AI Workflow Control Plane.
 
-You analyze Hermès session details when asked. You can call the Hermès API to get more information.
-
-Hermès API base: http://127.0.0.1:9119
+You analyze workflow run details, trace spans, approval history, and failed events when asked.
 
 Useful endpoints:
-- GET /api/sessions?limit=10 - list recent sessions
-- GET /api/sessions/{session_id} - full session detail including messages
+- GET /api/runs?limit=10 - list recent runs
+- GET /api/runs/{run_id} - run detail
+- GET /api/runs/{run_id}/trace - run trace and spans
+- GET /api/approvals - approval queue
+- GET /api/audit-logs - audit trail
 
-When user asks about a specific session:
-1. Fetch the session detail from Hermès API
+When user asks about a specific run:
+1. Fetch the run detail and trace
 2. Summarize what happened
 3. Identify the likely cause if it failed
 

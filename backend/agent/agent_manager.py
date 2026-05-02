@@ -126,7 +126,6 @@ class _AgentRegistry:
 
 
 _agent_registry = _AgentRegistry()
-_agent_registry.load()
 
 
 def get_main_agent() -> Agent:

@@ -1,141 +1,138 @@
-# Hermès Dashboard 架构文档
+# Architecture — AI Workflow Control Plane
 
-## 系统架构图
+## Status
 
-![Architecture Diagram](./architecture-diagram.html)
+This document describes the current v3 release-ready architecture. Historical Hermès Bridge and code-review-specific architecture documents are archived under `docs/archive/`.
 
-## 技术栈
+## System Overview
 
-### 后端
-- **FastAPI** - Python Web 框架
-- **SSE (Server-Sent Events)** - 实时事件流
-- **uvicorn** - ASGI 服务器
-- **pytest** - 自动化测试
-- **httpx** - 异步 HTTP 客户端（代理 Hermes Dashboard API）
-
-### 前端
-- **Vue 3** - 渐进式 JavaScript 框架
-- **Vite** - 快速构建工具
-- **TailwindCSS** - 原子化 CSS
-- **TypeScript** - 类型安全
-
-## 系统组件
-
-### 1. Hermès Agent
-- 运行的 CLI 实例
-- 包含内置 Dashboard（端口 9119）
-- 提供 REST API：`/api/status`、`/api/sessions`、`/api/tasks`、`/api/logs` 等
-
-### 2. Bridge Server（后端代理）
-- FastAPI 应用，端口：8000
-- 代理 Hermes Dashboard API（:9119），解决 CORS 问题
-- SSE 端点 `/sse` 转发 Hermès 实时事件
-- 关键端点：
-  - `GET /api/status` - 代理 `/api/status`
-  - `GET /api/tasks` - 代理 `/api/tasks`
-  - `GET /api/tasks/{id}` - 代理 `/api/tasks/{id}`（先验证 session 存在）
-  - `GET /api/logs` - 代理 `/api/logs`
-  - `GET /sse` - SSE 事件流
-
-### 3. Vue Frontend
-- 端口：5173
-- 通过后端代理获取 Hermes 数据
-- 组件：
-  - TaskPanel.vue - 当前任务状态
-  - LogStream.vue - 实时日志流
-  - HistoryList.vue - 历史任务列表
-
-## 数据流
-
-```
-Hermès Agent (Dashboard :9119)
-    │
-    │ REST API (HTTP)
-    ▼
-Bridge Server (FastAPI :8000)  ←── 代理模式，消除 CORS
-    │
-    │ SSE Stream / HTTP API
-    ▼
-Vue Frontend (:5173)
-    │
-    │ HTTP
-    ▼
-Web Browser
+```mermaid
+flowchart LR
+  Browser["Vue 3 Control Plane UI"] --> API["FastAPI Control Plane API"]
+  API --> PG[("PostgreSQL")]
+  API --> SSE["SSE / WebSocket Streams"]
+  API --> Conn["Connector Ingestion API"]
+  Scheduler["Workflow Scheduler Worker"] --> PG
+  Retention["Retention Worker"] --> PG
+  External["External Runtimes / CI / Agent Systems"] --> Conn
+  Conn --> PG
 ```
 
-### 代理模式说明
-- 前端直接请求后端（:8000）
-- 后端转发请求到 Hermes Dashboard（:9119）
-- 解决浏览器 CORS 跨域限制
-- 后端自动从 Dashboard HTML 页面提取 session token
+## Core Responsibilities
 
-## GitHub 工作流
+| Layer | Responsibility |
+|---|---|
+| Frontend | Workflow observability, approvals, RCA/runbook, eval/config, workflows, enterprise admin |
+| FastAPI API | REST APIs, connector ingestion, RBAC, webhook verification, audit logging |
+| PostgreSQL | Primary storage for runs, traces, workflows, approvals, artifacts, evals, users, teams, environments |
+| Scheduler Worker | Durable workflow execution, task claiming, retry/backoff, timeout, dead-letter |
+| Retention Worker | Policy-based cleanup with dry-run and audit logging |
+| Connectors | Runtime-agnostic event ingestion from external systems |
 
+## Primary Domain Model
+
+The platform is runtime-agnostic. The current core objects are:
+
+- Runtime
+- Run
+- Task
+- TraceSpan
+- ToolCall
+- Approval
+- Artifact
+- EvalResult
+- WorkflowDefinition
+- WorkflowNode
+- WorkflowEdge
+- ConnectorConfig
+- User / Team / Environment
+- AuditLog
+
+## API Boundaries
+
+### Current Control Plane APIs
+
+- `/api/runs`
+- `/api/runtimes`
+- `/api/workflows`
+- `/api/connectors`
+- `/api/approvals`
+- `/api/tools`
+- `/api/evals`
+- `/api/config-versions`
+- `/api/users`
+- `/api/teams`
+- `/api/environments`
+
+### Legacy / Compatibility APIs
+
+The app still contains compatibility endpoints for older dashboard, session, agent chat, terminal, provider, cost, and code-review flows. They must not be treated as the product center.
+
+Next optimization work should move them behind explicit legacy routers and add deprecation headers where appropriate.
+
+## Data Flow
+
+### Connector Ingestion
+
+```mermaid
+sequenceDiagram
+  participant Runtime as External Runtime
+  participant API as Connector API
+  participant DB as PostgreSQL
+  Runtime->>API: POST /api/connectors/{id}/events
+  API->>API: Verify HMAC signature
+  API->>DB: Upsert runtime / run / span / artifact / approval
+  API->>DB: Write audit log
+  API-->>Runtime: Ingestion result
 ```
-Engineer ──▶ 创建分支 ──▶ 实现功能 ──▶ 提交 PR
-                                    │
-                ┌───────────────────┘
-                ▼
-              QA 执行测试
-                │
-                ├── 通过 ──▶ Lead 审核 ──▶ Merge
-                │
-                └── 失败 ──▶ 打回 Engineer 修复
+
+### Workflow Execution
+
+```mermaid
+sequenceDiagram
+  participant UI as User
+  participant API as FastAPI
+  participant DB as PostgreSQL
+  participant Worker as Scheduler Worker
+  UI->>API: Start workflow run
+  API->>DB: Create Run + Tasks
+  Worker->>DB: Claim ready task with lock
+  Worker->>DB: Update task state + TraceSpan
+  Worker->>DB: Retry/backoff or dead-letter on failure
+  UI->>API: Read run detail / trace
 ```
 
-## 分支策略
+## Security Architecture
 
-```
-main (保护分支)
-    │
-    └── feature/* (开发分支)
-```
+| Concern | Current Implementation | Next Optimization |
+|---|---|---|
+| Secret storage | Fernet encryption, masked responses | rotation workflow and secret audit UI |
+| Webhook verification | HMAC-SHA256 over raw body with timestamp tolerance | connector-specific signing docs and SDK helpers |
+| RBAC | role helper with admin/operator/viewer, header placeholder | real auth MVP and service tokens |
+| Audit | centralized audit writer for mutations | searchable Audit UI |
+| Production safety | production requires `ENCRYPTION_KEY` | deployment health gates |
 
-当前活跃分支：
-- `main` - 生产就绪
-- `feature/hermes-proxy` - 后端代理模式（已合并）
+## Runtime Topology
 
-## 文件结构
+Recommended production topology:
 
-```
-hermes_free/
-├── README.md
-├── docs/
-│   ├── ARCHITECTURE.md
-│   └── architecture-diagram.html
-├── backend/
-│   ├── main.py          # FastAPI 代理应用
-│   ├── sse_manager.py   # SSE 连接管理
-│   ├── config.py        # 配置管理
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── App.vue
-│   │   ├── main.ts
-│   │   └── components/
-│   │       ├── TaskPanel.vue
-│   │       ├── LogStream.vue
-│   │       └── HistoryList.vue
-│   ├── tests/           # Vitest 组件测试
-│   │   ├── test_task_panel.spec.ts
-│   │   ├── test_log_stream.spec.ts
-│   │   └── test_history_list.spec.ts
-│   └── vitest.config.ts
-└── tests/
-    └── backend/
-        └── test_sse.py  # Pytest 后端测试
+```text
+web: FastAPI + Vue static serving/reverse proxy
+scheduler-worker: workflow execution worker
+retention-worker: lifecycle cleanup worker
+postgres: primary database
+reverse-proxy: optional TLS and routing layer
 ```
 
-## 测试覆盖
+## Current Architecture Risks
 
-### 后端测试 (pytest)
-- `tests/backend/test_sse.py` - SSE 端点、API 代理、错误处理
-- 运行方式：`cd backend && pytest` 或 `pytest`（项目根目录）
+- `backend/main.py` still contains legacy endpoints and should be split.
+- `frontend/src/App.vue` still mixes routing, data loading, and page rendering.
+- RBAC is not backed by real authentication yet.
+- Some old UI pages and docs still carry legacy product language.
+- SQLite fallback remains as compatibility and should be made read-only, then removed.
 
-### 前端测试 (Vitest)
-- `frontend/tests/*.spec.ts` - Vue 组件渲染、props、事件
-- 运行方式：`cd frontend && npx vitest run`
+## Next Architecture Direction
 
----
+See `docs/PLATFORM_OPTIMIZATION_EXECUTION_PLAN.md`.
 
-*最后更新：2026-04-25 - Phase 3.1 完成，代理模式架构*

@@ -22,7 +22,7 @@ describe('AlertsPanel', () => {
     })
 
     expect(wrapper.text()).toContain('Gateway 未运行')
-    expect(wrapper.text()).toContain('严重')
+    expect(wrapper.text()).toContain('Critical')
 
     await wrapper.findAll('.action-btn')[1].trigger('click')
     expect(wrapper.emitted('action')?.[0]).toEqual([alert])

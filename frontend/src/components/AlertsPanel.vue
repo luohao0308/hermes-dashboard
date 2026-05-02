@@ -2,12 +2,12 @@
   <section class="alerts-panel">
     <div class="alerts-header">
       <div>
-        <h2>告警与建议</h2>
+        <h2>{{ t('alerts.title') }}</h2>
         <p>{{ subtitle }}</p>
       </div>
       <button class="refresh-btn" :disabled="loading" @click="emit('refresh')">
         <span v-if="loading" class="spinner"></span>
-        {{ loading ? '同步中' : '刷新' }}
+        {{ loading ? t('alerts.syncing') : t('common.refresh') }}
       </button>
     </div>
 
@@ -28,7 +28,7 @@
         </div>
         <div class="alert-actions">
           <button v-if="alert.session_id" class="action-btn" @click="emit('runbook', alert)">
-            生成 Runbook
+            {{ t('alerts.generateRunbook') }}
           </button>
           <button class="action-btn" @click="emit('action', alert)">
             {{ alert.action_label }}
@@ -37,7 +37,7 @@
       </article>
 
       <div v-if="alerts.length === 0 && !loading" class="empty-alerts">
-        暂无告警
+        {{ t('alerts.noAlerts') }}
       </div>
 
       <div v-if="loading" class="loading-stack">
@@ -49,19 +49,11 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { AlertItem } from '../types'
+import { useI18n } from "vue-i18n"
+import { formatTime } from '../composables/useFormatters'
 
-export interface AlertItem {
-  id: string
-  severity: 'critical' | 'warning' | 'info'
-  title: string
-  message: string
-  source: string
-  session_id?: string | null
-  action_label: string
-  action_nav: string
-  created_at: string
-}
-
+const { t } = useI18n()
 const props = defineProps<{
   alerts: AlertItem[]
   loading?: boolean
@@ -73,28 +65,20 @@ const emit = defineEmits<{
   runbook: [alert: AlertItem]
 }>()
 
-const severityText: Record<string, string> = {
-  critical: '严重',
-  warning: '关注',
-  info: '信息',
-}
+const severityText = computed<Record<string, string>>(() => ({
+  critical: t('alerts.severityCritical'),
+  warning: t('alerts.severityWarning'),
+  info: t('alerts.severityInfo'),
+}))
 
 const subtitle = computed(() => {
   const critical = props.alerts.filter(alert => alert.severity === 'critical').length
   const warning = props.alerts.filter(alert => alert.severity === 'warning').length
-  if (critical > 0) return `${critical} 个严重告警需要优先处理`
-  if (warning > 0) return `${warning} 个运行信号建议关注`
-  return '当前没有需要立即介入的告警'
+  if (critical > 0) return t('alerts.criticalSubtitle', { count: critical })
+  if (warning > 0) return t('alerts.warningSubtitle', { count: warning })
+  return t('alerts.defaultSubtitle')
 })
 
-function formatTime(timestamp: string): string {
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return '刚刚'
-  return date.toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 </script>
 
 <style scoped>

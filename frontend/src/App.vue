@@ -7,7 +7,7 @@
     <div class="main-wrapper">
       <!-- 顶部栏 -->
       <TopBar
-        :title="navTitleMap[currentNav] || '概览'"
+        :title="navTitleMap[currentNav] || 'Dashboard'"
         :hermesStatus="hermesStatus"
         :loading="isRefreshing"
         @refresh="handleTopRefresh"
@@ -15,17 +15,22 @@
 
       <!-- 页面内容 -->
       <main class="main-content" :class="{ 'chat-active': currentNav === 'chat' }">
+        <!-- Legacy Deprecation Banner -->
+        <div v-if="isLegacyNav(currentNav)" class="legacy-banner">
+          <span class="legacy-banner-icon">⚠</span>
+          <span>{{ t('dashboard.legacyBanner') }}</span>
+        </div>
         <!-- Dashboard 概览页面 -->
         <template v-if="currentNav === 'dashboard'">
-          <!-- 系统状态栏 -->
+          <!-- System Status Bar -->
           <div class="status-bar">
             <div class="status-item">
               <span class="status-dot" :class="hermesStatus?.gateway_running ? 'success' : 'error'"></span>
-              <span>Gateway {{ hermesStatus?.gateway_running ? '运行中' : '已停止' }}</span>
+              <span>{{ hermesStatus?.gateway_running ? t('dashboard.gatewayRunning') : t('dashboard.gatewayStopped') }}</span>
             </div>
             <div class="status-item">
               <span class="status-dot" :class="isConnected ? 'success' : 'error'"></span>
-              <span>实时推送 {{ isConnected ? '已连接' : '未连接' }}</span>
+              <span>{{ isConnected ? t('dashboard.realtimeConnected') : t('dashboard.realtimeDisconnected') }}</span>
             </div>
             <div class="status-item version">
               <span>v{{ hermesStatus?.version || 'N/A' }}</span>
@@ -51,27 +56,27 @@
             @runbook="handleAlertRunbook"
           />
 
-          <!-- 快捷入口 -->
+          <!-- Quick Actions -->
           <div class="quick-actions">
-            <button class="quick-action" @click="handleNavChange('terminal')">
-              <span class="action-icon">◎</span>
-              <span class="action-label">终端</span>
-              <span class="action-desc">打开终端</span>
+            <button class="quick-action" @click="handleNavChange('runs')">
+              <span class="action-icon">▶</span>
+              <span class="action-label">{{ t('dashboard.runs') }}</span>
+              <span class="action-desc">{{ t('dashboard.runsDesc') }}</span>
             </button>
-            <button class="quick-action" @click="handleNavChange('chat')">
-              <span class="action-icon">🤖</span>
-              <span class="action-label">Agent 聊天</span>
-              <span class="action-desc">与 Agent 对话</span>
+            <button class="quick-action" @click="handleNavChange('workflows')">
+              <span class="action-icon">◇</span>
+              <span class="action-label">{{ t('dashboard.workflows') }}</span>
+              <span class="action-desc">{{ t('dashboard.workflowsDesc') }}</span>
             </button>
-            <button class="quick-action" @click="handleNavChange('tasks')">
-              <span class="action-icon">☰</span>
-              <span class="action-label">任务列表</span>
-              <span class="action-desc">{{ tasks.length }} 个任务</span>
+            <button class="quick-action" @click="handleNavChange('approvals')">
+              <span class="action-icon">☑</span>
+              <span class="action-label">{{ t('dashboard.approvals') }}</span>
+              <span class="action-desc">{{ t('dashboard.approvalsDesc') }}</span>
             </button>
-            <button class="quick-action" @click="handleNavChange('logs')">
-              <span class="action-icon">◷</span>
-              <span class="action-label">日志</span>
-              <span class="action-desc">查看运行日志</span>
+            <button class="quick-action" @click="handleNavChange('eval')">
+              <span class="action-icon">📊</span>
+              <span class="action-label">{{ t('dashboard.eval') }}</span>
+              <span class="action-desc">{{ t('dashboard.evalDesc') }}</span>
             </button>
           </div>
 
@@ -108,7 +113,7 @@
                 {{ tab.name }}
                 <span class="terminal-tab-close" @click.stop="closeTerminal(idx)">×</span>
               </button>
-              <button class="terminal-tab-add" @click="addTerminal">+ 新终端</button>
+              <button class="terminal-tab-add" @click="addTerminal">+ {{ t('dashboard.newTerminal') }}</button>
             </div>
             <div
               v-for="tab in terminalTabs"
@@ -186,6 +191,12 @@
 
         <!-- 系统配置中心页面 -->
         <template v-else-if="currentNav === 'system'">
+          <HealthMatrix
+            :health="healthData"
+            :metrics="metricsData"
+            :loading="loadingHealth"
+            @refresh="fetchHealth"
+          />
           <SystemConfigPanel />
         </template>
 
@@ -218,6 +229,146 @@
         <template v-else-if="currentNav === 'guardrails'">
           <GuardrailsPanel />
         </template>
+
+        <!-- Workflow Runs (v1.0) -->
+        <template v-else-if="currentNav === 'runs'">
+          <RunList
+            :runs="workflowRuns"
+            :runtimes="workflowRuntimes"
+            :connectorTypes="connectorTypeOptions"
+            :total="workflowRunsTotal"
+            :limit="workflowRunsLimit"
+            :offset="workflowRunsOffset"
+            :loading="loadingWorkflowRuns"
+            @refresh="fetchWorkflowRuns"
+            @selectRun="openRunDetail"
+            @filterChange="handleWorkflowFilterChange"
+            @pageChange="handleWorkflowPageChange"
+          />
+        </template>
+
+        <!-- Workflow Run Detail (v1.0) -->
+        <template v-else-if="currentNav === 'run-detail'">
+          <RunDetail
+            :runId="selectedRunId"
+            :run="selectedRun"
+            :spans="selectedRunSpans"
+            :loading="loadingRunDetail"
+            :error="runDetailError"
+            :rcaReport="selectedRcaReport"
+            :runbook="selectedRunbook"
+            :loadingRca="loadingRca"
+            :loadingRunbook="loadingRunbook"
+            @back="backToRuns"
+            @refresh="refreshRunDetail"
+            @analyzeRca="handleAnalyzeRca"
+            @generateRunbook="handleGenerateRunbook"
+            @exportRca="handleExportRca"
+            @exportRunbook="handleExportRunbook"
+          />
+        </template>
+
+        <!-- Approval Inbox (v1.1) -->
+        <template v-else-if="currentNav === 'approvals'">
+          <ApprovalInbox
+            :approvals="approvalItems"
+            :total="approvalTotal"
+            :limit="approvalLimit"
+            :offset="approvalOffset"
+            :loading="loadingApprovals"
+            :actionLoading="approvalActionLoading"
+            @refresh="fetchApprovals"
+            @approve="handleApprove"
+            @reject="handleReject"
+            @filterChange="handleApprovalFilterChange"
+            @pageChange="handleApprovalPageChange"
+            @batchApprove="handleBatchApprove"
+            @batchReject="handleBatchReject"
+          />
+        </template>
+
+        <template v-else-if="currentNav === 'eval'">
+          <EvalDashboard
+            :summary="evalSummary"
+            :loading="loadingEval"
+            @refresh="fetchEvalSummary"
+          />
+        </template>
+
+        <template v-else-if="currentNav === 'config-compare'">
+          <ConfigCompare
+            :versions="configVersions"
+            :result="configCompareResult"
+            :loading="loadingConfigCompare"
+            @compare="handleConfigCompare"
+            @refresh="fetchConfigVersions"
+          />
+        </template>
+
+        <!-- Connectors / Failed Events (OPT-54) -->
+        <template v-else-if="currentNav === 'connectors'">
+          <FailedEventsPanel
+            :events="failedEvents"
+            :connectors="connectorItems"
+            :total="failedEventsTotal"
+            :limit="failedEventsLimit"
+            :offset="failedEventsOffset"
+            :hasMore="failedEventsHasMore"
+            :loading="loadingFailedEvents"
+            :replayingId="replayingFailedEventId"
+            @refresh="fetchFailedEvents"
+            @replay="handleReplayFailedEvent"
+            @connectorChange="handleFailedEventConnectorChange"
+            @pageChange="handleFailedEventPageChange"
+            @nextPage="handleFailedEventsNextPage"
+            @prevPage="handleFailedEventsPrevPage"
+          />
+        </template>
+
+        <!-- Workflow Definitions (v2.0) -->
+        <template v-else-if="currentNav === 'workflows'">
+          <WorkflowList
+            :workflows="workflowDefinitions"
+            :total="workflowDefsTotal"
+            :limit="workflowDefsLimit"
+            :offset="workflowDefsOffset"
+            :loading="loadingWorkflowDefs"
+            @refresh="fetchWorkflowDefinitions"
+            @select="openWorkflowDetail"
+            @pageChange="(o) => { workflowDefsOffset = o; fetchWorkflowDefinitions() }"
+          />
+        </template>
+
+        <!-- Workflow Detail (v2.0) -->
+        <template v-else-if="currentNav === 'workflow-detail'">
+          <WorkflowDetail
+            v-if="selectedWorkflowDef"
+            :workflow="selectedWorkflowDef"
+            :runs="selectedWorkflowRuns"
+            :versions="workflowVersions"
+            :loadingVersions="loadingWorkflowVersions"
+            :rollingBack="rollingBackWorkflow"
+            @back="backToWorkflows"
+            @startRun="handleStartWorkflowRun"
+            @selectRun="handleSelectWorkflowRun"
+            @loadVersions="handleLoadWorkflowVersions"
+            @rollback="handleWorkflowRollback"
+          />
+        </template>
+
+        <!-- Audit Log (v3.0) -->
+        <template v-else-if="currentNav === 'audit'">
+          <AuditLogPanel
+            :logs="auditLogs"
+            :total="auditTotal"
+            :limit="auditLimit"
+            :offset="auditOffset"
+            :loading="loadingAudit"
+            @refresh="fetchAuditLogs"
+            @filterChange="handleAuditFilterChange"
+            @pageChange="handleAuditPageChange"
+          />
+        </template>
       </main>
     </div>
 
@@ -233,6 +384,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { onLCP, onINP, onCLS, onFCP, onTTFB } from 'web-vitals'
 import Sidebar from './components/Sidebar.vue'
 import TopBar from './components/TopBar.vue'
@@ -251,45 +403,79 @@ import ReviewDashboard from './components/ReviewDashboard.vue'
 import ProviderPanel from './components/ProviderPanel.vue'
 import CostDashboard from './components/CostDashboard.vue'
 import GuardrailsPanel from './components/GuardrailsPanel.vue'
+import RunList from './components/RunList.vue'
+import RunDetail from './components/RunDetail.vue'
+import ApprovalInbox from './components/ApprovalInbox.vue'
+import EvalDashboard from './components/EvalDashboard.vue'
+import ConfigCompare from './components/ConfigCompare.vue'
+import WorkflowList from './components/WorkflowList.vue'
+import WorkflowDetail from './components/WorkflowDetail.vue'
+import FailedEventsPanel from './components/FailedEventsPanel.vue'
+import AuditLogPanel from './components/AuditLogPanel.vue'
+import HealthMatrix from './components/HealthMatrix.vue'
 import { API_BASE } from './config'
+import type { Task, Log, HistoryItem, SessionDetailData, TraceRun, TraceSpan, RcaReport, RunbookReport, OverviewSnapshot, AlertItem, WorkflowRun, WorkflowSpan, WorkflowRuntime, ApprovalItem, EvalSummaryData, ConfigVersionItem, ConfigCompareData, WorkflowDefinition, WorkflowRunDetail, WorkflowVersionHistoryItem, FailedEventItem, ConnectorConfig } from './types'
+import { useToast } from './composables/useToast'
+import { NAV_TO_HASH, HASH_TO_NAV, LEGACY_NAV_IDS } from './composables/useNavigation'
+import { useNavigation } from './composables/useNavigation'
+import { fetchJSON, fetchOptional, extractError } from './composables/useApi'
+import { listRuns, getTrace, listRuntimes, listConnectors, replayFailedEvent } from './composables/useWorkflowApi'
+import { listApprovals, approveApproval, rejectApproval, batchApprove, batchReject } from './composables/useApprovalApi'
+import { generateRca, getLatestRca, generateRunbook, getLatestRunbook, exportArtifact } from './composables/useRunAnalysisApi'
+import { getEvalSummary, listConfigVersions, compareConfigs } from './composables/useEvalApi'
+import { listWorkflowDefinitions, getWorkflowDefinition, listWorkflowRuns, startWorkflowRun, listWorkflowVersions, rollbackWorkflow } from './composables/useWorkflowOrchestrationApi'
+import { listAuditLogs } from './composables/useAuditApi'
+import type { AuditLogEntry } from './composables/useAuditApi'
+
+// i18n
+const { t } = useI18n()
 
 // Navigation state
+const { navTitleMap } = useNavigation()
 const currentNav = ref('dashboard')
-const navTitleMap: Record<string, string> = {
-  dashboard: '概览',
-  terminal: '终端',
-  tasks: '任务',
-  logs: '日志',
-  history: '历史',
-  'session-detail': '复盘',
-  knowledge: '知识库',
-  chat: '聊天',
-  agents: '配置',
-  system: '系统',
-  'pr-list': 'Pull Requests',
-  providers: 'Providers',
-  costs: '成本追踪',
-  guardrails: 'Guardrails',
+
+function isLegacyNav(navId: string): boolean {
+  return LEGACY_NAV_IDS.has(navId)
 }
 
 function handleNavChange(navId: string) {
   currentNav.value = navId
-  const navToHash: Record<string, string> = {
-    dashboard: '#/',
-    terminal: '#/terminal',
-    tasks: '#/tasks',
-    logs: '#/logs',
-    history: '#/history',
-    knowledge: '#/knowledge',
-    chat: '#/chat',
-    agents: '#/agents',
-    system: '#/system',
-    'pr-list': '#/pr-list',
-    providers: '#/providers',
-    costs: '#/costs',
-    guardrails: '#/guardrails',
+  if (NAV_TO_HASH[navId]) window.location.hash = NAV_TO_HASH[navId]
+  if (navId === 'runs') {
+    void fetchWorkflowRuns()
+    if (workflowRuntimes.value.length === 0) void fetchWorkflowRuntimes()
   }
-  if (navToHash[navId]) window.location.hash = navToHash[navId]
+  if (navId === 'approvals') {
+    void fetchApprovals()
+  }
+  if (navId === 'connectors') {
+    void loadConnectorItems()
+  }
+  if (navId === 'eval') {
+    void fetchEvalSummary()
+    void fetchConfigVersions()
+  }
+  if (navId === 'config-compare') {
+    void fetchConfigVersions()
+  }
+  if (navId === 'workflows') {
+    void fetchWorkflowDefinitions()
+  }
+  if (navId === 'audit') {
+    void fetchAuditLogs()
+  }
+  if (navId === 'system') {
+    void fetchHealth()
+  }
+  if (navId === 'tasks') {
+    void fetchTasks()
+  }
+  if (navId === 'logs') {
+    void fetchLogs()
+  }
+  if (navId === 'history') {
+    void fetchHistory()
+  }
 }
 
 // Connection state
@@ -317,6 +503,81 @@ const selectedTraceSpans = ref<TraceSpan[]>([])
 const selectedRcaReport = ref<RcaReport | null>(null)
 const selectedRunbook = ref<RunbookReport | null>(null)
 
+// Workflow runs state (v1.0)
+const workflowRuns = ref<WorkflowRun[]>([])
+const workflowRuntimes = ref<WorkflowRuntime[]>([])
+const connectorTypeOptions = ref<string[]>([])
+const workflowRunsTotal = ref(0)
+const workflowRunsLimit = ref(50)
+const workflowRunsOffset = ref(0)
+const workflowRunsStatusFilter = ref('')
+const workflowRunsRuntimeFilter = ref('')
+const loadingWorkflowRuns = ref(false)
+const selectedRunId = ref('')
+const selectedRun = ref<WorkflowRun | null>(null)
+const selectedRunSpans = ref<WorkflowSpan[]>([])
+const loadingRunDetail = ref(false)
+const runDetailError = ref<string | null>(null)
+
+// Approval Inbox state (v1.1)
+const approvalItems = ref<ApprovalItem[]>([])
+const approvalTotal = ref(0)
+const approvalLimit = ref(50)
+const approvalOffset = ref(0)
+const approvalStatusFilter = ref('')
+const loadingApprovals = ref(false)
+const approvalActionLoading = ref(false)
+
+// Eval state
+const evalSummary = ref<EvalSummaryData>({
+  total: 0, passed: 0, failed: 0,
+  by_runtime: [], by_config_version: [], trend: [],
+})
+const loadingEval = ref(false)
+const configVersions = ref<ConfigVersionItem[]>([])
+const configCompareResult = ref<ConfigCompareData | null>(null)
+const loadingConfigCompare = ref(false)
+
+// Workflow Orchestration state (v2.0)
+const workflowDefinitions = ref<WorkflowDefinition[]>([])
+const workflowDefsTotal = ref(0)
+const workflowDefsLimit = ref(50)
+const workflowDefsOffset = ref(0)
+const loadingWorkflowDefs = ref(false)
+const selectedWorkflowDef = ref<WorkflowDefinition | null>(null)
+const selectedWorkflowRuns = ref<WorkflowRunDetail[]>([])
+const selectedWorkflowRunDetail = ref<WorkflowRunDetail | null>(null)
+const loadingWorkflowDetail = ref(false)
+const workflowVersions = ref<WorkflowVersionHistoryItem[]>([])
+const loadingWorkflowVersions = ref(false)
+const rollingBackWorkflow = ref(false)
+
+// Failed Events state (OPT-54/58)
+const failedEvents = ref<FailedEventItem[]>([])
+const failedEventsTotal = ref(0)
+const failedEventsLimit = ref(50)
+const failedEventsOffset = ref(0)
+const failedEventsCursor = ref<string | null>(null)
+const failedEventsHasMore = ref(false)
+const failedEventsCursorStack = ref<string[]>([])
+const failedEventsConnectorId = ref('')
+const loadingFailedEvents = ref(false)
+const replayingFailedEventId = ref('')
+const connectorItems = ref<ConnectorConfig[]>([])
+
+// Audit Log state (v3.0)
+const auditLogs = ref<AuditLogEntry[]>([])
+const auditTotal = ref(0)
+const auditLimit = ref(50)
+const auditOffset = ref(0)
+const auditFilters = ref({ actor_type: '', actor_id: '', action: '', resource_type: '', resource_id: '' })
+const loadingAudit = ref(false)
+
+// Health Matrix state (v3.0)
+const healthData = ref<any>(null)
+const metricsData = ref<any>(null)
+const loadingHealth = ref(false)
+
 // Loading states
 const loadingTasks = ref(false)
 const loadingLogs = ref(false)
@@ -328,14 +589,8 @@ const loadingRca = ref(false)
 const loadingRunbook = ref(false)
 const exportingMarkdown = ref(false)
 
-// Toast notifications
-interface Toast {
-  id: number
-  type: 'info' | 'success' | 'warning' | 'error'
-  message: string
-}
-const toasts = ref<Toast[]>([])
-let toastId = 0
+// Toast notifications (shared composable)
+const { toasts, addToast, removeToast } = useToast()
 
 // Terminal tab management
 interface TerminalTab {
@@ -387,7 +642,7 @@ function closeTerminal(idx: number) {
       method: 'DELETE',
     })
     .catch(() => {
-      addToast('warning', `终端会话关闭请求失败，本地标签已移除`)
+      addToast('warning', `Terminal session close request failed, tab removed locally`)
     })
 }
 
@@ -395,174 +650,18 @@ function onTerminalConnected() {
   // Terminal connected successfully
 }
 
-function addToast(type: Toast['type'], message: string) {
-  const id = ++toastId
-  toasts.value.push({ id, type, message })
-  setTimeout(() => removeToast(id), 5000)
-}
-
-function removeToast(id: number) {
-  const idx = toasts.value.findIndex(t => t.id === id)
-  if (idx >= 0) toasts.value.splice(idx, 1)
-}
 
 // Polling interval
 let statusPollInterval: number | null = null
 let eventSource: EventSource | null = null
 
-// Types
-interface Task {
-  task_id: string
-  name: string
-  status: 'running' | 'pending' | 'completed'
-  progress: number
-  message_count?: number
-  model?: string
-  started_at?: string
-  elapsed?: number
-}
-
-interface Log {
-  timestamp: string
-  message: string
-  type: 'info' | 'warning' | 'error' | 'debug'
-}
-
-interface HistoryItem {
-  task_id: string
-  name: string
-  completed_at: string
-  duration: number
-  status: 'success' | 'failed' | 'cancelled'
-  message_count?: number
-  model?: string
-  input_tokens?: number
-  output_tokens?: number
-}
-
-interface SessionMessage {
-  role?: string
-  content?: string
-  text?: string
-  message?: string
-  timestamp?: string
-  created_at?: string
-}
-
-interface SessionDetailData {
-  task_id?: string
-  name?: string
-  status?: string
-  messages?: SessionMessage[]
-  message_count?: number
-  model?: string
-  started_at?: string
-  completed_at?: string
-  duration?: number
-  input_tokens?: number
-  output_tokens?: number
-  end_reason?: string
-}
-
-interface TraceRun {
-  run_id: string
-  session_id: string
-  agent_id: string
-  linked_session_id?: string | null
-  input_summary?: string
-  status: string
-  started_at: string
-  completed_at?: string | null
-}
-
-interface TraceSpan {
-  span_id: string
-  run_id: string
-  span_type: string
-  title: string
-  summary?: string
-  agent_name?: string | null
-  status: string
-  started_at: string
-  completed_at?: string | null
-  metadata?: Record<string, any>
-}
-
-interface RcaEvidence {
-  source: string
-  title: string
-  detail: string
-  severity: 'high' | 'medium' | 'low'
-  timestamp?: string | null
-  ref?: string | null
-}
-
-interface RcaReport {
-  report_id: string
-  session_id: string
-  run_id?: string | null
-  category: string
-  root_cause: string
-  confidence: number
-  evidence: RcaEvidence[]
-  next_actions: string[]
-  low_confidence: boolean
-  generated_at: string
-  analyzer: string
-}
-
-interface RunbookReport {
-  runbook_id: string
-  session_id: string
-  run_id?: string | null
-  rca_report_id?: string | null
-  title: string
-  severity: string
-  summary: string
-  checklist: string[]
-  execution_steps?: Array<{
-    step_id: string
-    label: string
-    action_type: string
-    requires_confirmation: boolean
-    status: string
-  }>
-  evidence_count: number
-  markdown: string
-  generated_at: string
-  generator: string
-}
-
-interface OverviewSnapshot {
-  health?: Record<string, any> | null
-  analytics?: Record<string, any> | null
-  evalSummary?: Record<string, any> | null
-  modelInfo?: Record<string, any> | null
-  config?: Record<string, any> | null
-  skills?: Record<string, any> | any[] | null
-  cronJobs?: Record<string, any> | any[] | null
-  plugins?: Record<string, any> | any[] | null
-}
-
-interface AlertItem {
-  id: string
-  severity: 'critical' | 'warning' | 'info'
-  title: string
-  message: string
-  source: string
-  session_id?: string | null
-  action_label: string
-  action_nav: string
-  created_at: string
-}
-
 // Actions
 function handlePause(taskId: string) {
-  addToast('info', `暂停任务: ${taskId.slice(0, 8)}`)
+  addToast('info', `Pause task: ${taskId.slice(0, 8)}`)
 }
 
 function handleCancel(taskId: string) {
-  addToast('warning', `取消任务: ${taskId.slice(0, 8)}`)
+  addToast('warning', `Cancel task: ${taskId.slice(0, 8)}`)
 }
 
 function handleViewDetails(item: HistoryItem) {
@@ -570,24 +669,21 @@ function handleViewDetails(item: HistoryItem) {
 }
 
 function handleReRunTask(item: HistoryItem) {
-  addToast('info', `重新运行: ${item.name}`)
+  addToast('info', `Re-run: ${item.name}`)
 }
 
 // API calls
-async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init)
-  if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`)
-  return res.json()
-}
-
 async function fetchHermesStatus() {
   try {
-    const data = await fetchJSON<any>(`${API_BASE}/api/status`)
-    hermesStatus.value = data
+    const data = await fetchJSON<any>(`${API_BASE}/health`)
+    hermesStatus.value = {
+      ...data,
+      gateway_running: data.status === 'healthy',
+    }
     initError.value = null
   } catch (e) {
     if (!hermesStatus.value) {
-      initError.value = `无法连接到后端服务 (${API_BASE})，请确保 Hermes Bridge Service 已启动`
+      initError.value = `Cannot connect to backend (${API_BASE}). Ensure the API server is running.`
     }
     hermesStatus.value = null
   }
@@ -595,106 +691,42 @@ async function fetchHermesStatus() {
 
 async function fetchTasks() {
   loadingTasks.value = true
-  try {
-    const data = await fetchJSON<{ tasks: any[]; total: number }>(`${API_BASE}/tasks`)
-    tasks.value = data.tasks.map(t => ({
-      task_id: t.task_id,
-      name: t.name,
-      status: t.status,
-      progress: t.progress,
-      message_count: t.message_count,
-      model: t.model,
-      started_at: t.started_at
-    }))
-  } catch (e) {
-    addToast('error', `获取任务列表失败`)
-    tasks.value = []
-  } finally {
-    loadingTasks.value = false
-  }
+  tasks.value = []
+  loadingTasks.value = false
 }
 
 async function fetchLogs() {
   loadingLogs.value = true
-  try {
-    const data = await fetchJSON<{ logs: any[]; lines?: string[] }>(`${API_BASE}/api/logs?lines=50&level=INFO`)
-    if (data.logs) {
-      logs.value = data.logs.map((l: any) => ({
-        timestamp: l.timestamp || new Date().toISOString(),
-        message: l.message || l,
-        type: l.level?.toLowerCase() || 'info'
-      }))
-    } else if (data.lines) {
-      logs.value = data.lines.map(line => parseLogLine(line)).filter(Boolean) as Log[]
-    }
-  } catch (e) {
-    addToast('error', `获取日志失败`)
-  } finally {
-    loadingLogs.value = false
-  }
+  logs.value = []
+  loadingLogs.value = false
 }
 
 async function fetchHistory() {
   loadingHistory.value = true
-  try {
-    const data = await fetchJSON<{ history: any[]; total: number }>(`${API_BASE}/history?limit=20`)
-    history.value = data.history.map((h: any) => ({
-      task_id: h.task_id,
-      name: h.name,
-      completed_at: h.completed_at,
-      duration: h.duration,
-      status: 'success' as const,
-      message_count: h.message_count,
-      model: h.model,
-      input_tokens: h.input_tokens,
-      output_tokens: h.output_tokens
-    }))
-  } catch (e) {
-    addToast('error', `获取历史记录失败`)
-    history.value = []
-  } finally {
-    loadingHistory.value = false
-  }
-}
-
-async function fetchOptional<T>(url: string): Promise<T | null> {
-  try {
-    return await fetchJSON<T>(url)
-  } catch (e) {
-    return null
-  }
+  history.value = []
+  loadingHistory.value = false
 }
 
 async function fetchOverviewSnapshot() {
   loadingOverview.value = true
   const [
     health,
-    analytics,
     evalSummary,
-    modelInfo,
-    config,
-    skills,
-    cronJobs,
-    plugins,
+    metrics,
   ] = await Promise.all([
     fetchOptional<Record<string, any>>(`${API_BASE}/health`),
-    fetchOptional<Record<string, any>>(`${API_BASE}/api/analytics/usage?days=7`),
     fetchOptional<Record<string, any>>(`${API_BASE}/api/agent/evals/summary`),
-    fetchOptional<Record<string, any>>(`${API_BASE}/api/model/info`),
-    fetchOptional<Record<string, any>>(`${API_BASE}/api/config`),
-    fetchOptional<Record<string, any>>(`${API_BASE}/api/skills`),
-    fetchOptional<Record<string, any>>(`${API_BASE}/api/cron/jobs`),
-    fetchOptional<Record<string, any>>(`${API_BASE}/api/plugins`),
+    fetchOptional<Record<string, any>>(`${API_BASE}/api/metrics`),
   ])
   overviewSnapshot.value = {
     health,
-    analytics,
+    analytics: metrics,
     evalSummary,
-    modelInfo,
-    config,
-    skills,
-    cronJobs,
-    plugins,
+    modelInfo: null,
+    config: null,
+    skills: null,
+    cronJobs: null,
+    plugins: null,
   }
   loadingOverview.value = false
 }
@@ -716,7 +748,14 @@ async function fetchSessionDetail(taskId: string) {
   loadingSessionDetail.value = true
   sessionDetailError.value = null
   try {
-    selectedSessionDetail.value = await fetchJSON<SessionDetailData>(`${API_BASE}/tasks/${encodeURIComponent(taskId)}`)
+    selectedSessionDetail.value = {
+      task_id: taskId,
+      name: selectedHistoryItem.value?.name || `Run ${taskId.slice(0, 8)}`,
+      status: selectedHistoryItem.value?.status || 'unknown',
+      messages: [],
+      message_count: selectedHistoryItem.value?.message_count || 0,
+      logs: [],
+    }
     await fetchLatestTrace(taskId)
     await fetchLatestRca(taskId)
     await fetchLatestRunbook(taskId)
@@ -776,9 +815,9 @@ async function analyzeSessionRca() {
     )
     selectedRcaReport.value = data.report
     await fetchLatestTrace(selectedSessionId.value)
-    addToast('success', '失败原因分析已生成')
+    addToast('success', 'RCA analysis generated')
   } catch (e) {
-    addToast('error', '失败原因分析失败')
+    addToast('error', `RCA analysis failed: ${extractError(e)}`)
   } finally {
     loadingRca.value = false
   }
@@ -802,9 +841,9 @@ async function generateRunbookForSession(sessionId: string) {
       await fetchLatestRca(sessionId)
       await fetchLatestTrace(sessionId)
     }
-    addToast('success', 'Runbook 已生成')
+    addToast('success', 'Runbook generated')
   } catch (e) {
-    addToast('error', 'Runbook 生成失败')
+    addToast('error', `Runbook generation failed: ${extractError(e)}`)
   } finally {
     loadingRunbook.value = false
   }
@@ -818,9 +857,9 @@ async function exportSessionMarkdown() {
       `${API_BASE}/api/sessions/${encodeURIComponent(selectedSessionId.value)}/export`,
       { method: 'POST' }
     )
-    addToast('success', `Markdown 已导出: ${data.export.path}`)
+    addToast('success', `Markdown exported: ${data.export.path}`)
   } catch (e) {
-    addToast('error', 'Markdown 导出失败')
+    addToast('error', `Markdown export failed: ${extractError(e)}`)
   } finally {
     exportingMarkdown.value = false
   }
@@ -839,9 +878,9 @@ async function confirmRunbookStep(stepId: string) {
     )
     selectedRunbook.value = data.runbook || patchRunbookStep(selectedRunbook.value, stepId, data.step.status)
     await fetchLatestTrace(selectedSessionId.value)
-    addToast('success', 'Runbook 步骤已确认')
+    addToast('success', 'Runbook step confirmed')
   } catch (e) {
-    addToast('error', 'Runbook 步骤确认失败')
+    addToast('error', `Runbook step confirmation failed: ${extractError(e)}`)
   }
 }
 
@@ -854,9 +893,9 @@ async function executeRunbookStep(stepId: string) {
     )
     selectedRunbook.value = data.runbook || patchRunbookStep(selectedRunbook.value, stepId, data.step.status)
     await fetchLatestTrace(selectedSessionId.value)
-    addToast(data.step.status === 'blocked_unsafe' ? 'warning' : 'success', data.message || 'Runbook 动作已处理')
+    addToast(data.step.status === 'blocked_unsafe' ? 'warning' : 'success', data.message || 'Runbook step executed')
   } catch (e) {
-    addToast('error', 'Runbook 动作执行失败')
+    addToast('error', `Runbook step execution failed: ${extractError(e)}`)
   }
 }
 
@@ -908,6 +947,504 @@ function backToHistory() {
   handleNavChange('history')
 }
 
+// ---------------------------------------------------------------------------
+// Workflow Runs (v1.0)
+// ---------------------------------------------------------------------------
+
+async function fetchWorkflowRuntimes() {
+  try {
+    workflowRuntimes.value = await listRuntimes()
+  } catch {
+    // runtimes are optional for filtering
+  }
+  try {
+    const connectors = await listConnectors()
+    const types = [...new Set(connectors.items.map(c => c.connector_type))]
+    connectorTypeOptions.value = types
+  } catch {
+    // connectors are optional for filtering
+  }
+}
+
+async function fetchWorkflowRuns() {
+  loadingWorkflowRuns.value = true
+  try {
+    const data = await listRuns({
+      runtime_id: workflowRunsRuntimeFilter.value || undefined,
+      status: workflowRunsStatusFilter.value || undefined,
+      limit: workflowRunsLimit.value,
+      offset: workflowRunsOffset.value,
+    })
+    workflowRuns.value = data.items
+    workflowRunsTotal.value = data.total
+    workflowRunsOffset.value = data.offset
+  } catch (e) {
+    addToast('error', `Failed to load workflow runs: ${extractError(e)}`)
+  } finally {
+    loadingWorkflowRuns.value = false
+  }
+}
+
+function handleWorkflowFilterChange(filters: { status: string; runtime_id: string; connector_type: string }) {
+  workflowRunsStatusFilter.value = filters.status
+  workflowRunsRuntimeFilter.value = filters.runtime_id
+  workflowRunsOffset.value = 0
+  void fetchWorkflowRuns()
+}
+
+function handleWorkflowPageChange(offset: number) {
+  workflowRunsOffset.value = offset
+  void fetchWorkflowRuns()
+}
+
+async function openRunDetail(runId: string) {
+  selectedRunId.value = runId
+  selectedRun.value = null
+  selectedRunSpans.value = []
+  runDetailError.value = null
+  currentNav.value = 'run-detail'
+  window.location.hash = `#/runs/${encodeURIComponent(runId)}`
+  await fetchRunDetail(runId)
+}
+
+async function fetchRunDetail(runId: string) {
+  loadingRunDetail.value = true
+  runDetailError.value = null
+  selectedRcaReport.value = null
+  selectedRunbook.value = null
+  try {
+    const trace = await getTrace(runId)
+    selectedRun.value = trace.run
+    selectedRunSpans.value = trace.spans
+  } catch (e: unknown) {
+    const err = e as { status?: number; detail?: string }
+    runDetailError.value = err.detail || `Failed to load run ${runId}`
+  } finally {
+    loadingRunDetail.value = false
+  }
+  // Load existing RCA and Runbook (non-blocking)
+  getLatestRca(runId).then(r => { selectedRcaReport.value = r }).catch(() => {})
+  getLatestRunbook(runId).then(r => { selectedRunbook.value = r }).catch(() => {})
+}
+
+function refreshRunDetail() {
+  if (selectedRunId.value) void fetchRunDetail(selectedRunId.value)
+}
+
+function backToRuns() {
+  selectedRunId.value = ''
+  selectedRun.value = null
+  selectedRunSpans.value = []
+  runDetailError.value = null
+  selectedRcaReport.value = null
+  selectedRunbook.value = null
+  handleNavChange('runs')
+}
+
+// RCA / Runbook handlers (v1.2)
+async function handleAnalyzeRca() {
+  if (!selectedRunId.value) return
+  loadingRca.value = true
+  try {
+    selectedRcaReport.value = await generateRca(selectedRunId.value)
+  } catch (e: unknown) {
+    addToast('error', `RCA analysis failed: ${extractError(e)}`)
+  } finally {
+    loadingRca.value = false
+  }
+}
+
+async function handleGenerateRunbook() {
+  if (!selectedRunId.value) return
+  loadingRunbook.value = true
+  try {
+    selectedRunbook.value = await generateRunbook(selectedRunId.value)
+  } catch (e: unknown) {
+    addToast('error', `Runbook generation failed: ${extractError(e)}`)
+  } finally {
+    loadingRunbook.value = false
+  }
+}
+
+async function handleExportRca() {
+  if (!selectedRunId.value) return
+  try {
+    const result = await exportArtifact(selectedRunId.value, 'rca')
+    addToast('success', `RCA exported: ${result.title}`)
+  } catch (e: unknown) {
+    addToast('error', `Export failed: ${extractError(e)}`)
+  }
+}
+
+async function handleExportRunbook() {
+  if (!selectedRunId.value) return
+  try {
+    const result = await exportArtifact(selectedRunId.value, 'runbook')
+    addToast('success', `Runbook exported: ${result.title}`)
+  } catch (e: unknown) {
+    addToast('error', `Export failed: ${extractError(e)}`)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Approval Inbox (v1.1)
+// ---------------------------------------------------------------------------
+
+async function fetchApprovals() {
+  loadingApprovals.value = true
+  try {
+    const data = await listApprovals({
+      status: approvalStatusFilter.value || undefined,
+      limit: approvalLimit.value,
+      offset: approvalOffset.value,
+    })
+    approvalItems.value = data.items
+    approvalTotal.value = data.total
+    approvalOffset.value = data.offset
+  } catch {
+    addToast('error', 'Failed to load approvals')
+  } finally {
+    loadingApprovals.value = false
+  }
+}
+
+function handleApprovalFilterChange(status: string) {
+  approvalStatusFilter.value = status
+  approvalOffset.value = 0
+  void fetchApprovals()
+}
+
+function handleApprovalPageChange(offset: number) {
+  approvalOffset.value = offset
+  void fetchApprovals()
+}
+
+async function handleApprove(id: string) {
+  approvalActionLoading.value = true
+  try {
+    await approveApproval(id)
+    addToast('success', 'Approval approved')
+    await fetchApprovals()
+  } catch (e) {
+    addToast('error', `Failed to approve: ${extractError(e)}`)
+  } finally {
+    approvalActionLoading.value = false
+  }
+}
+
+async function handleReject(id: string) {
+  approvalActionLoading.value = true
+  try {
+    await rejectApproval(id)
+    addToast('success', 'Approval rejected')
+    await fetchApprovals()
+  } catch (e) {
+    addToast('error', `Failed to reject: ${extractError(e)}`)
+  } finally {
+    approvalActionLoading.value = false
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Audit Log (v3.0)
+// ---------------------------------------------------------------------------
+
+async function fetchAuditLogs() {
+  loadingAudit.value = true
+  try {
+    const data = await listAuditLogs({
+      actor_type: auditFilters.value.actor_type || undefined,
+      actor_id: auditFilters.value.actor_id || undefined,
+      action: auditFilters.value.action || undefined,
+      resource_type: auditFilters.value.resource_type || undefined,
+      resource_id: auditFilters.value.resource_id || undefined,
+      limit: auditLimit.value,
+      offset: auditOffset.value,
+    })
+    auditLogs.value = data.logs
+    auditTotal.value = data.total
+  } catch {
+    addToast('error', 'Failed to load audit logs')
+  } finally {
+    loadingAudit.value = false
+  }
+}
+
+function handleAuditFilterChange(filters: { actor_type: string; actor_id: string; action: string; resource_type: string; resource_id: string }) {
+  auditFilters.value = { ...filters }
+  auditOffset.value = 0
+  void fetchAuditLogs()
+}
+
+function handleAuditPageChange(offset: number) {
+  auditOffset.value = offset
+  void fetchAuditLogs()
+}
+
+async function fetchHealth() {
+  loadingHealth.value = true
+  try {
+    const [health, metrics] = await Promise.all([
+      fetchJSON(`${API_BASE}/health`),
+      fetchJSON(`${API_BASE}/api/metrics`).catch(() => null),
+    ])
+    healthData.value = health
+    metricsData.value = metrics
+  } catch {
+    addToast('error', 'Failed to load health status')
+    healthData.value = null
+    metricsData.value = null
+  } finally {
+    loadingHealth.value = false
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Eval / Config Version
+// ---------------------------------------------------------------------------
+
+async function fetchEvalSummary() {
+  loadingEval.value = true
+  try {
+    evalSummary.value = await getEvalSummary()
+  } catch {
+    addToast('error', 'Failed to load eval summary')
+  } finally {
+    loadingEval.value = false
+  }
+}
+
+async function fetchConfigVersions() {
+  try {
+    const data = await listConfigVersions()
+    configVersions.value = data.items
+  } catch {
+    addToast('error', 'Failed to load config versions')
+  }
+}
+
+async function handleConfigCompare(beforeId: string, afterId: string) {
+  loadingConfigCompare.value = true
+  configCompareResult.value = null
+  try {
+    configCompareResult.value = await compareConfigs({
+      before_version_id: beforeId,
+      after_version_id: afterId,
+    })
+  } catch {
+    addToast('error', 'Failed to compare configs')
+  } finally {
+    loadingConfigCompare.value = false
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Workflow Orchestration (v2.0)
+// ---------------------------------------------------------------------------
+
+async function fetchWorkflowDefinitions() {
+  loadingWorkflowDefs.value = true
+  try {
+    const data = await listWorkflowDefinitions({
+      limit: workflowDefsLimit.value,
+      offset: workflowDefsOffset.value,
+    })
+    workflowDefinitions.value = data.items
+    workflowDefsTotal.value = data.total
+  } catch {
+    addToast('error', 'Failed to load workflow definitions')
+  } finally {
+    loadingWorkflowDefs.value = false
+  }
+}
+
+async function openWorkflowDetail(wf: WorkflowDefinition) {
+  selectedWorkflowDef.value = wf
+  selectedWorkflowRuns.value = []
+  workflowVersions.value = []
+  currentNav.value = 'workflow-detail'
+  window.location.hash = `#/workflows/${encodeURIComponent(wf.id)}`
+  loadingWorkflowDetail.value = true
+  try {
+    const [detail, runsData] = await Promise.all([
+      getWorkflowDefinition(wf.id),
+      listWorkflowRuns(wf.id),
+    ])
+    selectedWorkflowDef.value = detail
+    selectedWorkflowRuns.value = runsData.items
+    void handleLoadWorkflowVersions()
+  } catch {
+    addToast('error', 'Failed to load workflow detail')
+  } finally {
+    loadingWorkflowDetail.value = false
+  }
+}
+
+function backToWorkflows() {
+  currentNav.value = 'workflows'
+  window.location.hash = '#/workflows'
+}
+
+async function handleStartWorkflowRun() {
+  if (!selectedWorkflowDef.value) return
+  try {
+    const run = await startWorkflowRun(selectedWorkflowDef.value.id, {
+      input_summary: 'Manual run from dashboard',
+    })
+    selectedWorkflowRuns.value = [run, ...selectedWorkflowRuns.value]
+    addToast('success', 'Workflow run started')
+  } catch (e) {
+    addToast('error', `Failed to start workflow run: ${extractError(e)}`)
+  }
+}
+
+async function handleSelectWorkflowRun(run: WorkflowRunDetail) {
+  selectedWorkflowRunDetail.value = run
+}
+
+async function handleLoadWorkflowVersions() {
+  if (!selectedWorkflowDef.value) return
+  loadingWorkflowVersions.value = true
+  try {
+    const data = await listWorkflowVersions(selectedWorkflowDef.value.id)
+    workflowVersions.value = data.items
+  } catch {
+    addToast('error', 'Failed to load version history')
+  } finally {
+    loadingWorkflowVersions.value = false
+  }
+}
+
+async function handleWorkflowRollback(version: number) {
+  if (!selectedWorkflowDef.value) return
+  rollingBackWorkflow.value = true
+  try {
+    const updated = await rollbackWorkflow(selectedWorkflowDef.value.id, { version })
+    selectedWorkflowDef.value = updated
+    addToast('success', `Rolled back to v${version}`)
+    await handleLoadWorkflowVersions()
+  } catch {
+    addToast('error', 'Failed to rollback workflow')
+  } finally {
+    rollingBackWorkflow.value = false
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Failed Events (OPT-54)
+// ---------------------------------------------------------------------------
+
+async function loadConnectorItems() {
+  try {
+    const data = await listConnectors()
+    connectorItems.value = data.items
+  } catch {
+    addToast('error', 'Failed to load connectors')
+  }
+}
+
+async function fetchFailedEvents(connectorId?: string, cursor?: string | null) {
+  const cid = connectorId || failedEventsConnectorId.value
+  if (!cid) return
+  failedEventsConnectorId.value = cid
+  loadingFailedEvents.value = true
+  try {
+    const params: Record<string, string | number> = { limit: failedEventsLimit.value }
+    if (cursor) {
+      params.cursor = cursor
+    } else {
+      params.offset = failedEventsOffset.value
+    }
+    const searchParams = new URLSearchParams()
+    for (const [k, v] of Object.entries(params)) searchParams.set(k, String(v))
+    const data = await (await import('./composables/useApi')).fetchJSON(
+      `${(await import('./config')).API_BASE}/api/connectors/${encodeURIComponent(cid)}/failed-events?${searchParams}`,
+    ) as { items: FailedEventItem[]; total: number; next_cursor: string | null; has_more: boolean }
+    failedEvents.value = data.items
+    failedEventsTotal.value = data.total
+    failedEventsHasMore.value = data.has_more
+    failedEventsCursor.value = data.next_cursor
+  } catch {
+    addToast('error', 'Failed to load failed events')
+  } finally {
+    loadingFailedEvents.value = false
+  }
+}
+
+function handleFailedEventConnectorChange(connectorId: string) {
+  failedEventsConnectorId.value = connectorId
+  failedEventsOffset.value = 0
+  failedEventsCursor.value = null
+  failedEventsCursorStack.value = []
+  void fetchFailedEvents(connectorId)
+}
+
+function handleFailedEventsNextPage() {
+  if (failedEventsCursor.value) {
+    failedEventsCursorStack.value.push(failedEventsCursor.value)
+    failedEventsOffset.value += failedEventsLimit.value
+    void fetchFailedEvents(undefined, failedEventsCursor.value)
+  }
+}
+
+function handleFailedEventsPrevPage() {
+  failedEventsCursorStack.value.pop()
+  failedEventsOffset.value = Math.max(0, failedEventsOffset.value - failedEventsLimit.value)
+  const prevCursor = failedEventsCursorStack.value.length > 0
+    ? failedEventsCursorStack.value[failedEventsCursorStack.value.length - 1]
+    : null
+  void fetchFailedEvents(undefined, prevCursor)
+}
+
+async function handleReplayFailedEvent(eventId: string) {
+  if (!failedEventsConnectorId.value) return
+  replayingFailedEventId.value = eventId
+  try {
+    await replayFailedEvent(failedEventsConnectorId.value, eventId)
+    addToast('success', 'Event replayed successfully')
+    await fetchFailedEvents()
+  } catch {
+    addToast('error', 'Failed to replay event')
+  } finally {
+    replayingFailedEventId.value = ''
+  }
+}
+
+function handleFailedEventPageChange(offset: number) {
+  failedEventsOffset.value = offset
+  void fetchFailedEvents()
+}
+
+// ---------------------------------------------------------------------------
+// Batch Approvals (OPT-55)
+// ---------------------------------------------------------------------------
+
+async function handleBatchApprove(ids: string[]) {
+  approvalActionLoading.value = true
+  try {
+    const result = await batchApprove(ids)
+    addToast('success', `Batch approved: ${result.processed} processed, ${result.skipped} skipped`)
+    await fetchApprovals()
+  } catch {
+    addToast('error', 'Batch approve failed')
+  } finally {
+    approvalActionLoading.value = false
+  }
+}
+
+async function handleBatchReject(ids: string[]) {
+  approvalActionLoading.value = true
+  try {
+    const result = await batchReject(ids)
+    addToast('success', `Batch rejected: ${result.processed} processed, ${result.skipped} skipped`)
+    await fetchApprovals()
+  } catch {
+    addToast('error', 'Batch reject failed')
+  } finally {
+    approvalActionLoading.value = false
+  }
+}
+
 function handleAlertAction(alert: AlertItem) {
   if (alert.action_nav.startsWith('sessions/')) {
     const taskId = alert.action_nav.replace('sessions/', '')
@@ -929,7 +1466,30 @@ async function handleAlertRunbook(alert: AlertItem) {
 async function handleTopRefresh() {
   if (currentNav.value === 'session-detail') {
     refreshSessionDetail()
+    return
+  }
+  if (currentNav.value === 'runs') {
+    await fetchWorkflowRuns()
+    return
+  }
+  if (currentNav.value === 'run-detail') {
+    refreshRunDetail()
+    return
+  }
+  if (currentNav.value === 'approvals') {
+    await fetchApprovals()
+    return
+  }
+  if (currentNav.value === 'tasks') {
+    await fetchTasks()
+    return
+  }
+  if (currentNav.value === 'logs') {
     await fetchLogs()
+    return
+  }
+  if (currentNav.value === 'history') {
+    await fetchHistory()
     return
   }
   await refreshAll()
@@ -937,26 +1497,21 @@ async function handleTopRefresh() {
 
 async function refreshAll() {
   isRefreshing.value = true
-  await Promise.all([fetchHermesStatus(), fetchTasks(), fetchLogs(), fetchHistory(), fetchOverviewSnapshot(), fetchAlerts()])
+  await Promise.all([
+    fetchHermesStatus(),
+    fetchWorkflowRuns(),
+    fetchWorkflowRuntimes(),
+    fetchWorkflowDefinitions(),
+    fetchApprovals(),
+    fetchEvalSummary(),
+    fetchOverviewSnapshot(),
+    fetchAlerts(),
+  ])
   isRefreshing.value = false
-  addToast('success', '数据已刷新')
+  addToast('success', 'Data refreshed')
 }
 
 // retryInit removed - unused
-
-function parseLogLine(line: string): Log | null {
-  if (!line || typeof line !== 'string') return null
-  const lower = line.toLowerCase()
-  let type: 'info' | 'warning' | 'error' | 'debug' = 'info'
-  if (lower.includes('error') || lower.includes('err]')) type = 'error'
-  else if (lower.includes('warn') || lower.includes('[w]')) type = 'warning'
-  else if (lower.includes('debug') || lower.includes('[d]')) type = 'debug'
-
-  const timestampMatch = line.match(/^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})/)
-  const timestamp = timestampMatch ? timestampMatch[1] : new Date().toISOString()
-
-  return { timestamp, message: line, type }
-}
 
 function handleSSEMessage(event: MessageEvent) {
   try {
@@ -1005,7 +1560,7 @@ function handleSSEMessage(event: MessageEvent) {
         break
 
       case 'error':
-        addToast('error', data.message || 'SSE 错误')
+        addToast('error', data.message || 'SSE error')
         break
 
       default:
@@ -1051,7 +1606,7 @@ function connectSSE() {
     eventSource?.close()
 
     if (reconnectAttempts.value >= MAX_RECONNECT_ATTEMPTS) {
-      addToast('error', `SSE 连接失败，已停止重连。请刷新页面重试。`)
+      addToast('error', `SSE connection failed, retry stopped. Please refresh the page.`)
       return
     }
 
@@ -1060,7 +1615,7 @@ function connectSSE() {
 
     if (!isReconnecting.value) {
       isReconnecting.value = true
-      addToast('warning', `SSE 连接断开，${Math.round(delay / 1000)}s 后自动重连...`)
+      addToast('warning', `SSE disconnected, reconnecting in ${Math.round(delay / 1000)}s...`)
     }
 
     setTimeout(connectSSE, delay)
@@ -1073,22 +1628,6 @@ onMounted(async () => {
   connectSSE()
 
   // Sync hash route to currentNav so browser back/forward and direct URL work
-  const hashToNav: Record<string, string> = {
-    '#/terminal': 'terminal',
-    '#/tasks': 'tasks',
-    '#/logs': 'logs',
-    '#/history': 'history',
-    '#/knowledge': 'knowledge',
-    '#/chat': 'chat',
-    '#/agents': 'agents',
-    '#/system': 'system',
-    '#/pr-list': 'pr-list',
-    '#/providers': 'providers',
-    '#/costs': 'costs',
-    '#/guardrails': 'guardrails',
-    '#/': 'dashboard',
-    '': 'dashboard',
-  }
   const handleHashChange = () => {
     const sessionMatch = window.location.hash.match(/^#\/sessions\/(.+)$/)
     if (sessionMatch) {
@@ -1098,8 +1637,16 @@ onMounted(async () => {
       }
       return
     }
+    const runMatch = window.location.hash.match(/^#\/runs\/(.+)$/)
+    if (runMatch) {
+      const runId = decodeURIComponent(runMatch[1])
+      if (selectedRunId.value !== runId || currentNav.value !== 'run-detail') {
+        openRunDetail(runId)
+      }
+      return
+    }
     const baseHash = window.location.hash.split('?')[0]
-    const nav = hashToNav[baseHash]
+    const nav = HASH_TO_NAV[baseHash]
     if (nav && currentNav.value !== nav) currentNav.value = nav
   }
   window.addEventListener('hashchange', handleHashChange)
@@ -1155,6 +1702,24 @@ onUnmounted(() => {
 .main-content.chat-active {
   padding: 0;
   gap: 0;
+}
+
+/* Legacy Deprecation Banner */
+.legacy-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--warning-bg, rgba(255, 193, 7, 0.1));
+  border: 1px solid var(--warning-color, #ffc107);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.legacy-banner-icon {
+  font-size: 16px;
+  flex-shrink: 0;
 }
 
 /* 系统状态栏 */

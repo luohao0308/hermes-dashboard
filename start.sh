@@ -10,6 +10,13 @@ export PATH="/Applications/Codex.app/Contents/Resources:/opt/homebrew/bin:/usr/l
 export NO_PROXY="localhost,127.0.0.1,::1,${NO_PROXY:-}"
 export no_proxy="localhost,127.0.0.1,::1,${no_proxy:-}"
 
+# 加载 .env 文件
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  set -a
+  source "$SCRIPT_DIR/.env"
+  set +a
+fi
+
 echo "=========================================="
 echo "  AI Code Review Pipeline 启动脚本"
 echo "=========================================="

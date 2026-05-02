@@ -3,7 +3,6 @@
 import asyncio
 import uuid
 import json
-from datetime import datetime
 from typing import Optional
 
 from agents import Agent, Runner
@@ -58,8 +57,8 @@ class AgentOrchestrator:
 
         # Start SSE event broadcaster (consumes _event_queue in the background)
         self._broadcast_task = asyncio.create_task(self._run_broadcaster())
-        # Start background monitor loop (polls Hermès every 30s) alongside broadcaster
-        self._monitor_task = asyncio.create_task(self._monitor_loop())
+        # The old bridge monitor was removed with the legacy proxy path.
+        self._monitor_task = None
 
     async def _run_broadcaster(self):
         """Background task: drain the event queue and broadcast to SSE."""
@@ -276,58 +275,6 @@ class AgentOrchestrator:
 
         print(f"[_classify_event] event_type={event.type if hasattr(event, 'type') else 'N/A'}, name={name if 'name' in dir() else 'N/A'}")
         return None, None
-
-    # -------------------------------------------------------------------------
-    # Background monitor loop
-    # -------------------------------------------------------------------------
-
-    async def _monitor_loop(self):
-        """Poll Hermès sessions every 30s and emit alerts."""
-        import httpx
-        HERMES = "http://127.0.0.1:9119"
-
-        while True:
-            await asyncio.sleep(30)
-            try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    resp = await client.get(f"{HERMES}/api/sessions", params={"limit": 10})
-                    if resp.status_code != 200:
-                        continue
-                    sessions = resp.json().get("sessions", [])
-
-                now = datetime.utcnow().timestamp()
-
-                for session in sessions:
-                    if not session.get("is_active"):
-                        continue
-
-                    last_active = session.get("last_active", now)
-                    if isinstance(last_active, (int, float)):
-                        age_min = (now - last_active) / 60
-                    else:
-                        age_min = 0
-
-                    if age_min > 5:
-                        await self._emit(AgentEvent(
-                            type="hermes_alert",
-                            hermes_level="warning",
-                            message=f"Session {session['id']} idle > {age_min:.0f}min",
-                            session_id=session["id"],
-                        ))
-
-                    end_reason = session.get("end_reason", "")
-                    if end_reason and end_reason not in ("cli_close", "done"):
-                        await self._emit(AgentEvent(
-                            type="hermes_alert",
-                            hermes_level="error",
-                            message=f"Session {session['id']} ended: {end_reason}",
-                            session_id=session["id"],
-                        ))
-
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                pass  # Silent - monitor should not spam logs
 
     # -------------------------------------------------------------------------
     # Helpers

@@ -50,9 +50,9 @@
 
     <div class="ops-details">
       <div class="detail-group">
-        <span class="detail-label">Bridge</span>
-        <strong>{{ snapshot.health?.service || 'hermes-bridge' }}</strong>
-        <span>{{ snapshot.health?.hermes_reachable ? 'Hermès 可达' : 'Hermès 未确认' }}</span>
+        <span class="detail-label">Control Plane</span>
+        <strong>{{ snapshot.health?.service || 'ai-workflow-control-plane' }}</strong>
+        <span>{{ snapshot.health?.status === 'healthy' ? 'API healthy' : 'API degraded' }}</span>
       </div>
       <div class="detail-group">
         <span class="detail-label">模型</span>
@@ -60,14 +60,14 @@
         <span>{{ modelProvider }}</span>
       </div>
       <div class="detail-group">
-        <span class="detail-label">能力面</span>
+        <span class="detail-label">Workers</span>
         <strong>{{ capabilityText }}</strong>
-        <span>{{ cronCount }} 个定时任务</span>
+        <span>{{ pendingApprovals }} pending approvals</span>
       </div>
       <div class="detail-group">
-        <span class="detail-label">配置</span>
+        <span class="detail-label">Database</span>
         <strong>{{ configText }}</strong>
-        <span>Gateway {{ status?.gateway_running ? '运行中' : '未运行' }}</span>
+        <span>API {{ status?.gateway_running ? '运行中' : '未运行' }}</span>
       </div>
     </div>
 
@@ -82,39 +82,15 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-
-interface OverviewTask {
-  task_id: string
-  status: 'running' | 'pending' | 'completed'
-  message_count?: number
-}
-
-interface OverviewLog {
-  type: 'info' | 'warning' | 'error' | 'debug'
-}
-
-interface OverviewHistoryItem {
-  input_tokens?: number
-  output_tokens?: number
-}
-
-interface OverviewSnapshot {
-  health?: Record<string, any> | null
-  analytics?: Record<string, any> | null
-  evalSummary?: Record<string, any> | null
-  modelInfo?: Record<string, any> | null
-  config?: Record<string, any> | null
-  skills?: Record<string, any> | any[] | null
-  cronJobs?: Record<string, any> | any[] | null
-  plugins?: Record<string, any> | any[] | null
-}
+import type { Task, Log, HistoryItem, OverviewSnapshot } from '../types'
+import { formatNumber } from '../composables/useFormatters'
 
 const props = defineProps<{
   status: Record<string, any> | null
   isConnected: boolean
-  tasks: OverviewTask[]
-  logs: OverviewLog[]
-  history: OverviewHistoryItem[]
+  tasks: Task[]
+  logs: Log[]
+  history: HistoryItem[]
   snapshot: OverviewSnapshot
   loading?: boolean
 }>()
@@ -124,11 +100,18 @@ const emit = defineEmits<{
 }>()
 
 const activeTaskCount = computed(() =>
-  props.tasks.filter(task => task.status === 'running' || task.status === 'pending').length
+  getNestedNumber(props.snapshot.analytics, ['runs', 'running'])
+    ?? props.tasks.filter(task => task.status === 'running' || task.status === 'pending').length
 )
 
-const errorLogCount = computed(() => props.logs.filter(log => log.type === 'error').length)
-const warningLogCount = computed(() => props.logs.filter(log => log.type === 'warning').length)
+const errorLogCount = computed(() =>
+  getNestedNumber(props.snapshot.analytics, ['runs', 'failed'])
+    ?? props.logs.filter(log => log.type === 'error').length
+)
+const warningLogCount = computed(() =>
+  getNestedNumber(props.snapshot.analytics, ['connectors', 'errors_today'])
+    ?? props.logs.filter(log => log.type === 'warning').length
+)
 
 const totalMessages = computed(() =>
   props.tasks.reduce((sum, task) => sum + (task.message_count || 0), 0)
@@ -218,27 +201,30 @@ const modelProvider = computed(() => {
   return info.provider || info.vendor || info.platform || '模型信息'
 })
 
-const skillCount = computed(() => getCollectionCount(props.snapshot.skills, ['skills']))
-const pluginCount = computed(() => getCollectionCount(props.snapshot.plugins, ['plugins']))
-const cronCount = computed(() => getCollectionCount(props.snapshot.cronJobs, ['jobs', 'cron_jobs']))
+const workerCount = computed(() => Object.keys(
+  getNestedRecord(props.snapshot.analytics, ['workers'])
+    || getNestedRecord(props.snapshot.health, ['workers'])
+    || {}
+).length)
+const pendingApprovals = computed(() => getNestedNumber(props.snapshot.analytics, ['approvals', 'pending']) ?? 0)
 
-const capabilityText = computed(() => `${skillCount.value} Skills / ${pluginCount.value} Plugins`)
+const capabilityText = computed(() => `${workerCount.value} active signals`)
 
 const configText = computed(() => {
-  const config = props.snapshot.config || {}
-  return config.profile || config.environment || config.mode || '默认配置'
+  const database = getNestedRecord(props.snapshot.health, ['database']) || {}
+  return database.migration_version ? `migration ${database.migration_version}` : database.status || '未确认'
 })
 
 const signals = computed(() => {
   const result: Array<{ text: string; tone: 'good' | 'warn' | 'bad' }> = []
   if (!props.status?.gateway_running) {
-    result.push({ text: 'Gateway 未运行，任务数据可能不是实时状态', tone: 'bad' })
+    result.push({ text: '控制面 API 未运行，页面数据可能不是实时状态', tone: 'bad' })
   }
   if (!props.isConnected) {
     result.push({ text: 'SSE 实时推送断开，页面正在依赖轮询数据', tone: 'warn' })
   }
   if (errorLogCount.value > 0) {
-    result.push({ text: `最近抓取到 ${errorLogCount.value} 条错误日志`, tone: 'bad' })
+    result.push({ text: `当前有 ${errorLogCount.value} 个失败运行`, tone: 'bad' })
   }
   if (activeTaskCount.value > 0 && totalMessages.value === 0) {
     result.push({ text: '存在活跃任务但消息数为 0，可能刚启动或未产生输出', tone: 'warn' })
@@ -249,21 +235,24 @@ const signals = computed(() => {
   return result
 })
 
-function getCollectionCount(value: unknown, keys: string[]): number {
-  if (Array.isArray(value)) return value.length
-  if (!value || typeof value !== 'object') return 0
-  const record = value as Record<string, unknown>
-  for (const key of keys) {
-    const nested = record[key]
-    if (Array.isArray(nested)) return nested.length
+function getNestedRecord(value: unknown, path: string[]): Record<string, any> | null {
+  let current: unknown = value
+  for (const key of path) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return null
+    current = (current as Record<string, unknown>)[key]
   }
-  return 0
+  return current && typeof current === 'object' && !Array.isArray(current)
+    ? current as Record<string, any>
+    : null
 }
 
-function formatNumber(value: number): string {
-  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`
-  return String(value)
+function getNestedNumber(value: unknown, path: string[]): number | undefined {
+  let current: unknown = value
+  for (const key of path) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined
+    current = (current as Record<string, unknown>)[key]
+  }
+  return typeof current === 'number' ? current : undefined
 }
 </script>
 

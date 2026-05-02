@@ -152,7 +152,7 @@ async function testProvider(name: string) {
   try {
     const res = await fetch(`${API_BASE}/api/providers/${name}/test`, { method: 'POST' })
     const data = await res.json()
-    alert(data.ok ? `${name} 连接成功` : `${name} 连接失败`)
+    alert(data.ok ? `${name} 连接成功` : `${name} 连接失败: ${data.error || '未知原因'}`)
   } catch {
     alert(`测试 ${name} 失败`)
   }

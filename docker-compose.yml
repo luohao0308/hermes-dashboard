@@ -1,22 +1,82 @@
 version: '3.8'
 
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ai_workflow
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env before docker compose up}
+  SCHEDULER_HEARTBEAT_PATH: /var/run/ai-workflow/scheduler_worker_heartbeat
+  RETENTION_HEARTBEAT_PATH: /var/run/ai-workflow/retention_worker_heartbeat
+  TRUST_ENV: "false"
+
 services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ai_workflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["alembic", "upgrade", "head"]
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
     ports:
       - "8000:8000"
-    environment:
-      - HERMES_API_URL=http://host.docker.internal:9119
-      - TRUST_ENV=false
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    environment: *backend-env
+    volumes:
+      - worker_heartbeats:/var/run/ai-workflow
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/status"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)\""]
       interval: 30s
       timeout: 10s
       retries: 3
+
+  workflow-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["python", "-m", "workers.workflow_worker", "--poll-interval", "2", "--stale-lock-seconds", "300"]
+    environment: *backend-env
+    volumes:
+      - worker_heartbeats:/var/run/ai-workflow
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  retention-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    command: ["python", "-m", "workers.retention_worker", "--poll-interval", "3600"]
+    environment: *backend-env
+    volumes:
+      - worker_heartbeats:/var/run/ai-workflow
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
 
   frontend:
     build:
@@ -25,5 +85,10 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  postgres_data:
+  worker_heartbeats:

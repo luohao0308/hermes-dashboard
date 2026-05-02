@@ -86,14 +86,8 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-
-export interface Log {
-  id?: number
-  timestamp: string
-  message: string
-  type: 'info' | 'warning' | 'error' | 'debug'
-  source?: string
-}
+import type { Log } from '../types'
+import { formatTime } from '../composables/useFormatters'
 
 const props = defineProps<{
   logs: Log[]
@@ -138,15 +132,6 @@ const filteredLogs = computed(() => {
 const infoCount = computed(() => props.logs.filter(l => l.type === 'info').length)
 const warningCount = computed(() => props.logs.filter(l => l.type === 'warning').length)
 const errorCount = computed(() => props.logs.filter(l => l.type === 'error').length)
-
-function formatTime(timestamp: string): string {
-  const date = new Date(timestamp)
-  return date.toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
-}
 
 function toggleExpand(logId: number) {
   if (expandedLogs.value.has(logId)) {

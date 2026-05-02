@@ -36,11 +36,11 @@ describe('TraceTimeline', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('Trace 时间线')
+    expect(wrapper.text()).toContain('Trace Timeline')
     expect(wrapper.text()).toContain('completed')
     expect(wrapper.text()).toContain('Agent handoff')
     expect(wrapper.text()).toContain('handoff to Reviewer')
-    expect(wrapper.text()).toContain('耗时 120ms')
+    expect(wrapper.text()).toContain('Duration 120ms')
     expect(wrapper.text()).toContain('需要 Reviewer 审查')
     expect(wrapper.text()).toContain('审查结论')
   })
@@ -53,6 +53,6 @@ describe('TraceTimeline', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('暂无 trace 数据')
+    expect(wrapper.text()).toContain('No trace data')
   })
 })

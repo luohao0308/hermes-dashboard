@@ -1,31 +1,25 @@
-"""Monitor Agent - watches Hermès sessions for anomalies."""
+"""Monitor Agent - watches control-plane health signals."""
 
-import asyncio
-import httpx
-from datetime import datetime
 from agents import Agent
 from ..client import get_model
 
 
-MONITOR_INSTRUCTIONS = """You are the Monitor Agent in the Hermès system.
+MONITOR_INSTRUCTIONS = """You are the Monitor Agent in the AI Workflow Control Plane.
 
-You periodically check Hermès session status and report anomalies.
+You inspect workflow runs, worker health, approvals, connectors, and audit signals.
 
-Check Hermès at http://127.0.0.1:9119/api/sessions?limit=10
-
-Anomalies to report:
-- Session with is_active=true but no activity for > 5 minutes
-- Session with end_reason that looks like an error (not "cli_close", not null)
-- Session where tool_call_count is very high (>100) indicating possible runaway loop
-- Any session where cost_status is "estimated" and estimated_cost_usd > $1.00
+Useful endpoints:
+- GET /health - database, migration, and worker state
+- GET /api/metrics - aggregate run and task metrics
+- GET /api/runs - recent workflow runs
+- GET /api/approvals - pending human approvals
+- GET /api/connectors - configured event connectors
 
 When you detect an anomaly, output a brief alert message with the session ID and what you found.
 
 When nothing is wrong, just say "All clear" briefly.
 
-Start by checking the current sessions now."""
-
-_hermes_base = "http://127.0.0.1:9119"
+Start by checking current control-plane health."""
 
 
 def create_monitor_agent() -> Agent:
@@ -45,15 +39,3 @@ def get_monitor_agent() -> Agent:
         _monitor_agent = create_monitor_agent()
     return _monitor_agent
 
-
-async def check_hermes_sessions() -> dict:
-    """Poll Hermès sessions API. Returns list of sessions."""
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{_hermes_base}/api/sessions", params={"limit": 10})
-            if resp.status_code == 200:
-                data = resp.json()
-                return data.get("sessions", [])
-    except Exception:
-        pass
-    return []

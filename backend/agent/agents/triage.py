@@ -20,12 +20,12 @@ def create_triage_agent() -> Agent:
 
     return Agent(
         name="TriageAgent",
-        instructions="""You are the Triage Agent in the Hermès monitoring system.
+        instructions="""You are the Triage Agent in the AI Workflow Control Plane.
 
 Your job is to understand the user's request and route it to the right specialist.
 
 Routing rules:
-- If user asks about Hermès session status, task health, agent health → transfer_to_MonitorAgent
+- If user asks about workflow run status, task health, worker health, or agent health → transfer_to_MonitorAgent
 - If user asks to analyze why something failed, understand a session, explain → transfer_to_AnalystAgent
 - If user asks to execute a task, run a command, do something → transfer_to_ExecutorAgent
 - If unclear, ask a brief clarifying question.

@@ -82,17 +82,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-
-export interface Task {
-  task_id: string
-  name: string
-  status: 'running' | 'pending' | 'completed'
-  progress: number
-  started_at?: string
-  estimated_end?: string
-  message_count?: number
-  model?: string
-}
+import type { Task } from '../types'
 
 const props = defineProps<{
   tasks: Task[]

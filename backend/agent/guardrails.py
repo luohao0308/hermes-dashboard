@@ -86,12 +86,19 @@ class ApprovalEventStore:
 
 
 _approval_store = ApprovalEventStore()
+_approval_repo = None
 
 
 def configure_approval_event_store(path: str | None = None) -> None:
     """Configure persistence for approval events."""
     global _approval_store
     _approval_store = ApprovalEventStore(path)
+
+
+def configure_approval_repository(repo) -> None:
+    """Configure PG repository for new writes."""
+    global _approval_repo
+    _approval_repo = repo
 
 
 def approval_event_store_status() -> dict[str, Any]:
@@ -159,10 +166,14 @@ def create_approval_event(
         "resolved_by": None,
         "resolution_note": None,
     }
+    if _approval_repo is not None:
+        return _approval_repo.create(event)
     return _approval_store.create(event)
 
 
 def list_approval_events(status: str | None = None) -> list[dict[str, Any]]:
+    if _approval_repo is not None:
+        return _approval_repo.list(status)
     return _approval_store.list(status)
 
 
@@ -172,12 +183,13 @@ def resolve_approval_event(
     resolved_by: str = "local_user",
     note: str | None = None,
 ) -> dict[str, Any] | None:
-    event = _approval_store.get(event_id)
+    store = _approval_repo if _approval_repo is not None else _approval_store
+    event = store.get(event_id)
     if not event:
         return None
     if event.get("status") != "pending":
         return dict(event)
-    return _approval_store.update(event_id, {
+    return store.update(event_id, {
         "status": "approved" if approved else "rejected",
         "updated_at": datetime.now().isoformat(),
         "resolved_by": resolved_by,
@@ -186,7 +198,8 @@ def resolve_approval_event(
 
 
 def validate_approval_event(event_id: str, tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
-    event = _approval_store.get(event_id)
+    store = _approval_repo if _approval_repo is not None else _approval_store
+    event = store.get(event_id)
     if not event:
         raise ValueError("Approval event not found")
     if event.get("tool") != tool_name:

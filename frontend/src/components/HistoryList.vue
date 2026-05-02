@@ -90,18 +90,8 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-
-export interface HistoryItem {
-  task_id: string
-  name: string
-  completed_at: string
-  duration: number
-  status: 'success' | 'failed' | 'cancelled'
-  message_count?: number
-  model?: string
-  input_tokens?: number
-  output_tokens?: number
-}
+import type { HistoryItem } from '../types'
+import { formatDate, formatDuration } from '../composables/useFormatters'
 
 const props = defineProps<{
   history: HistoryItem[]
@@ -160,26 +150,6 @@ const avgDuration = computed(() => {
   const avg = Math.floor(props.history.reduce((sum, item) => sum + item.duration, 0) / props.history.length)
   return formatDuration(avg)
 })
-
-function formatDate(timestamp: string): string {
-  const date = new Date(timestamp)
-  return date.toLocaleDateString('zh-CN', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  if (mins < 60) return `${mins}m ${secs}s`
-  const hours = Math.floor(mins / 60)
-  const remainingMins = mins % 60
-  return `${hours}h ${remainingMins}m`
-}
 
 function viewDetails(item: HistoryItem) {
   emit('viewDetails', item)

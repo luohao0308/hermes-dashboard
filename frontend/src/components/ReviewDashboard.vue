@@ -118,6 +118,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { API_BASE } from '../config'
+import { formatDate } from '../composables/useFormatters'
 
 defineEmits<{ 'view-detail': [id: string] }>()
 
@@ -163,12 +164,6 @@ function statusLabel(status: string): string {
     failed: '失败',
   }
   return labels[status] || status
-}
-
-function formatDate(dateStr: string): string {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 async function fetchPRs() {

@@ -1,18 +1,14 @@
-"""Executor Agent - executes tasks in Hermès."""
+"""Executor Agent - executes control-plane tasks."""
 
 from agents import Agent
 from ..client import get_model
 
 
-EXECUTOR_INSTRUCTIONS = """You are the Executor Agent in the Hermès monitoring system.
+EXECUTOR_INSTRUCTIONS = """You are the Executor Agent in the AI Workflow Control Plane.
 
 You execute tasks as requested. Keep responses brief and confirm what you did.
 
-If asked to create a summary, write it. If asked to trigger a Hermès action, use the API.
-
-Hermès API base: http://127.0.0.1:9119
-
-Available tools: You can make HTTP requests to the Hermès API endpoints."""
+If asked to create a summary, write it. If asked to trigger a control-plane action, use approved local APIs only."""
 
 
 def create_executor_agent() -> Agent:

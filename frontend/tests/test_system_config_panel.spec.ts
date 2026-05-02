@@ -5,10 +5,10 @@ import SystemConfigPanel from '@/components/SystemConfigPanel.vue'
 describe('SystemConfigPanel', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn((url: string) => {
-      const body = url.includes('/api/model/info')
-        ? { model: 'MiniMax-M2.7', provider: 'MiniMax' }
-        : url.includes('/api/skills')
-          ? { skills: [{ name: 'review', description: 'Code review' }] }
+      const body = url.endsWith('/health')
+        ? { service: 'ai-workflow-control-plane', version: '3.0.0', status: 'healthy', database: { status: 'connected', migration_version: '009' }, workers: { 'scheduler-worker': { status: 'alive', worker_id: 'worker-1' } } }
+        : url.includes('/api/runtimes')
+          ? { items: [{ name: 'MiniMax-M2.7', type: 'model', status: 'available' }] }
           : url.includes('/api/agent/tools')
             ? { tools: [{ name: 'get_status', description: 'Read status', risk: 'read' }] }
           : url.includes('/api/agent/guardrails')
@@ -17,11 +17,9 @@ describe('SystemConfigPanel', () => {
             ? { export_dir: '/tmp/hermes-exports', exists: true, files: [{ filename: 'session.md', path: '/tmp/hermes-exports/session.md', bytes: 42, updated_at: '2026-04-29T00:00:00Z' }], count: 1 }
           : url.includes('/api/agent/evals/summary')
             ? { total_runs: 5, success_rate: 0.8, avg_duration_seconds: 2.4, trend: [{ date: '2026-04-29', runs: 5, errors: 1, success_rate: 0.8, avg_duration_seconds: 2.4 }] }
-          : url.includes('/api/plugins')
-            ? { plugins: [{ name: 'notion', description: 'Sync docs' }] }
-            : url.includes('/api/cron/jobs')
-              ? { jobs: [{ name: 'daily-check', schedule: '0 9 * * *' }] }
-              : { profile: 'local', gateway: 'enabled' }
+          : url.includes('/api/metrics')
+            ? { runs: { total: 5, running: 1 } }
+            : {}
 
       return Promise.resolve({
         ok: true,
@@ -39,15 +37,14 @@ describe('SystemConfigPanel', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('MiniMax-M2.7')
-    expect(wrapper.text()).toContain('review')
+    expect(wrapper.text()).toContain('控制面配置')
     expect(wrapper.text()).toContain('get_status')
     expect(wrapper.text()).toContain('Read-only')
-    expect(wrapper.text()).toContain('notion')
-    expect(wrapper.text()).toContain('daily-check')
+    expect(wrapper.text()).toContain('scheduler-worker')
     expect(wrapper.text()).toContain('/tmp/hermes-exports')
     expect(wrapper.text()).toContain('session.md')
     expect(wrapper.text()).toContain('Agent 性能趋势')
-    expect(wrapper.text()).toContain('80%')
+    expect(wrapper.text()).toContain('80.0%')
   })
 
   it('refreshes data when button is clicked', async () => {

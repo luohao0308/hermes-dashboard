@@ -101,7 +101,7 @@ def test_guardrail_approval_events_persist_between_store_reloads(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_execute_get_logs_validates_and_calls_hermes_get():
+async def test_execute_get_logs_validates_and_returns_local_empty_logs():
     calls = []
 
     async def fake_hermes_get(endpoint, params=None):
@@ -114,8 +114,22 @@ async def test_execute_get_logs_validates_and_calls_hermes_get():
         fake_hermes_get,
     )
 
-    assert result == {"logs": []}
-    assert calls == [("/api/logs", {"lines": 25, "level": "ERROR"})]
+    assert result == {"logs": [], "legacy_disabled": True}
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_execute_get_status_uses_dashboard_api():
+    async def fake_legacy_get(endpoint, params=None):
+        raise AssertionError("legacy bridge should not be called")
+
+    async def fake_dashboard_get(endpoint, params=None):
+        assert endpoint == "/health"
+        return {"status": "healthy"}
+
+    result = await execute_tool("get_status", {}, fake_legacy_get, fake_dashboard_get)
+
+    assert result == {"status": "healthy"}
 
 
 @pytest.mark.asyncio

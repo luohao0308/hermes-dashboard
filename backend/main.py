@@ -1,5 +1,7 @@
-"""AI Code Review Pipeline - FastAPI + SSE Backend
-Multi-model consensus code review platform.
+"""AI Workflow Control Plane - FastAPI backend.
+
+Runtime-agnostic control plane for workflow observability, governance,
+orchestration, connectors, evals, audit, and enterprise controls.
 """
 
 import asyncio
@@ -22,7 +24,21 @@ import httpx
 
 from sse_manager import sse_manager
 from config import settings
+from security.structured_logging import RequestContextMiddleware, setup_logging, request_id_ctx
 from agent import AgentOrchestrator
+from deps import (
+    _provider_registry,
+    _review_store,
+    _cost_tracker,
+    _agent_registry,
+    _terminal_sessions,
+    _pty_lock,
+    TERMINAL_OUTPUT_BUFFER_LIMIT,
+    GUARDRAIL_EVENTS_PATH,
+    hermes_get,
+    hermes_get_raw,
+    init_providers,
+)
 from provider.registry import ProviderRegistry
 from provider.adapters import (
     create_openai_provider,
@@ -57,81 +73,16 @@ from agent.structured_guardrails import validate_agent_input
 from agent.agent_manager import _AgentRegistry
 from agents.stream_events import StreamEvent
 
-_agent_registry = _AgentRegistry()
-
-# Global agent orchestrator (started via lifespan)
+# Agent orchestrator (started via lifespan)
 _agent_orchestrator: AgentOrchestrator | None = None
 
-# Terminal session store: session_id -> session dict
-# session dict: {pid, master_fd, alive, is_attached, pending_messages, lock, attach_count}
-_terminal_sessions: dict[str, dict] = {}
-_pty_lock = asyncio.Lock()
-TERMINAL_OUTPUT_BUFFER_LIMIT = 200_000
-
-# Hermès Agent Dashboard API base URL (override with HERMES_API_URL env var)
-HERMES_API_BASE = os.environ.get("HERMES_API_URL", "http://127.0.0.1:9119")
-GUARDRAIL_EVENTS_PATH = os.environ.get(
-    "GUARDRAIL_EVENTS_PATH",
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "data", "guardrail_approval_events.json")),
-)
+# Configure approval event store
 configure_approval_event_store(GUARDRAIL_EVENTS_PATH)
 
 # Clear proxy env vars for httpx (avoid SOCKS proxy issues)
 for _k in list(os.environ.keys()):
     if 'proxy' in _k.lower():
         del os.environ[_k]
-
-# Session token for authenticated API calls
-_hermes_session_token = None
-
-
-def _get_hermes_token():
-    """Fetch session token from dashboard page"""
-    global _hermes_session_token
-    if _hermes_session_token:
-        return _hermes_session_token
-    try:
-        import re
-        import urllib.request
-        response = urllib.request.urlopen(f"{HERMES_API_BASE}/", timeout=3)
-        html = response.read().decode('utf-8')
-        match = re.search(r'window\.__HERMES_SESSION_TOKEN__="([^"]+)"', html)
-        if match:
-            _hermes_session_token = match.group(1)
-            return _hermes_session_token
-    except Exception:
-        pass
-    return None
-
-
-# ============================================================================
-# Hermès API Client
-# ============================================================================
-
-async def hermes_get(endpoint: str, params: dict = None) -> dict[str, Any]:
-    """Proxy GET request to Hermès Agent API"""
-    url = f"{HERMES_API_BASE}{endpoint}"
-    headers = {}
-    token = _get_hermes_token()
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
-        response = await client.get(url, params=params, headers=headers)
-        response.raise_for_status()
-        return response.json()
-
-
-async def hermes_get_raw(endpoint: str, params: dict = None) -> str:
-    """Proxy GET request to Hermès Agent API, return raw text"""
-    url = f"{HERMES_API_BASE}{endpoint}"
-    headers = {}
-    token = _get_hermes_token()
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
-        response = await client.get(url, params=params, headers=headers)
-        response.raise_for_status()
-        return response.text
 
 
 # ============================================================================
@@ -188,21 +139,35 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events"""
     global _agent_orchestrator
 
-    # Startup: initialize providers
+    # Startup: configure structured logging
+    setup_logging()
     import logging
     logger = logging.getLogger("uvicorn")
     logger.info("Initializing providers...")
-    _init_providers()
+    init_providers()
     logger.info(f"Registered providers: {list(_provider_registry._providers.keys())}")
+
+    # Startup: configure PG repositories if DATABASE_URL is available
+    try:
+        from repositories.factory import configure_pg_repositories
+        configure_pg_repositories()
+        logger.info("PostgreSQL repositories configured — new writes go to PG")
+    except Exception as exc:
+        logger.warning(f"PG repository setup skipped: {exc}")
 
     # Startup: start the event generator
     event_task = asyncio.create_task(generate_events())
 
-    # Start agent orchestrator
-    _agent_orchestrator = AgentOrchestrator(
-        sse_broadcaster=lambda et, d: sse_manager.broadcast(et, d)
-    )
-    await _agent_orchestrator.start()
+    # Start legacy Agent orchestrator only when its model provider is configured.
+    # The control plane core must remain usable without optional Agent API keys.
+    try:
+        _agent_orchestrator = AgentOrchestrator(
+            sse_broadcaster=lambda et, d: sse_manager.broadcast(et, d)
+        )
+        await _agent_orchestrator.start()
+    except Exception as exc:
+        logger.warning(f"Agent orchestrator disabled: {exc}")
+        _agent_orchestrator = None
 
     yield
 
@@ -218,9 +183,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AI Code Review Pipeline",
-    description="Multi-model consensus code review platform",
-    version="2.0.0",
+    title="AI Workflow Control Plane",
+    description="Runtime-agnostic control plane for AI workflow observability, governance, orchestration, and audit",
+    version="3.0.0",
     lifespan=lifespan
 )
 
@@ -228,6 +193,27 @@ app = FastAPI(
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Include request_id in all unhandled error responses."""
+    req_id = request_id_ctx.get("")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "request_id": req_id},
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Include request_id in all HTTP error responses."""
+    req_id = request_id_ctx.get("")
+    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": detail, "request_id": req_id},
+    )
 
 # Security headers middleware
 @app.middleware("http")
@@ -245,399 +231,56 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Service-Token", "X-User-Role"],
+    expose_headers=["X-Request-ID"],
 )
 
+# Structured logging middleware (request_id, access logs, secret sanitization)
+app.add_middleware(RequestContextMiddleware)
 
-# ============================================================================
-# SSE Endpoint
-# ============================================================================
+# Mount routers
+from routers.health import router as health_router
+from routers.provider import router as provider_router
+from routers.review import router as review_router
+from routers.cost import router as cost_router
+from routers.alerts import router as alerts_router
+from routers.agent_config import router as agent_config_router
+from routers.runtimes import router as runtimes_router
+from routers.runs import router as runs_router
+from routers.tools import router as tools_router
+from routers.approvals import router as approvals_router
+from routers.run_analysis import router as run_analysis_router
+from routers.connectors import router as connectors_router
+from routers.evals import router as evals_router
+from routers.workflows import router as workflows_router
+from routers.users import router as users_router
+from routers.environments import router as environments_router
+from routers.audit import router as audit_router
+from routers.auth import router as auth_router
+from routers.metrics import router as metrics_router
 
-@app.get("/sse")
-@limiter.limit("30/minute")
-async def sse_endpoint(request: Request):
-    """Server-Sent Events endpoint for Hermès updates"""
-
-    client_id = str(uuid.uuid4())
-
-    async def event_generator():
-        # Register connection — creates a queue for this client
-        await sse_manager.connect(client_id, request)
-        queue = sse_manager._queues[client_id]
-        heartbeat_count = 0
-
-        try:
-            # Send initial connection event
-            yield ServerSentEvent(
-                event="connected",
-                data=json.dumps({
-                    "client_id": client_id,
-                    "message": "Connected to Hermès Bridge Service",
-                    "hermes_api": HERMES_API_BASE,
-                    "timestamp": datetime.now().isoformat()
-                })
-            )
-
-            # Keep connection alive and yield events from the queue
-            while True:
-                # Check if client disconnected
-                if await request.is_disconnected():
-                    break
-
-                # Wait for event from queue OR timeout for heartbeat
-                try:
-                    event = await asyncio.wait_for(
-                        queue.get(),
-                        timeout=settings.heartbeat_interval
-                    )
-                    if event is None:  # Sentinel
-                        break
-                    yield event
-                except asyncio.TimeoutError:
-                    # Send heartbeat
-                    yield ServerSentEvent(
-                        event="heartbeat",
-                        data=json.dumps({
-                            "status": "alive",
-                            "timestamp": datetime.now().isoformat()
-                        })
-                    )
-
-        finally:
-            # Cleanup on disconnect — push sentinel to unblock queue.get()
-            try:
-                queue.put_nowait(None)
-            except asyncio.QueueFull:
-                pass
-            sse_manager.disconnect(client_id)
-
-    return EventSourceResponse(event_generator())
+app.include_router(health_router)
+app.include_router(provider_router)
+app.include_router(review_router)
+app.include_router(cost_router)
+app.include_router(alerts_router)
+app.include_router(agent_config_router)
+app.include_router(runtimes_router)
+app.include_router(runs_router)
+app.include_router(tools_router)
+app.include_router(approvals_router)
+app.include_router(run_analysis_router)
+app.include_router(connectors_router)
+app.include_router(evals_router)
+app.include_router(workflows_router)
+app.include_router(users_router)
+app.include_router(environments_router)
+app.include_router(audit_router)
+app.include_router(auth_router)
+app.include_router(metrics_router)
 
 
-# ============================================================================
-# Health & Connection Management
-# ============================================================================
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "ai-code-review-pipeline",
-        "version": "2.0.0",
-        "active_connections": sse_manager.get_connection_count(),
-        "providers": len(_provider_registry.list_providers()),
-    }
-
-
-@app.get("/connections")
-async def list_connections():
-    """List all active SSE connections"""
-    return {
-        "count": sse_manager.get_connection_count(),
-        "connections": sse_manager.get_all_connections()
-    }
-
-
-@app.get("/connections/{client_id}")
-async def get_connection(client_id: str):
-    """Get information about a specific connection"""
-    info = sse_manager.get_connection_info(client_id)
-    if not info:
-        raise HTTPException(status_code=404, detail="Connection not found")
-    return {"client_id": client_id, **info}
-
-
-# ============================================================================
-# Hermès API Proxy Endpoints
-# ============================================================================
-
-@app.get("/api/status")
-async def proxy_status():
-    """Proxy to Hermès /api/status - Gateway status overview"""
-    try:
-        return await hermes_get("/api/status")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
-
-
-@app.get("/api/sessions")
-async def proxy_sessions(
-    limit: int = Query(20, ge=1, le=100, description="Number of sessions to return"),
-    offset: int = Query(0, ge=0, description="Offset for pagination")
-):
-    """Proxy to Hermès /api/sessions - List sessions"""
-    try:
-        return await hermes_get("/api/sessions", {"limit": limit, "offset": offset})
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
-
-
-@app.get("/api/sessions/search")
-async def proxy_search_sessions(q: str = Query(..., description="Search query")):
-    """Proxy to Hermès /api/sessions/search - Search sessions"""
-    try:
-        return await hermes_get("/api/sessions/search", {"q": q})
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
-
-
-@app.get("/api/sessions/{session_id}/messages")
-async def proxy_session_messages(session_id: str):
-    """Proxy to Hermès /api/sessions/{id}/messages - Get session messages"""
-    try:
-        return await hermes_get(f"/api/sessions/{session_id}/messages")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
-
-
-@app.delete("/api/sessions/{session_id}")
-async def proxy_delete_session(session_id: str):
-    """Proxy to Hermès /api/sessions/{id} DELETE - Delete a session"""
-    url = f"{HERMES_API_BASE}/api/sessions/{session_id}"
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            response = await client.delete(url)
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
-
-
-@app.get("/api/logs")
-async def proxy_logs(
-    lines: int = Query(100, ge=1, le=1000, description="Number of log lines"),
-    level: str = Query("INFO", description="Log level filter"),
-    file: Optional[str] = Query(None, description="Log file path"),
-    component: Optional[str] = Query(None, description="Component filter")
-):
-    """Proxy to Hermès /api/logs - Get log entries"""
-    params: dict[str, Any] = {"lines": lines, "level": level}
-    if file:
-        params["file"] = file
-    if component and component != "all":
-        params["component"] = component
-
-    try:
-        return await hermes_get("/api/logs", params)
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
-
-
-@app.get("/api/analytics/usage")
-async def proxy_analytics(days: int = Query(7, ge=1, le=90, description="Number of days")):
-    """Proxy to Hermès /api/analytics/usage - Get usage analytics"""
-    try:
-        return await hermes_get("/api/analytics/usage", {"days": days})
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
-
-
-@app.get("/api/config")
-async def proxy_config():
-    """Proxy to Hermès /api/config - Get current config"""
-    try:
-        return await hermes_get("/api/config")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
-
-
-@app.get("/api/model/info")
-async def proxy_model_info():
-    """Proxy to Hermès /api/model/info - Get model info"""
-    try:
-        return await hermes_get("/api/model/info")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
-
-
-@app.get("/api/skills")
-async def proxy_skills():
-    """Proxy to Hermès /api/skills - Get skills list"""
-    try:
-        return await hermes_get("/api/skills")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
-
-
-@app.get("/api/cron/jobs")
-async def proxy_cron_jobs():
-    """Proxy to Hermès /api/cron/jobs - Get cron jobs"""
-    try:
-        return await hermes_get("/api/cron/jobs")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
-
-
-@app.get("/api/plugins")
-async def proxy_plugins():
-    """Proxy to Hermès /api/dashboard/plugins - Get dashboard plugins"""
-    try:
-        return await hermes_get("/api/dashboard/plugins")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"Hermès API error: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to reach Hermès: {e}")
-
-
-@app.get("/api/alerts")
-async def get_alerts(limit: int = Query(10, ge=1, le=50)):
-    """Build actionable alerts from Hermès status, sessions, and logs."""
-    alerts: list[dict[str, Any]] = []
-    now = datetime.now()
-
-    try:
-        status = await hermes_get("/api/status")
-        if not status.get("gateway_running"):
-            alerts.append(_make_alert(
-                severity="critical",
-                title="Gateway 未运行",
-                message="Hermès Gateway 当前未运行，任务状态和日志可能不是实时数据。",
-                source="status",
-                action_label="查看日志",
-                action_nav="logs",
-            ))
-    except Exception:
-        alerts.append(_make_alert(
-            severity="critical",
-            title="Hermès API 不可达",
-            message="Bridge 无法访问 Hermès Dashboard API，请确认 9119 端口服务是否启动。",
-            source="status",
-            action_label="打开终端",
-            action_nav="terminal",
-        ))
-
-    try:
-        sessions = await hermes_get("/api/sessions", {"limit": 50, "offset": 0})
-        for session in sessions.get("sessions", []):
-            if not session.get("is_active"):
-                continue
-            idle_seconds = _age_seconds(session.get("last_active"), now)
-            if idle_seconds >= 300:
-                session_id = session.get("id", "")
-                alerts.append(_make_alert(
-                    severity="warning",
-                    title="活跃 Session 长时间无更新",
-                    message=f"{session.get('title') or session_id[:8]} 已约 {idle_seconds // 60} 分钟没有活跃信号。",
-                    source="session",
-                    session_id=session_id,
-                    action_label="查看复盘",
-                    action_nav=f"sessions/{session_id}",
-                ))
-    except Exception:
-        pass
-
-    try:
-        log_data = await hermes_get("/api/logs", {"lines": 100, "level": "INFO"})
-        for log in _normalize_log_entries(log_data):
-            message = log.get("message", "")
-            level = str(log.get("level") or log.get("type") or "").lower()
-            lower = message.lower()
-            if "error" in level or "error" in lower or "exception" in lower or "traceback" in lower:
-                alerts.append(_make_alert(
-                    severity="critical",
-                    title="最近日志包含错误",
-                    message=message[:220],
-                    source="logs",
-                    action_label="查看日志",
-                    action_nav="logs",
-                ))
-            elif "warn" in level or "warn" in lower:
-                alerts.append(_make_alert(
-                    severity="warning",
-                    title="最近日志包含警告",
-                    message=message[:220],
-                    source="logs",
-                    action_label="查看日志",
-                    action_nav="logs",
-                ))
-            if len(alerts) >= limit:
-                break
-    except Exception:
-        pass
-
-    if not alerts:
-        alerts.append(_make_alert(
-            severity="info",
-            title="暂无需要介入的告警",
-            message="当前状态、活跃 session 和最近日志没有触发规则型告警。",
-            source="monitor",
-            action_label="刷新",
-            action_nav="dashboard",
-        ))
-
-    severity_rank = {"critical": 0, "warning": 1, "info": 2}
-    alerts.sort(key=lambda item: severity_rank.get(item["severity"], 3))
-    return {
-        "alerts": alerts[:limit],
-        "generated_at": now.isoformat(),
-        "total": len(alerts[:limit]),
-    }
-
-
-def _make_alert(
-    severity: str,
-    title: str,
-    message: str,
-    source: str,
-    action_label: str,
-    action_nav: str,
-    session_id: Optional[str] = None,
-) -> dict[str, Any]:
-    alert_id = uuid.uuid5(uuid.NAMESPACE_URL, f"{severity}:{source}:{session_id or title}:{message[:80]}")
-    return {
-        "id": str(alert_id),
-        "severity": severity,
-        "title": title,
-        "message": message,
-        "source": source,
-        "session_id": session_id,
-        "action_label": action_label,
-        "action_nav": action_nav,
-        "created_at": datetime.now().isoformat(),
-    }
-
-
-def _age_seconds(value: Any, now: datetime) -> int:
-    if not value:
-        return 0
-    try:
-        timestamp = float(value)
-        if timestamp > 10_000_000_000:
-            timestamp = timestamp / 1000
-        return max(0, int((now - datetime.fromtimestamp(timestamp)).total_seconds()))
-    except Exception:
-        return 0
-
-
-def _normalize_log_entries(log_data: dict[str, Any]) -> list[dict[str, Any]]:
-    if isinstance(log_data.get("logs"), list):
-        return [entry if isinstance(entry, dict) else {"message": str(entry)} for entry in log_data["logs"]]
-    if isinstance(log_data.get("lines"), list):
-        return [{"message": str(line)} for line in log_data["lines"]]
-    return []
+# SSE, Health, Proxy, Alerts endpoints moved to routers/health.py, routers/proxy.py, routers/alerts.py
 
 
 @app.get("/api/agent/tools")
@@ -692,7 +335,7 @@ async def reject_agent_guardrail(event_id: str, body: dict | None = None):
 
 @app.post("/api/agent/tools/{tool_name}/invoke")
 async def invoke_agent_tool(tool_name: str, body: dict | None = None):
-    """Invoke a read-only Hermès Agent tool."""
+    """Invoke a read-only local Agent tool."""
     params = dict(body or {})
     tool_spec = next((tool for tool in list_tool_specs() if tool["name"] == tool_name), None)
     if not tool_spec:
@@ -730,7 +373,7 @@ async def invoke_agent_tool(tool_name: str, body: dict | None = None):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=exc.response.status_code, detail="Hermès API error")
+        raise HTTPException(status_code=exc.response.status_code, detail="Tool upstream error")
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Tool execution failed: {exc}")
     return {
@@ -741,13 +384,28 @@ async def invoke_agent_tool(tool_name: str, body: dict | None = None):
 
 
 async def dashboard_get(endpoint: str, params: dict | None = None) -> dict[str, Any]:
-    """Expose bridge-local read APIs to Agent tools."""
+    """Expose control-plane read APIs to Agent tools."""
+    if endpoint == "/health":
+        from routers.health import health_check
+        return await health_check()
     if endpoint == "/api/alerts":
         params = params or {}
         return await get_alerts(limit=params.get("limit", 10))
     if endpoint == "/api/terminal/sessions":
         return await list_terminal_sessions()
     raise ValueError(f"Unsupported dashboard endpoint: {endpoint}")
+
+
+async def _load_session_detail(session_id: str) -> dict[str, Any]:
+    """Return a local placeholder for old session-linked analysis routes."""
+    return {
+        "task_id": session_id,
+        "name": f"Run {session_id[:8]}",
+        "status": "unknown",
+        "messages": [],
+        "message_count": 0,
+        "logs": [],
+    }
 
 
 @app.get("/api/sessions/{session_id}/rca")
@@ -769,11 +427,7 @@ async def analyze_session_rca(session_id: str):
             "message_count": 0,
         }
 
-    try:
-        log_data = await hermes_get("/api/logs", {"lines": 200, "level": "INFO"})
-        logs = _normalize_log_entries(log_data)
-    except Exception:
-        logs = []
+    logs = []
 
     run = (
         trace_store.find_latest_run(linked_session_id=session_id)
@@ -827,11 +481,7 @@ async def generate_session_runbook(session_id: str):
     spans = trace_store.list_spans(run["run_id"]) if run else []
     rca = trace_store.get_latest_rca_report(session_id)
     if not rca:
-        try:
-            log_data = await hermes_get("/api/logs", {"lines": 200, "level": "INFO"})
-            logs = _normalize_log_entries(log_data)
-        except Exception:
-            logs = []
+        logs = []
         rca_report = analyze_failure(session, logs, run=run, spans=spans, config_evaluation=_agent_config_evaluation())
         rca = trace_store.save_rca_report(
             session_id=session_id,
@@ -974,132 +624,6 @@ async def list_session_exports(limit: int = Query(20, ge=1, le=100)):
         os.path.abspath(os.path.join(os.path.dirname(__file__), "data", "exports")),
     )
     return list_markdown_exports(export_dir, limit=limit)
-
-
-# ============================================================================
-# Legacy Endpoints (for backward compatibility with frontend)
-# ============================================================================
-
-@app.get("/tasks")
-async def list_tasks():
-    """List tasks from Hermès sessions (derived from recent sessions)"""
-    try:
-        sessions = await hermes_get("/api/sessions", {"limit": 20, "offset": 0})
-        # Convert sessions to tasks format
-        tasks = []
-        for session in sessions.get("sessions", []):
-            tasks.append({
-                "task_id": session.get("id", ""),
-                "name": session.get("title") or f"Session {session.get('id', '')[:8]}",
-                "status": "running" if session.get("is_active") else "completed",
-                "progress": 100 if not session.get("is_active") else 50,
-                "message_count": session.get("message_count", 0),
-                "model": session.get("model"),
-                "started_at": datetime.fromtimestamp(session.get("started_at", 0)/1000).isoformat() if session.get("started_at") else None
-            })
-        return {"tasks": tasks, "total": len(tasks)}
-    except Exception as e:
-        # Fallback: return empty
-        return {"tasks": [], "total": 0, "error": str(e)}
-
-
-@app.get("/tasks/{task_id}")
-async def get_task(task_id: str):
-    """Get specific task/session by ID"""
-    return await _load_session_detail(task_id)
-
-
-async def _load_session_detail(task_id: str) -> dict[str, Any]:
-    """Load a Hermès session and normalize it into the task detail shape."""
-    try:
-        # First check if session exists by fetching sessions list
-        sessions = await hermes_get("/api/sessions", {"limit": 100, "offset": 0})
-        session = next((s for s in sessions.get("sessions", []) if s.get("id") == task_id), None)
-
-        if not session:
-            raise HTTPException(status_code=404, detail="Task not found")
-
-        try:
-            messages = await hermes_get(f"/api/sessions/{task_id}/messages")
-        except Exception:
-            messages = {"messages": []}
-
-        return {
-            "task_id": task_id,
-            "name": session.get("title") or f"Session {task_id[:8]}",
-            "status": "running" if session.get("is_active") else "completed",
-            "progress": 100 if not session.get("is_active") else 50,
-            "messages": messages.get("messages", []),
-            "message_count": session.get("message_count", 0),
-            "model": session.get("model"),
-            "started_at": datetime.fromtimestamp(session.get("started_at", 0)/1000).isoformat() if session.get("started_at") else None,
-            "completed_at": datetime.fromtimestamp(session.get("ended_at", session.get("last_active", 0))/1000).isoformat() if session.get("ended_at") or session.get("last_active") else None,
-            "duration": (session.get("ended_at", 0) - session.get("started_at", 0)) // 1000 if session.get("ended_at") and session.get("started_at") else 0,
-            "input_tokens": session.get("input_tokens", 0),
-            "output_tokens": session.get("output_tokens", 0),
-            "end_reason": session.get("end_reason") or session.get("reason"),
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to get task: {e}")
-
-
-@app.get("/history")
-async def list_history(limit: int = Query(20, ge=1, le=100)):
-    """List historical tasks/sessions"""
-    try:
-        sessions = await hermes_get("/api/sessions", {"limit": limit, "offset": 0})
-        history = []
-        for session in sessions.get("sessions", []):
-            if not session.get("is_active"):
-                history.append({
-                    "task_id": session.get("id", ""),
-                    "name": session.get("title") or f"Session {session.get('id', '')[:8]}",
-                    "completed_at": datetime.fromtimestamp(session.get("ended_at", session.get("last_active", 0))/1000).isoformat() if session.get("ended_at") or session.get("last_active") else None,
-                    "duration": (session.get("ended_at", 0) - session.get("started_at", 0)) // 1000 if session.get("ended_at") and session.get("started_at") else 0,
-                    "message_count": session.get("message_count", 0),
-                    "model": session.get("model"),
-                    "input_tokens": session.get("input_tokens", 0),
-                    "output_tokens": session.get("output_tokens", 0)
-                })
-        return {"history": history, "total": sessions.get("total", 0)}
-    except Exception as e:
-        return {"history": [], "total": 0, "error": str(e)}
-
-
-# ============================================================================
-# Broadcast (legacy)
-# ============================================================================
-
-@app.post("/broadcast")
-async def broadcast_event(
-    event_type: str = Query(..., description="Event type for the broadcast"),
-    message: str = Query(..., description="Message to broadcast")
-):
-    """Broadcast a custom event to all connected clients"""
-    data = {
-        "message": message,
-        "timestamp": datetime.now().isoformat(),
-        "event_type": event_type
-    }
-    await sse_manager.broadcast(event_type, data)
-    return {
-        "status": "broadcast_sent",
-        "event_type": event_type,
-        "recipient_count": sse_manager.get_connection_count()
-    }
-
-
-@app.post("/tasks/{task_id}/broadcast")
-async def broadcast_task_update(task_id: str):
-    """Broadcast a task update event"""
-    try:
-        session = await hermes_get(f"/api/sessions/{task_id}")
-        await sse_manager.broadcast("task_update", session)
-        return {"status": "broadcast_sent", "task": session}
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Task not found: {e}")
 
 
 # ============================================================================
@@ -1470,138 +994,7 @@ async def terminal_websocket(
         await _detach()
 
 
-# ============================================================================
-# Agent Config API
-# ============================================================================
-
-from pydantic import BaseModel
-from typing import Optional
-from agent.config_loader import load_config, save_config
-from agent.agent_manager import reload_agents
-from agent.config_evaluator import compare_agent_config, evaluate_agent_config
-from agent.config_history import config_history
-
-
-class AgentToggle(BaseModel):
-    enabled: bool
-
-
-class SetMainRequest(BaseModel):
-    main_agent: str
-
-
-class CustomAgentCreate(BaseModel):
-    name: str
-    description: Optional[str] = ""
-    instructions: Optional[str] = ""
-    enabled: bool = True
-
-
-class ConfigCompareRequest(BaseModel):
-    main_agent: Optional[str] = None
-    enabled_overrides: dict[str, bool] = {}
-
-
-@app.get("/api/agent/config")
-async def get_agent_config():
-    """Return full agent configuration."""
-    cfg = load_config()
-    return {
-        "main_agent": cfg.get("main_agent"),
-        "agents": cfg.get("agents", {}),
-        "custom_agents": cfg.get("custom_agents", []),
-        "evaluation": evaluate_agent_config(cfg),
-    }
-
-
-@app.get("/api/agent/config/history")
-async def get_agent_config_history(limit: int = Query(20, ge=1, le=100)):
-    """Return local Agent config change history."""
-    return {"events": config_history.list_events(limit=limit)}
-
-
-@app.post("/api/agent/config/compare")
-async def compare_agent_config_endpoint(body: ConfigCompareRequest):
-    """Compare current Agent config with a proposed candidate."""
-    cfg = load_config()
-    return compare_agent_config(cfg, body.dict())
-
-
-@app.put("/api/agent/config/enabled")
-async def toggle_agent(name: str, body: AgentToggle):
-    """Enable or disable an agent."""
-    cfg = load_config()
-    before = json.loads(json.dumps(cfg))
-    if name in cfg["agents"]:
-        cfg["agents"][name]["enabled"] = body.enabled
-    else:
-        for ca in cfg.get("custom_agents", []):
-            if ca["name"].lower().replace(" ", "_") == name:
-                ca["enabled"] = body.enabled
-                break
-        else:
-            raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
-    save_config(cfg)
-    config_history.record("toggle_agent", before, cfg, target=name)
-    reload_agents()
-    return {"ok": True, "agent": name, "enabled": body.enabled}
-
-
-@app.post("/api/agent/config/main")
-async def set_main_agent(body: SetMainRequest):
-    """Set the main (entry) agent."""
-    cfg = load_config()
-    before = json.loads(json.dumps(cfg))
-    key = body.main_agent
-    if key not in cfg["agents"] and not any(
-        c["name"].lower().replace(" ", "_") == key for c in cfg.get("custom_agents", [])
-    ):
-        raise HTTPException(status_code=404, detail=f"Agent '{key}' not found")
-    cfg["main_agent"] = key
-    save_config(cfg)
-    config_history.record("set_main_agent", before, cfg, target=key)
-    reload_agents()
-    return {"ok": True, "main_agent": key}
-
-
-@app.post("/api/agent/config/custom")
-async def add_custom_agent(body: CustomAgentCreate):
-    """Add a custom agent."""
-    cfg = load_config()
-    before = json.loads(json.dumps(cfg))
-    key = body.name.lower().replace(" ", "_")
-    if key in cfg["agents"] or any(
-        c["name"].lower().replace(" ", "_") == key for c in cfg.get("custom_agents", [])
-    ):
-        raise HTTPException(status_code=409, detail=f"Agent '{key}' already exists")
-    cfg.setdefault("custom_agents", []).append({
-        "name": body.name,
-        "description": body.description,
-        "instructions": body.instructions or f"You are {body.name}.",
-        "enabled": body.enabled,
-    })
-    save_config(cfg)
-    config_history.record("add_custom_agent", before, cfg, target=key)
-    reload_agents()
-    return {"ok": True, "agent": key}
-
-
-@app.delete("/api/agent/config/custom/{agent_key}")
-async def delete_custom_agent(agent_key: str):
-    """Delete a custom agent by key."""
-    cfg = load_config()
-    before = json.loads(json.dumps(cfg))
-    original_len = len(cfg.get("custom_agents", []))
-    cfg["custom_agents"] = [
-        c for c in cfg.get("custom_agents", [])
-        if c["name"].lower().replace(" ", "_") != agent_key
-    ]
-    if len(cfg["custom_agents"]) == original_len:
-        raise HTTPException(status_code=404, detail=f"Custom agent '{agent_key}' not found")
-    save_config(cfg)
-    config_history.record("delete_custom_agent", before, cfg, target=agent_key)
-    reload_agents()
-    return {"ok": True}
+# Agent Config API moved to routers/agent_config.py
 
 
 # ============================================================================
@@ -2285,276 +1678,28 @@ async def agent_events_sse(request: Request):
 async def root():
     """Root endpoint"""
     return {
-        "service": "Hermès Bridge Service",
-        "version": "1.1.0",
-        "description": "SSE-based bridge service that proxies to Hermès Agent Dashboard API",
-        "hermes_api_base": HERMES_API_BASE,
+        "service": "AI Workflow Control Plane",
+        "version": "3.0.0",
+        "description": "Runtime-agnostic control plane for AI workflow observability, governance, orchestration, and audit",
         "endpoints": {
             "sse": "/sse",
             "health": "/health",
             "connections": "/connections",
             "broadcast": "/broadcast",
-            "tasks": "/tasks",
-            "history": "/history",
             "api": {
-                "status": "/api/status",
-                "sessions": "/api/sessions",
-                "logs": "/api/logs",
-                "analytics": "/api/analytics/usage",
-                "config": "/api/config",
-                "skills": "/api/skills"
+                "runs": "/api/runs",
+                "workflows": "/api/workflows",
+                "approvals": "/api/approvals",
+                "connectors": "/api/connectors",
+                "metrics": "/api/metrics",
+                "audit_logs": "/api/audit-logs"
             }
         }
     }
 
 
-# ============================================================================
-# Code Review Pipeline - Provider, Review, Cost APIs
-# ============================================================================
+# Provider/Review/Cost endpoints moved to routers/provider.py, routers/review.py, routers/cost.py
 
-# Initialize provider registry and register available providers
-_provider_registry = ProviderRegistry()
-_review_store = ReviewStore()
-_cost_tracker = CostTracker()
-
-
-def _init_providers():
-    """注册所有已配置的 Provider。"""
-    for name, config in _provider_registry._config.get("providers", {}).items():
-        if not config.get("enabled", True):
-            continue
-        provider = None
-        if name == "openai":
-            provider = create_openai_provider(config)
-        elif name == "anthropic":
-            provider = create_anthropic_provider(config)
-        elif name == "ollama":
-            provider = create_ollama_provider(config)
-        else:
-            # 使用 OpenAI 兼容适配器支持 xiaomi/minimax/deepseek 等
-            provider = create_openai_compat_provider(name, config)
-        if provider:
-            _provider_registry.register(provider)
-
-
-@app.on_event("startup")
-async def startup_providers():
-    import logging
-    logger = logging.getLogger("uvicorn")
-    logger.info("Initializing providers...")
-    logger.info(f"XIAOMI_API_KEY set: {bool(os.environ.get('XIAOMI_API_KEY'))}")
-    _init_providers()
-    logger.info(f"Registered providers: {list(_provider_registry._providers.keys())}")
-
-
-# --- Provider API ---
-
-@app.get("/api/providers")
-async def list_providers():
-    """List all configured LLM providers."""
-    return {"providers": _provider_registry.list_providers()}
-
-
-@app.post("/api/providers/{name}/test")
-async def test_provider(name: str):
-    """Test a provider connection."""
-    provider = _provider_registry.get(name)
-    if not provider:
-        raise HTTPException(status_code=404, detail=f"Provider '{name}' not found")
-    ok = await provider.health_check()
-    return {"name": name, "ok": ok}
-
-
-@app.put("/api/providers/{name}")
-async def update_provider(name: str, body: dict):
-    """Update provider configuration."""
-    _provider_registry.update_provider_config(name, body)
-    return {"ok": True, "provider": name}
-
-
-@app.post("/api/providers/custom")
-async def add_custom_provider(body: dict):
-    """添加自定义 OpenAI 兼容 Provider。"""
-    name = body.get("name")
-    base_url = body.get("base_url")
-    api_key = body.get("api_key")
-    default_model = body.get("default_model")
-    models = body.get("models", [])
-
-    if not name or not base_url or not api_key:
-        raise HTTPException(400, "name, base_url, api_key 必填")
-
-    config = {
-        "enabled": True,
-        "base_url": base_url,
-        "api_key": api_key,
-        "default_model": default_model,
-        "models": [{"id": m, "display_name": m} for m in models],
-    }
-
-    provider = create_openai_compat_provider(name, config)
-    if provider:
-        _provider_registry.register(provider)
-        _provider_registry.update_provider_config(name, config)
-    return {"ok": True, "provider": name}
-
-
-# --- GitHub PR API ---
-
-@app.get("/api/github/prs")
-async def list_github_prs(
-    repo: str = Query(..., description="GitHub repo, e.g. owner/repo"),
-    state: str = Query("open", description="open/closed/all"),
-    limit: int = Query(20, ge=1, le=100),
-):
-    """List pull requests from a GitHub repository."""
-    github = GitHubAdapter()
-    try:
-        pulls = await github.list_pulls(repo=repo, state=state, limit=limit)
-        return {
-            "repo": repo,
-            "pulls": [
-                {
-                    "number": pr["number"],
-                    "title": pr["title"],
-                    "author": pr["user"]["login"],
-                    "state": pr["state"],
-                    "created_at": pr["created_at"],
-                    "updated_at": pr["updated_at"],
-                    "html_url": pr["html_url"],
-                    "draft": pr.get("draft", False),
-                }
-                for pr in pulls
-            ],
-        }
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"GitHub API error: {e}")
-    finally:
-        await github.close()
-
-
-# --- Review API ---
-
-@app.get("/api/reviews")
-async def list_reviews(
-    repo: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-):
-    """List review history."""
-    reviews = _review_store.list_reviews(repo=repo, status=status, limit=limit, offset=offset)
-    return {"reviews": [r.model_dump() for r in reviews], "total": len(reviews)}
-
-
-@app.get("/api/reviews/stats")
-async def get_review_stats():
-    """Get review statistics."""
-    return _review_store.get_stats()
-
-
-@app.get("/api/reviews/{review_id}")
-async def get_review(review_id: str):
-    """Get a specific review by ID."""
-    review = _review_store.get(review_id)
-    if not review:
-        raise HTTPException(status_code=404, detail="Review not found")
-    return review.model_dump()
-
-
-@app.post("/api/reviews/trigger")
-async def trigger_review(body: dict):
-    """Manually trigger a code review for a PR."""
-    repo = body.get("repo")
-    pr_number = body.get("pr_number")
-    if not repo or not pr_number:
-        raise HTTPException(status_code=400, detail="repo and pr_number required")
-
-    github = GitHubAdapter()
-    consensus = ConsensusEngine(min_agreement=2)
-    # 默认使用所有已注册的 provider
-    available = list(_provider_registry._providers.keys())
-    models = body.get("models", available)
-    pipeline = ReviewPipeline(
-        _provider_registry, github, consensus,
-        review_models=models, cost_tracker=_cost_tracker,
-    )
-
-    try:
-        review = await pipeline.review_pr(repo, int(pr_number))
-        _review_store.save(review)
-        return review.model_dump()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Review failed: {e}")
-    finally:
-        await github.close()
-
-
-# --- GitHub Webhook API ---
-
-@app.post("/api/webhooks/github")
-async def github_webhook(request: Request):
-    """Receive GitHub webhook events for PR reviews."""
-    body = await request.json()
-    action = body.get("action")
-    pr = body.get("pull_request")
-
-    if action not in ("opened", "synchronize") or not pr:
-        return {"status": "ignored", "action": action}
-
-    repo = body.get("repository", {}).get("full_name", "")
-    pr_number = pr.get("number", 0)
-
-    github = GitHubAdapter()
-    consensus = ConsensusEngine(min_agreement=2)
-    pipeline = ReviewPipeline(_provider_registry, github, consensus)
-
-    try:
-        review = await pipeline.review_pr(repo, pr_number)
-        _review_store.save(review)
-        return {"status": "completed", "review_id": review.id}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
-    finally:
-        await github.close()
-
-
-# --- Cost API ---
-
-@app.get("/api/cost/summary")
-async def get_cost_summary(period: str = Query("daily")):
-    """Get cost summary for a period."""
-    return _cost_tracker.get_summary(period)
-
-
-@app.get("/api/cost/breakdown")
-async def get_cost_breakdown(days: int = Query(30)):
-    """Get cost breakdown by provider/model."""
-    return _cost_tracker.get_breakdown(days)
-
-
-@app.get("/api/cost/trend")
-async def get_cost_trend(days: int = Query(30)):
-    """Get daily cost trend."""
-    return _cost_tracker.get_trend(days)
-
-
-@app.post("/api/cost/budget")
-async def set_budget(body: dict):
-    """Set a budget limit."""
-    _cost_tracker.set_budget(
-        scope=body.get("scope", "monthly"),
-        limit_usd=body.get("limit_usd", 100),
-        provider=body.get("provider"),
-        alert_threshold=body.get("alert_threshold", 0.8),
-    )
-    return {"ok": True}
-
-
-@app.get("/api/cost/alerts")
-async def get_cost_alerts():
-    """Get budget alerts."""
-    return _cost_tracker.check_alerts()
 
 
 # ============================================================================

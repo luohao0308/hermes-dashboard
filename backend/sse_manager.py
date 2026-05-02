@@ -1,11 +1,14 @@
-"""SSE Connection Manager for Hermès Bridge Service — queue-based broadcast."""
+"""SSE connection manager for the AI Workflow Control Plane."""
 
 from typing import Dict, Optional
 from fastapi import Request
 from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 import asyncio
 import json
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class SSEManager:
@@ -49,10 +52,8 @@ class SSEManager:
     async def broadcast(self, event_type: str, data: dict):
         """Broadcast an event to all connected clients by pushing to their queues."""
         if not self._queues:
-            print(f"[SSEManager.broadcast] event_type={event_type}, connections=0 — no clients")
             return
 
-        print(f"[SSEManager.broadcast] event_type={event_type}, connections={len(self._queues)}")
         disconnected = []
 
         for client_id, queue in list(self._queues.items()):
@@ -62,10 +63,10 @@ class SSEManager:
                     data=json.dumps(data, ensure_ascii=False, default=str),
                 ))
             except asyncio.QueueFull:
-                print(f"[SSEManager.broadcast] Queue full for {client_id}, marking disconnected")
+                logger.warning("SSE queue full for %s, marking disconnected", client_id)
                 disconnected.append(client_id)
             except Exception as e:
-                print(f"[SSEManager.broadcast] Error for {client_id}: {e}")
+                logger.warning("SSE broadcast error for %s: %s", client_id, e)
                 disconnected.append(client_id)
 
         for client_id in disconnected:

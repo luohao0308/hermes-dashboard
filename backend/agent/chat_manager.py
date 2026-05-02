@@ -78,6 +78,9 @@ class ChatManager:
         title: Optional[str] = None,
     ) -> ChatSession:
         session_id = str(uuid.uuid4())
+        if _chat_repo is not None:
+            pg_session = _chat_repo.create_session(agent_id, linked_session_id, terminal_session_id, title)
+            session_id = pg_session["session_id"]
         session = ChatSession(
             session_id=session_id,
             agent_id=agent_id,
@@ -86,7 +89,8 @@ class ChatManager:
             terminal_session_id=terminal_session_id,
         )
         self._sessions[session_id] = session
-        self._persist_session(session)
+        if _chat_repo is None:
+            self._persist_session(session)
         return session
 
     def get_session(self, session_id: str) -> Optional[ChatSession]:
@@ -95,7 +99,10 @@ class ChatManager:
     def close_session(self, session_id: str) -> bool:
         if session_id in self._sessions:
             del self._sessions[session_id]
-            self._delete_session(session_id)
+            if _chat_repo is not None:
+                _chat_repo.close_session(session_id)
+            else:
+                self._delete_session(session_id)
             return True
         return False
 
@@ -104,7 +111,10 @@ class ChatManager:
         if not session:
             return False
         session.agent_id = agent_id
-        self._persist_session(session)
+        if _chat_repo is not None:
+            _chat_repo.update_session_agent(session_id, agent_id)
+        else:
+            self._persist_session(session)
         return True
 
     def update_session_context(
@@ -123,7 +133,10 @@ class ChatManager:
             session.linked_session_id = linked_session_id
         if terminal_session_id is not None:
             session.terminal_session_id = terminal_session_id
-        self._persist_session(session)
+        if _chat_repo is not None:
+            _chat_repo.update_session_context(session_id, title, linked_session_id, terminal_session_id)
+        else:
+            self._persist_session(session)
         return True
 
     def append_message(
@@ -144,7 +157,10 @@ class ChatManager:
             agent_name=agent_name,
         )
         session.messages.append(msg)
-        self._persist_message(session_id, msg)
+        if _chat_repo is not None:
+            _chat_repo.append_message(session_id, role, content, agent_name, msg.timestamp)
+        else:
+            self._persist_message(session_id, msg)
         return msg
 
     async def stop_session(self, session_id: str) -> bool:
@@ -155,6 +171,37 @@ class ChatManager:
         return await session.stop()
 
     def list_sessions(self) -> list[dict]:
+        if _chat_repo is not None:
+            pg_sessions = _chat_repo.list_sessions()
+            # Merge with in-memory sessions (PG is authoritative, in-memory adds is_running)
+            in_memory = {
+                s.session_id: {
+                    "session_id": s.session_id,
+                    "agent_id": s.agent_id,
+                    "title": s.title,
+                    "linked_session_id": s.linked_session_id,
+                    "terminal_session_id": s.terminal_session_id,
+                    "message_count": len(s.messages),
+                    "created_at": s.created_at.isoformat(),
+                    "is_running": s.is_running,
+                }
+                for s in self._sessions.values()
+            }
+            result = []
+            for pg in pg_sessions:
+                sid = pg["session_id"]
+                if sid in in_memory:
+                    merged = {**pg, "is_running": in_memory[sid]["is_running"]}
+                    result.append(merged)
+                else:
+                    result.append({**pg, "is_running": False})
+            # Add in-memory sessions not yet in PG
+            pg_ids = {pg["session_id"] for pg in pg_sessions}
+            for sid, info in in_memory.items():
+                if sid not in pg_ids:
+                    result.append(info)
+            result.sort(key=lambda item: item.get("created_at", ""), reverse=True)
+            return result
         return [
             {
                 "session_id": s.session_id,
@@ -318,3 +365,10 @@ _default_db_path = os.environ.get(
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "chat_sessions.sqlite3")),
 )
 chat_manager = ChatManager(db_path=_default_db_path)
+_chat_repo = None
+
+
+def configure_chat_repository(repo) -> None:
+    """Configure PG repository for read and write operations."""
+    global _chat_repo
+    _chat_repo = repo

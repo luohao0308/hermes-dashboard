@@ -227,6 +227,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { API_BASE } from '../config'
+import { formatDate } from '../composables/useFormatters'
 
 interface AgentConfig {
   id: string
@@ -430,17 +431,6 @@ function actionLabel(action: string): string {
     delete_custom_agent: '删除自定义 Agent',
   }
   return map[action] || action
-}
-
-function formatDate(timestamp: string): string {
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return timestamp
-  return date.toLocaleString('zh-CN', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }
 
 const newAgent = ref({

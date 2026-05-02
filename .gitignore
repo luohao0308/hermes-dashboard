@@ -21,5 +21,9 @@ frontend/.vite/
 backend/data/*.sqlite
 backend/data/*.sqlite3
 backend/data/*.db
+backend/test.db
 .backend.pid
 .frontend.pid
+
+# Logs
+*.log

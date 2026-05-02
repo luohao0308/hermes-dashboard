@@ -1,95 +1,107 @@
-# 发布检查清单 (Pre-Launch Checklist)
+# Release Checklist
 
-> 基于 `shipping-and-launch` + `security-and-hardening` skill 整理。
-> 每次发布前逐项确认，所有项必须 green 才能合并到 main。
+Use this checklist before tagging or deploying the AI Workflow Control Plane.
 
----
+## Optimization Release Verification
 
-## 代码质量
+Run these before declaring the Optimization Release final:
 
-- [ ] 所有单元测试通过 (`npm run test:unit` + `pytest tests/backend/`)
-- [ ] 构建成功无警告 (`npm run build` + `uvicorn main:app --reload` 能启动)
-- [ ] Lint 和类型检查通过 (`npm run lint` + `vue-tsc --noEmit`)
-- [ ] 代码已 review 并 approved（PR 至少 1 个 approval）
-- [ ] 无 TODO 注释应在此阶段解决
-- [ ] 无 `console.log` 调试语句（生产代码）
-- [ ] 错误处理覆盖预期失败场景
+- [ ] Frontend typecheck: `cd frontend && npx vue-tsc --noEmit`
+- [ ] Frontend unit tests: `cd frontend && npm run test:unit` (145 tests, 20 files)
+- [ ] Backend security tests: `cd backend && python -m pytest tests/test_v3_enterprise.py tests/test_auth.py tests/test_service_token.py tests/test_secret_leak.py -v`
+- [ ] Backend health/metrics tests: `cd backend && python -m pytest tests/test_health.py tests/test_metrics.py tests/test_structured_logging.py -v`
+- [ ] Backend cursor pagination tests: `cd backend && python -m pytest tests/test_cursor_pagination.py tests/test_connector_failed_events_cursor.py -v`
+- [ ] Alembic migration: `cd backend && alembic upgrade head` (9 migrations, 001–009)
+- [ ] Document consistency: `grep -rn "Hermès Dashboard\|Code Review Pipeline\|Bridge Server" docs/ README.md --include="*.md" | grep -v archive` — only contextual references allowed
 
-## 安全
+## Product Direction
 
-- [ ] `.env` 中无真实 secret（API key、password 等）
-- [ ] `npm audit --audit-level=high` 无 critical/high 漏洞
-- [ ] 所有用户输入在边界处验证（Query/Body 参数有类型和范围限制）
-- [ ] CORS  origins 非 `*`（生产环境需指定具体域名）
-- [ ] 安全响应头已配置（X-Frame-Options, X-Content-Type-Options 等）
-- [ ] Rate Limiting 已启用（SSE 端点 30/min，其他端点 100/min）
-- [ ] 无内网地址或凭证在错误响应中暴露（HTTPException detail 不过度详细）
-- [ ] 前端无敏感信息在 localStorage（auth token 等）
+- [ ] README, `CURRENT_STATE.md`, and `ARCHITECTURE.md` all describe the project as AI Workflow Control Plane.
+- [ ] Legacy Hermès / Code Review / single-Agent content appears only in archive, connector examples, or legacy compatibility notes.
+- [ ] Navigation presents Observe / Govern / Improve / Integrate / Admin / Legacy clearly.
 
-## 性能
+## Code Quality
 
-- [ ] Core Web Vitals 阈值：
-  - LCP ≤ 2500ms
-  - INP ≤ 200ms
-  - CLS ≤ 0.1
-- [ ] Bundle 分 chunk（naive-ui 独立、xterm 独立），无单文件 > 500KB
-- [ ] 构建产物 gzip 比例合理（xterm 334KB → 84KB gzip）
-- [ ] 无 N+1 查询问题
-- [ ] 图片有尺寸属性（防止 CLS）
+- [ ] Frontend typecheck passes: `cd frontend && npx vue-tsc --noEmit`.
+- [ ] Frontend unit tests pass: `cd frontend && npm run test:unit`.
+- [ ] Frontend build passes: `cd frontend && npm run build`.
+- [ ] Backend tests pass without optional PG integration where applicable.
+- [ ] Backend PG integration tests pass with `TEST_DATABASE_URL`.
+- [ ] No new Python 3.12-only syntax is introduced; project remains Python 3.9+ compatible.
 
-## 基础设施
+## Database and Migrations
 
-- [ ] 环境变量在生产环境正确设置（.env.example 已更新）
-- [ ] 数据库 migrations 就绪（如有）
-- [ ] Health check endpoint 返回 200
-- [ ] 日志和错误上报已配置
-- [ ] CDN/静态资源缓存已配置
+- [ ] `alembic upgrade head` succeeds on an empty PostgreSQL database.
+- [ ] Migration rollback path is documented for the release.
+- [ ] New models, migrations, and `POSTGRESQL_SCHEMA.md` are aligned.
+- [ ] New writes go to PostgreSQL, not SQLite.
+- [ ] Any legacy SQLite fallback is read-only or documented as compatibility.
 
-## 文档
+## Security
 
-- [ ] README 更新（新功能说明、依赖变更）
-- [ ] CHANGELOG 更新（如有）
-- [ ] API 文档同步（如有）
+- [ ] Production requires `ENVIRONMENT=production` and `ENCRYPTION_KEY`.
+- [ ] Connector secrets are encrypted at rest and masked in API responses.
+- [ ] No secret appears in logs, audit records, error messages, or snapshots.
+- [ ] Webhook signatures use raw request body and timestamp anti-replay.
+- [ ] All write endpoints have RBAC coverage or a tracked exception.
+- [ ] Viewer cannot perform write operations.
+- [ ] Operator cannot manage users, teams, environments, retention, or secrets.
+- [ ] Audit logs are written for connector, workflow, approval, eval, config, user, team, environment, retention, and secret mutations.
 
-## 部署
+## Runtime and Workers
 
-- [ ] 已在 staging 环境验证
-- [ ] 回滚方案已准备（上一个稳定版本的 commit/tag）
-- [ ] 团队已通知部署时间窗口
-- [ ] 部署后监控指标基线已记录
+- [ ] API process starts successfully.
+- [ ] Scheduler worker starts and can advance a workflow run.
+- [ ] Retention worker dry-run works before production deletion.
+- [ ] Task retries respect `backoff_seconds`.
+- [ ] Workflow timeout and approval timeout behavior is tested.
+- [ ] Dead-letter status is visible in API and UI.
 
----
+## Connectors
 
-## 快速检查命令
+- [ ] Connector event ingestion accepts valid signed payloads.
+- [ ] Invalid, missing, or expired signatures are rejected when signing is configured.
+- [ ] Ingestion errors are audit logged.
+- [ ] Batch ingestion idempotency is tested.
+- [ ] Connector examples match the current protocol.
 
-```bash
-# 前端
-cd frontend
-npm run lint          # ESLint
-npx vue-tsc --noEmit  # 类型检查
-npm run test:unit     # 单元测试
-npm run build         # 构建
-npm audit --audit-level=high  # 安全审计
+## Frontend UX
 
-# 后端
-cd backend
-flake8 . --select=E9,F63,F7,F82  # 致命错误
-pytest tests/ -v                  # 测试
-python -m py_compile main.py      # 语法检查
-```
+- [ ] Main brand is AI Control Plane.
+- [ ] Legacy pages are grouped and visually secondary.
+- [ ] Loading, empty, error, unauthorized states are handled for core pages.
+- [ ] Runs, Workflows, Approvals, Evals, Connectors and Config pages render without mocked assumptions.
+- [ ] Large tables have pagination or a documented limitation.
 
-## Rollback 方案
+## Operations
 
-如果发布后指标异常（错误率 > 2x 基线、p95 延迟 > 50% 增长）：
+- [ ] `.env.example` includes all required production variables.
+- [ ] `PRODUCTION_DEPLOYMENT.md` is current.
+- [ ] Backup and restore steps are documented.
+- [ ] Health checks are documented for API, DB, scheduler worker, retention worker, and connector ingestion.
+- [ ] Known limitations are updated in `CURRENT_STATE.md`.
 
-```bash
-# 方案 A：feature flag 关闭（< 1 分钟）
-# 方案 B：git revert 并重新部署（< 5 分钟）
-git revert <commit-hash>
-git push
-# 触发 CI/CD 重新部署
+## Documentation
 
-# 方案 C：切换到上一个 tag（< 5 分钟）
-git checkout <previous-tag>
-docker build && docker push
-```
+- [ ] `API_CONTRACT.md` reflects implemented endpoints.
+- [ ] `POSTGRESQL_SCHEMA.md` reflects migrations.
+- [ ] Release notes are updated for the version.
+- [ ] Historical docs are in `docs/archive/`.
+- [ ] New optimization work is tracked in `PLATFORM_OPTIMIZATION_EXECUTION_PLAN.md`.
+
+## Deployment
+
+- [ ] Staging deployment completed.
+- [ ] Smoke test completed:
+  - create runtime
+  - create run
+  - append span
+  - create connector
+  - ingest signed event
+  - start workflow
+  - approve approval
+  - generate RCA/runbook
+  - run eval summary
+- [ ] Rollback plan is ready.
+- [ ] Database backup exists.
+- [ ] Post-deploy monitoring window is assigned.

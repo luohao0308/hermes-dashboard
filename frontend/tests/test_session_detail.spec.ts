@@ -41,7 +41,7 @@ describe('SessionDetail', () => {
     expect(wrapper.text()).toContain('2m 5s')
     expect(wrapper.text()).toContain('150')
     expect(wrapper.text()).toContain('请分析问题')
-    expect(wrapper.text()).toContain('未发现明显失败信号')
+    expect(wrapper.text()).toContain('No obvious failure signals found')
   })
 
   it('detects error signals from related logs', () => {
@@ -67,7 +67,7 @@ describe('SessionDetail', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('发现错误信号')
+    expect(wrapper.text()).toContain('Error signal detected')
     expect(wrapper.text()).toContain('tool failed with timeout')
   })
 
@@ -168,7 +168,7 @@ describe('SessionDetail', () => {
     })
 
     expect(wrapper.text()).toContain('工具或 handoff 失败')
-    expect(wrapper.text()).toContain('置信度 82%')
+    expect(wrapper.text()).toContain('Confidence 82%')
     expect(wrapper.text()).toContain('get_logs failed')
     expect(wrapper.text()).toContain('复盘 Runbook')
     expect(wrapper.find('.runbook-step').exists()).toBe(true)

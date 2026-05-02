@@ -22,6 +22,8 @@ class TraceStore:
         input_summary: str,
         linked_session_id: Optional[str] = None,
     ) -> str:
+        if _trace_repo is not None:
+            return _trace_repo.create_run(session_id, agent_id, input_summary, linked_session_id)
         run_id = str(uuid.uuid4())
         conn = self._connect()
         if not conn:
@@ -51,6 +53,8 @@ class TraceStore:
         return run_id
 
     def complete_run(self, run_id: str, status: str = "completed") -> None:
+        if _trace_repo is not None:
+            return _trace_repo.complete_run(run_id, status)
         conn = self._connect()
         if not conn:
             return
@@ -73,6 +77,8 @@ class TraceStore:
         status: str = "completed",
         metadata: Optional[dict[str, Any]] = None,
     ) -> str:
+        if _trace_repo is not None:
+            return _trace_repo.add_span(run_id, span_type, title, summary, agent_name, status, metadata)
         span_id = str(uuid.uuid4())
         conn = self._connect()
         if not conn:
@@ -104,6 +110,10 @@ class TraceStore:
         return span_id
 
     def get_run(self, run_id: str) -> Optional[dict[str, Any]]:
+        if _trace_repo is not None:
+            result = _trace_repo.get_run(run_id)
+            if result is not None:
+                return result
         conn = self._connect()
         if not conn:
             return None
@@ -121,6 +131,10 @@ class TraceStore:
         session_id: Optional[str] = None,
         linked_session_id: Optional[str] = None,
     ) -> Optional[dict[str, Any]]:
+        if _trace_repo is not None:
+            result = _trace_repo.find_latest_run(session_id, linked_session_id)
+            if result is not None:
+                return result
         conn = self._connect()
         if not conn:
             return None
@@ -143,6 +157,10 @@ class TraceStore:
             conn.close()
 
     def list_spans(self, run_id: str) -> list[dict[str, Any]]:
+        if _trace_repo is not None:
+            result = _trace_repo.list_spans(run_id)
+            if result:
+                return result
         conn = self._connect()
         if not conn:
             return []
@@ -157,6 +175,8 @@ class TraceStore:
             conn.close()
 
     def get_eval_summary(self) -> dict[str, Any]:
+        if _trace_repo is not None:
+            return _trace_repo.get_eval_summary()
         conn = self._connect()
         if not conn:
             return _empty_eval_summary()
@@ -209,6 +229,8 @@ class TraceStore:
         report: dict[str, Any],
         run_id: Optional[str] = None,
     ) -> dict[str, Any]:
+        if _trace_repo is not None:
+            return _trace_repo.save_rca_report(session_id, report, run_id)
         report_id = str(uuid.uuid4())
         saved = {**report, "report_id": report_id, "session_id": session_id, "run_id": run_id}
         conn = self._connect()
@@ -241,6 +263,10 @@ class TraceStore:
         return saved
 
     def get_latest_rca_report(self, session_id: str) -> Optional[dict[str, Any]]:
+        if _trace_repo is not None:
+            result = _trace_repo.get_latest_rca_report(session_id)
+            if result is not None:
+                return result
         conn = self._connect()
         if not conn:
             return None
@@ -267,6 +293,8 @@ class TraceStore:
         runbook: dict[str, Any],
         run_id: Optional[str] = None,
     ) -> dict[str, Any]:
+        if _trace_repo is not None:
+            return _trace_repo.save_runbook(session_id, runbook, run_id)
         runbook_id = str(uuid.uuid4())
         saved = {**runbook, "runbook_id": runbook_id, "session_id": session_id, "run_id": run_id}
         conn = self._connect()
@@ -300,6 +328,10 @@ class TraceStore:
         return saved
 
     def get_latest_runbook(self, session_id: str) -> Optional[dict[str, Any]]:
+        if _trace_repo is not None:
+            result = _trace_repo.get_latest_runbook(session_id)
+            if result is not None:
+                return result
         conn = self._connect()
         if not conn:
             return None
@@ -321,6 +353,8 @@ class TraceStore:
             conn.close()
 
     def update_latest_runbook(self, session_id: str, runbook: dict[str, Any]) -> dict[str, Any]:
+        if _trace_repo is not None:
+            return _trace_repo.update_latest_runbook(session_id, runbook)
         conn = self._connect()
         if not conn:
             return runbook
@@ -357,6 +391,10 @@ class TraceStore:
         term = query.strip()
         if not term:
             return []
+        if _trace_repo is not None:
+            result = _trace_repo.search_knowledge(query, limit)
+            if result:
+                return result
         conn = self._connect()
         if not conn:
             return []
@@ -593,3 +631,10 @@ _default_trace_db_path = os.environ.get(
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "agent_traces.sqlite3")),
 )
 trace_store = TraceStore(db_path=_default_trace_db_path)
+_trace_repo = None
+
+
+def configure_repository(repo) -> None:
+    """Configure PG repository for read and write operations."""
+    global _trace_repo
+    _trace_repo = repo

@@ -41,6 +41,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { API_BASE } from '../config'
+import { formatDate } from '../composables/useFormatters'
 
 interface KnowledgeItem {
   source: string
@@ -81,18 +82,6 @@ async function search() {
 
 function shortId(value: string): string {
   return value.slice(0, 8)
-}
-
-function formatDate(value?: string | null): string {
-  if (!value) return '时间未确认'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('zh-CN', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }
 </script>
 

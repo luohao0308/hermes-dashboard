@@ -470,6 +470,38 @@ class TestWorkflowRunControls:
         assert resume.status_code == 200
         assert resume.json()["status"] == "running"
 
+    def test_resume_respects_retry_backoff(self, client):
+        c = client
+        session = client._test_session
+        rt = _seed_runtime(session)
+        resp = c.post("/api/workflows", json={
+            "name": "resume-backoff-test",
+            "runtime_id": str(rt.id),
+            "nodes": [
+                {"node_id": "a", "title": "A", "retry_policy": {"max_retries": 1, "backoff_seconds": 300}},
+            ],
+        })
+        wf_id = resp.json()["id"]
+        run = c.post(f"/api/workflows/{wf_id}/runs", json={}).json()
+        task_a = run["tasks"][0]
+
+        failed = c.post(
+            f"/api/workflows/{wf_id}/runs/{run['id']}/tasks/{task_a['id']}/fail",
+            json={"error_summary": "temporary failure"},
+        )
+        retry_task = failed.json()["tasks"][0]
+        assert retry_task["status"] == "pending"
+        assert retry_task["next_retry_at"] is not None
+
+        pause = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/pause", json={})
+        assert pause.status_code == 200
+
+        resume = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/resume", json={})
+        assert resume.status_code == 200
+        resumed_task = resume.json()["tasks"][0]
+        assert resumed_task["status"] == "pending"
+        assert resumed_task["next_retry_at"] == retry_task["next_retry_at"]
+
     def test_cancel_run_cancels_non_terminal_tasks(self, client):
         c = client
         session = client._test_session

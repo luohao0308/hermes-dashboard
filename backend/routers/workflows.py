@@ -172,6 +172,7 @@ def _advance_workflow(db: Session, run: Run) -> None:
 
     any_failed = False
     active_count = sum(1 for t in tasks if t.status in ("running", "waiting_approval"))
+    now = datetime.now(timezone.utc)
 
     for task in tasks:
         if task.status in ("completed", "cancelled"):
@@ -196,6 +197,8 @@ def _advance_workflow(db: Session, run: Run) -> None:
             continue
 
         if task.status == "pending":
+            if task.next_retry_at and task.next_retry_at > now:
+                continue
             if task.node_id and _check_dependencies_met(task.node_id, tasks_by_node, rev_adj):
                 # Check concurrency limit before starting
                 if workflow.max_concurrent_tasks and active_count >= workflow.max_concurrent_tasks:

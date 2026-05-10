@@ -24,14 +24,7 @@
     <div class="workflow-grid">
       <div class="dag-section">
         <div class="canvas-header">
-          <div class="canvas-tabs">
-            <button class="active">Visual Editor</button>
-            <button>JSON Config</button>
-          </div>
-          <div class="canvas-actions">
-            <button><Plus :size="14" /></button>
-            <button><Search :size="14" /></button>
-          </div>
+          <h3 class="sub-title">{{ t('workflows.dag') }}</h3>
         </div>
         <div class="dag-container">
           <svg class="dag-svg" :viewBox="svgViewBox">
@@ -222,7 +215,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ArrowLeft, GitBranch, History, Play, Plus, Search, Settings } from 'lucide-vue-next'
+import { ArrowLeft, GitBranch, History, Play, Settings } from 'lucide-vue-next'
 import type { WorkflowDefinition, WorkflowRunDetail, WorkflowVersionHistoryItem } from '../types'
 
 const { t } = useI18n()

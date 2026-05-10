@@ -415,6 +415,115 @@ class TestRetryPolicy:
 
 
 # ---------------------------------------------------------------------------
+# Run Control Tests
+# ---------------------------------------------------------------------------
+
+
+class TestWorkflowRunControls:
+    def _create_single_step_run(self, c, session):
+        rt = _seed_runtime(session)
+        resp = c.post("/api/workflows", json={
+            "name": "control-single-test",
+            "runtime_id": str(rt.id),
+            "nodes": [
+                {"node_id": "a", "title": "A", "retry_policy": {"max_retries": 0, "backoff_seconds": 0}},
+            ],
+        })
+        wf_id = resp.json()["id"]
+        run_resp = c.post(f"/api/workflows/{wf_id}/runs", json={})
+        return wf_id, run_resp.json()
+
+    def _create_two_step_run(self, c, session):
+        rt = _seed_runtime(session)
+        resp = c.post("/api/workflows", json={
+            "name": "control-test",
+            "runtime_id": str(rt.id),
+            "nodes": [
+                {"node_id": "a", "title": "A", "retry_policy": {"max_retries": 0, "backoff_seconds": 0}},
+                {"node_id": "b", "title": "B"},
+            ],
+            "edges": [{"from_node": "a", "to_node": "b"}],
+        })
+        wf_id = resp.json()["id"]
+        run_resp = c.post(f"/api/workflows/{wf_id}/runs", json={})
+        return wf_id, run_resp.json()
+
+    def test_pause_and_resume_run(self, client):
+        c = client
+        session = client._test_session
+        wf_id, run = self._create_two_step_run(c, session)
+
+        pause = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/pause", json={})
+        assert pause.status_code == 200
+        assert pause.json()["status"] == "paused"
+
+        task_a = pause.json()["tasks"][0]
+        assert task_a["status"] == "pending"
+        assert task_a["locked_by"] is None
+        blocked_complete = c.post(
+            f"/api/workflows/{wf_id}/runs/{run['id']}/tasks/{task_a['id']}/complete",
+            json={},
+        )
+        assert blocked_complete.status_code == 400
+
+        resume = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/resume", json={})
+        assert resume.status_code == 200
+        assert resume.json()["status"] == "running"
+
+    def test_cancel_run_cancels_non_terminal_tasks(self, client):
+        c = client
+        session = client._test_session
+        wf_id, run = self._create_two_step_run(c, session)
+
+        cancel = c.post(
+            f"/api/workflows/{wf_id}/runs/{run['id']}/cancel",
+            json={"reason": "operator stop"},
+        )
+        assert cancel.status_code == 200
+        data = cancel.json()
+        assert data["status"] == "cancelled"
+        assert data["error_summary"] == "operator stop"
+        assert {t["status"] for t in data["tasks"]} == {"cancelled"}
+
+    def test_retry_failed_run_resets_failed_task(self, client):
+        c = client
+        session = client._test_session
+        wf_id, run = self._create_single_step_run(c, session)
+        task_a = next(t for t in run["tasks"] if t["node_id"] == "a")
+
+        failed = c.post(
+            f"/api/workflows/{wf_id}/runs/{run['id']}/tasks/{task_a['id']}/fail",
+            json={"error_summary": "first failure"},
+        )
+        assert failed.json()["status"] == "failed"
+
+        retry = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/retry", json={})
+        assert retry.status_code == 200
+        data = retry.json()
+        assert data["status"] == "running"
+        retried_a = next(t for t in data["tasks"] if t["node_id"] == "a")
+        assert retried_a["status"] == "running"
+        assert retried_a["error_summary"] is None
+
+    def test_invalid_run_controls_are_rejected(self, client):
+        c = client
+        session = client._test_session
+        wf_id, run = self._create_two_step_run(c, session)
+
+        resume = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/resume", json={})
+        assert resume.status_code == 400
+
+        retry = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/retry", json={})
+        assert retry.status_code == 400
+
+        pause = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/pause", json={})
+        assert pause.status_code == 200
+
+        retry_paused = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/retry", json={})
+        assert retry_paused.status_code == 400
+
+
+# ---------------------------------------------------------------------------
 # Timeout Tests
 # ---------------------------------------------------------------------------
 

@@ -257,6 +257,8 @@ class WorkflowWorker:
             run = db.get(Run, task.run_id)
             if not run or not run.workflow_id or not task.started_at:
                 continue
+            if run.status != "running":
+                continue
             node = (
                 db.query(WorkflowNode)
                 .filter(

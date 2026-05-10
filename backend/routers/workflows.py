@@ -904,6 +904,178 @@ def advance_workflow_run(
 
 
 # ---------------------------------------------------------------------------
+# POST /api/workflows/{workflow_id}/runs/{run_id}/pause
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{workflow_id}/runs/{run_id}/pause", response_model=WorkflowRunResponse)
+def pause_workflow_run(
+    workflow_id: uuid.UUID,
+    run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_role("operator")),
+):
+    """Pause a running workflow run without changing task terminal state."""
+    run = _get_workflow_run_or_404(db, workflow_id, run_id)
+    if run.status != "running":
+        raise HTTPException(status_code=400, detail=f"Run is {run.status}, cannot pause")
+
+    run.status = "paused"
+    run.updated_at = datetime.now(timezone.utc)
+    _pause_active_run_tasks(db, run.id)
+    _add_run_event_span(db, run, "workflow_paused", "Workflow paused", "completed")
+    write_audit_log(
+        db,
+        actor_type="user",
+        actor_id="api",
+        action="workflow_run.paused",
+        resource_type="run",
+        resource_id=str(run.id),
+    )
+    db.commit()
+    db.refresh(run)
+    return _build_run_response(run, db.query(Task).filter(Task.run_id == run.id).all())
+
+
+# ---------------------------------------------------------------------------
+# POST /api/workflows/{workflow_id}/runs/{run_id}/resume
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{workflow_id}/runs/{run_id}/resume", response_model=WorkflowRunResponse)
+def resume_workflow_run(
+    workflow_id: uuid.UUID,
+    run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_role("operator")),
+):
+    """Resume a paused workflow run and advance any newly eligible work."""
+    run = _get_workflow_run_or_404(db, workflow_id, run_id)
+    if run.status != "paused":
+        raise HTTPException(status_code=400, detail=f"Run is {run.status}, cannot resume")
+
+    run.status = "running"
+    run.updated_at = datetime.now(timezone.utc)
+    _add_run_event_span(db, run, "workflow_resumed", "Workflow resumed", "completed")
+    write_audit_log(
+        db,
+        actor_type="user",
+        actor_id="api",
+        action="workflow_run.resumed",
+        resource_type="run",
+        resource_id=str(run.id),
+    )
+    db.commit()
+    _advance_workflow(db, run)
+    db.refresh(run)
+    return _build_run_response(run, db.query(Task).filter(Task.run_id == run.id).all())
+
+
+# ---------------------------------------------------------------------------
+# POST /api/workflows/{workflow_id}/runs/{run_id}/cancel
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{workflow_id}/runs/{run_id}/cancel", response_model=WorkflowRunResponse)
+def cancel_workflow_run(
+    workflow_id: uuid.UUID,
+    run_id: uuid.UUID,
+    body: dict | None = None,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_role("operator")),
+):
+    """Cancel a non-terminal workflow run and all non-terminal tasks."""
+    run = _get_workflow_run_or_404(db, workflow_id, run_id)
+    if run.status in ("completed", "failed", "cancelled"):
+        raise HTTPException(status_code=400, detail=f"Run is {run.status}, cannot cancel")
+
+    now = datetime.now(timezone.utc)
+    reason = (body or {}).get("reason", "Workflow run cancelled")
+    tasks = db.query(Task).filter(Task.run_id == run.id).all()
+    for task in tasks:
+        if task.status not in ("completed", "failed", "cancelled", "dead_letter"):
+            task.status = "cancelled"
+            task.error_summary = reason
+            task.ended_at = now
+            task.duration_ms = _compute_duration_ms(task.started_at, task.ended_at)
+        task.locked_by = None
+        task.locked_at = None
+
+    run.status = "cancelled"
+    run.error_summary = reason
+    run.ended_at = now
+    run.duration_ms = _compute_duration_ms(run.started_at, run.ended_at)
+    _add_run_event_span(db, run, "workflow_cancelled", "Workflow cancelled", "cancelled", reason)
+    write_audit_log(
+        db,
+        actor_type="user",
+        actor_id="api",
+        action="workflow_run.cancelled",
+        resource_type="run",
+        resource_id=str(run.id),
+        after_json={"reason": reason},
+    )
+    db.commit()
+    db.refresh(run)
+    return _build_run_response(run, tasks)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/workflows/{workflow_id}/runs/{run_id}/retry
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{workflow_id}/runs/{run_id}/retry", response_model=WorkflowRunResponse)
+def retry_workflow_run(
+    workflow_id: uuid.UUID,
+    run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_role("operator")),
+):
+    """Retry failed, cancelled, or dead-letter tasks in a workflow run."""
+    run = _get_workflow_run_or_404(db, workflow_id, run_id)
+    if run.status not in ("failed", "cancelled"):
+        raise HTTPException(status_code=400, detail=f"Run is {run.status}, cannot retry")
+
+    tasks = db.query(Task).filter(Task.run_id == run.id).all()
+    retried = 0
+    for task in tasks:
+        if task.status in ("failed", "cancelled", "dead_letter"):
+            task.status = "pending"
+            task.error_summary = None
+            task.started_at = None
+            task.ended_at = None
+            task.duration_ms = None
+            task.locked_by = None
+            task.locked_at = None
+            task.next_retry_at = None
+            retried += 1
+
+    if retried == 0:
+        raise HTTPException(status_code=400, detail="Run has no failed, cancelled, or dead-letter tasks to retry")
+
+    run.status = "running"
+    run.error_summary = None
+    run.ended_at = None
+    run.duration_ms = None
+    run.updated_at = datetime.now(timezone.utc)
+    _add_run_event_span(db, run, "workflow_retried", "Workflow retry requested", "completed")
+    write_audit_log(
+        db,
+        actor_type="user",
+        actor_id="api",
+        action="workflow_run.retried",
+        resource_type="run",
+        resource_id=str(run.id),
+        after_json={"retried_tasks": retried},
+    )
+    db.commit()
+    _advance_workflow(db, run)
+    db.refresh(run)
+    return _build_run_response(run, db.query(Task).filter(Task.run_id == run.id).all())
+
+
+# ---------------------------------------------------------------------------
 # POST /api/workflows/{workflow_id}/runs/{run_id}/tasks/{task_id}/complete
 # ---------------------------------------------------------------------------
 
@@ -921,6 +1093,8 @@ def complete_workflow_task(
     run = db.get(Run, run_id)
     if not run or run.workflow_id != workflow_id:
         raise HTTPException(status_code=404, detail="Run not found")
+    if run.status != "running":
+        raise HTTPException(status_code=400, detail=f"Run is {run.status}, cannot complete task")
 
     task = db.get(Task, task_id)
     if not task or task.run_id != run_id:
@@ -962,6 +1136,8 @@ def fail_workflow_task(
     run = db.get(Run, run_id)
     if not run or run.workflow_id != workflow_id:
         raise HTTPException(status_code=404, detail="Run not found")
+    if run.status != "running":
+        raise HTTPException(status_code=400, detail=f"Run is {run.status}, cannot fail task")
 
     task = db.get(Task, task_id)
     if not task or task.run_id != run_id:
@@ -1017,6 +1193,45 @@ def fail_workflow_task(
 # ---------------------------------------------------------------------------
 
 
+def _get_workflow_run_or_404(db: Session, workflow_id: uuid.UUID, run_id: uuid.UUID) -> Run:
+    run = db.get(Run, run_id)
+    if not run or run.workflow_id != workflow_id:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return run
+
+
+def _pause_active_run_tasks(db: Session, run_id: uuid.UUID) -> None:
+    for task in db.query(Task).filter(Task.run_id == run_id).all():
+        if task.status == "running":
+            task.status = "pending"
+            task.started_at = None
+            task.ended_at = None
+            task.duration_ms = None
+        task.locked_by = None
+        task.locked_at = None
+
+
+def _add_run_event_span(
+    db: Session,
+    run: Run,
+    span_type: str,
+    title: str,
+    status: str,
+    error_summary: str | None = None,
+) -> None:
+    now = datetime.now(timezone.utc)
+    db.add(TraceSpan(
+        id=uuid.uuid4(),
+        run_id=run.id,
+        span_type=span_type,
+        title=title,
+        status=status,
+        error_summary=error_summary,
+        started_at=now,
+        ended_at=now,
+    ))
+
+
 def _build_run_response(run: Run, tasks: list[Task]) -> WorkflowRunResponse:
     task_responses = [
         WorkflowTaskResponse(
@@ -1032,6 +1247,9 @@ def _build_run_response(run: Run, tasks: list[Task]) -> WorkflowRunResponse:
             duration_ms=t.duration_ms,
             error_summary=t.error_summary,
             retry_count=t.retry_count,
+            locked_by=t.locked_by,
+            locked_at=t.locked_at,
+            next_retry_at=t.next_retry_at,
             metadata_json=t.metadata_json,
             created_at=t.created_at,
             updated_at=t.updated_at,

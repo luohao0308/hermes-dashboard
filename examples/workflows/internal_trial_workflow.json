@@ -1,0 +1,56 @@
+{
+  "name": "Internal Trial Workflow Smoke Test",
+  "description": "Small DAG for validating workflow creation, worker execution state, retry, pause/resume, and cancel controls.",
+  "nodes": [
+    {
+      "node_id": "prepare",
+      "title": "Prepare Input",
+      "task_type": "action",
+      "retry_policy": {
+        "max_retries": 1,
+        "backoff_seconds": 0
+      },
+      "timeout_seconds": 60
+    },
+    {
+      "node_id": "execute",
+      "title": "Execute Work",
+      "task_type": "action",
+      "retry_policy": {
+        "max_retries": 2,
+        "backoff_seconds": 1
+      },
+      "timeout_seconds": 120
+    },
+    {
+      "node_id": "summarize",
+      "title": "Summarize Result",
+      "task_type": "action",
+      "retry_policy": {
+        "max_retries": 1,
+        "backoff_seconds": 0
+      },
+      "timeout_seconds": 60
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "prepare",
+      "to_node": "execute"
+    },
+    {
+      "from_node": "execute",
+      "to_node": "summarize"
+    }
+  ],
+  "metadata_json": {
+    "purpose": "Internal team onboarding and workflow/worker smoke testing",
+    "suggested_checks": [
+      "Create this workflow with a real runtime_id",
+      "Start a run",
+      "Pause and resume the run",
+      "Fail a running task and retry the run",
+      "Cancel a fresh run"
+    ]
+  }
+}

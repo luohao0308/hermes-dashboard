@@ -43,6 +43,15 @@
           <span v-if="worker.last_seen_seconds_ago != null" class="health-detail">
             {{ formatAge(worker.last_seen_seconds_ago) }}
           </span>
+          <span v-if="worker.worker_id" class="health-detail">
+            {{ worker.worker_id }}
+          </span>
+          <span v-if="worker.pid" class="health-detail">
+            pid {{ worker.pid }}
+          </span>
+          <span v-if="worker.version" class="health-detail">
+            v{{ worker.version }}
+          </span>
         </span>
       </div>
 
@@ -93,6 +102,15 @@
           <span class="metric-label">{{ t('health.evalResults') }}</span>
         </div>
       </div>
+      <div v-if="metrics.workers" class="worker-metrics">
+        <div v-for="(worker, name) in metrics.workers" :key="name" class="worker-card">
+          <span class="worker-name">{{ name }}</span>
+          <strong>{{ worker.status }}</strong>
+          <small v-if="worker.age_seconds != null">{{ formatAge(worker.age_seconds) }}</small>
+          <small v-if="worker.worker_id">{{ worker.worker_id }}</small>
+          <small v-if="worker.pid">pid {{ worker.pid }}</small>
+        </div>
+      </div>
     </div>
 
     <EmptyState v-if="!health && !metrics" icon="🏥" :message="t('health.noData')" />
@@ -117,6 +135,9 @@ interface HealthData {
   workers?: Record<string, {
     status: string
     last_seen_seconds_ago?: number | null
+    worker_id?: string | null
+    pid?: number | null
+    version?: string | null
     error?: string
   }>
   timestamp?: string
@@ -128,7 +149,13 @@ interface MetricsData {
   tasks?: { dead_letter: number }
   connectors?: { errors_today: number }
   evals?: { total: number }
-  workers?: Record<string, { status: string; age_seconds?: number | null }>
+  workers?: Record<string, {
+    status: string
+    age_seconds?: number | null
+    worker_id?: string | null
+    pid?: number | null
+    version?: string | null
+  }>
 }
 
 defineProps<{
@@ -174,8 +201,8 @@ function formatAge(seconds: number): string {
 }
 
 .matrix-header h3 {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 800;
   color: var(--text-primary);
   margin: 0;
 }
@@ -183,10 +210,12 @@ function formatAge(seconds: number): string {
 .health-grid {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  border-radius: var(--radius-md);
+  gap: 0;
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-color);
+  background: #ffffff;
+  box-shadow: var(--glass-shadow);
 }
 
 .health-row {
@@ -194,12 +223,18 @@ function formatAge(seconds: number): string {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--bg-tertiary);
+  background: #ffffff;
   font-size: 13px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.health-row:last-child {
+  border-bottom: none;
 }
 
 .health-row.overall {
-  font-weight: 600;
+  font-weight: 900;
+  background: #f8fafc;
 }
 
 .health-icon {
@@ -208,9 +243,9 @@ function formatAge(seconds: number): string {
   font-size: 14px;
 }
 
-.status-healthy .health-icon { color: #6ee7b7; }
-.status-warning .health-icon { color: #fbbf24; }
-.status-error .health-icon { color: #fca5a5; }
+.status-healthy .health-icon { color: #047857; }
+.status-warning .health-icon { color: #d97706; }
+.status-error .health-icon { color: #b91c1c; }
 
 .health-label {
   flex: 1;
@@ -219,7 +254,7 @@ function formatAge(seconds: number): string {
 
 .health-value {
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: 800;
   text-align: right;
 }
 
@@ -231,15 +266,17 @@ function formatAge(seconds: number): string {
 }
 
 .btn {
-  padding: 6px 12px;
-  border-radius: var(--radius-md);
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 800;
   cursor: pointer;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  background: #ffffff;
   color: var(--text-secondary);
   transition: all 0.2s;
+  box-shadow: var(--shadow-sm);
 }
 
 .btn:hover:not(:disabled) {
@@ -258,7 +295,7 @@ function formatAge(seconds: number): string {
 
 .metrics-title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 900;
   color: var(--text-primary);
   margin: 0 0 12px;
 }
@@ -269,22 +306,60 @@ function formatAge(seconds: number): string {
   gap: 8px;
 }
 
+.worker-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.worker-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+  padding: 12px;
+}
+
+.worker-name {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.worker-card strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.worker-card small {
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+}
+
 .metric-card {
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 12px 8px;
-  border-radius: var(--radius-md);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
 }
 
-.metric-card.running .metric-value { color: #60a5fa; }
-.metric-card.failed .metric-value { color: #fca5a5; }
+.metric-card.running .metric-value { color: #2563eb; }
+.metric-card.failed .metric-value { color: #b91c1c; }
 
 .metric-value {
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 900;
   color: var(--text-primary);
 }
 
@@ -292,5 +367,18 @@ function formatAge(seconds: number): string {
   font-size: 11px;
   color: var(--text-muted);
   margin-top: 4px;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .matrix-header,
+  .health-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .health-value {
+    text-align: left;
+  }
 }
 </style>

@@ -1,7 +1,7 @@
 <template>
   <div class="app-layout">
     <!-- 侧边栏 -->
-    <Sidebar :isConnected="isConnected" @nav-change="handleNavChange" />
+    <Sidebar :activeView="currentNav" :isConnected="isConnected" @nav-change="handleNavChange" />
 
     <!-- 主内容区 -->
     <div class="main-wrapper">
@@ -59,24 +59,28 @@
           <!-- Quick Actions -->
           <div class="quick-actions">
             <button class="quick-action" @click="handleNavChange('runs')">
-              <span class="action-icon">▶</span>
+              <span class="action-icon primary"><Activity :size="20" /></span>
               <span class="action-label">{{ t('dashboard.runs') }}</span>
               <span class="action-desc">{{ t('dashboard.runsDesc') }}</span>
+              <ArrowUpRight class="action-arrow" :size="18" />
             </button>
             <button class="quick-action" @click="handleNavChange('workflows')">
-              <span class="action-icon">◇</span>
+              <span class="action-icon success"><GitBranch :size="20" /></span>
               <span class="action-label">{{ t('dashboard.workflows') }}</span>
               <span class="action-desc">{{ t('dashboard.workflowsDesc') }}</span>
+              <ArrowUpRight class="action-arrow" :size="18" />
             </button>
             <button class="quick-action" @click="handleNavChange('approvals')">
-              <span class="action-icon">☑</span>
+              <span class="action-icon warning"><ShieldCheck :size="20" /></span>
               <span class="action-label">{{ t('dashboard.approvals') }}</span>
               <span class="action-desc">{{ t('dashboard.approvalsDesc') }}</span>
+              <ArrowUpRight class="action-arrow" :size="18" />
             </button>
             <button class="quick-action" @click="handleNavChange('eval')">
-              <span class="action-icon">📊</span>
+              <span class="action-icon purple"><BarChart3 :size="20" /></span>
               <span class="action-label">{{ t('dashboard.eval') }}</span>
               <span class="action-desc">{{ t('dashboard.evalDesc') }}</span>
+              <ArrowUpRight class="action-arrow" :size="18" />
             </button>
           </div>
 
@@ -333,6 +337,8 @@
             :limit="workflowDefsLimit"
             :offset="workflowDefsOffset"
             :loading="loadingWorkflowDefs"
+            @create="openCreateWorkflowEditor"
+            @edit="openEditWorkflowEditor"
             @refresh="fetchWorkflowDefinitions"
             @select="openWorkflowDetail"
             @pageChange="(o) => { workflowDefsOffset = o; fetchWorkflowDefinitions() }"
@@ -345,12 +351,17 @@
             v-if="selectedWorkflowDef"
             :workflow="selectedWorkflowDef"
             :runs="selectedWorkflowRuns"
+            :selectedRun="selectedWorkflowRunDetail"
             :versions="workflowVersions"
             :loadingVersions="loadingWorkflowVersions"
             :rollingBack="rollingBackWorkflow"
             @back="backToWorkflows"
             @startRun="handleStartWorkflowRun"
             @selectRun="handleSelectWorkflowRun"
+            @pauseRun="handlePauseWorkflowRun"
+            @resumeRun="handleResumeWorkflowRun"
+            @retryRun="handleRetryWorkflowRun"
+            @cancelRun="handleCancelWorkflowRun"
             @loadVersions="handleLoadWorkflowVersions"
             @rollback="handleWorkflowRollback"
           />
@@ -379,6 +390,17 @@
         <button class="toast-close" @click="removeToast(toast.id)">×</button>
       </div>
     </TransitionGroup>
+
+    <WorkflowDefinitionEditor
+      :open="workflowEditorOpen"
+      :mode="workflowEditorMode"
+      :initialJson="workflowEditorInitialJson"
+      :sampleJson="workflowEditorSampleJson"
+      :saving="savingWorkflowDefinition"
+      :error="workflowEditorError"
+      @close="closeWorkflowEditor"
+      @save="handleSaveWorkflowDefinition"
+    />
   </div>
 </template>
 
@@ -410,11 +432,13 @@ import EvalDashboard from './components/EvalDashboard.vue'
 import ConfigCompare from './components/ConfigCompare.vue'
 import WorkflowList from './components/WorkflowList.vue'
 import WorkflowDetail from './components/WorkflowDetail.vue'
+import WorkflowDefinitionEditor from './components/WorkflowDefinitionEditor.vue'
 import FailedEventsPanel from './components/FailedEventsPanel.vue'
 import AuditLogPanel from './components/AuditLogPanel.vue'
 import HealthMatrix from './components/HealthMatrix.vue'
+import { Activity, ArrowUpRight, BarChart3, GitBranch, ShieldCheck } from 'lucide-vue-next'
 import { API_BASE } from './config'
-import type { Task, Log, HistoryItem, SessionDetailData, TraceRun, TraceSpan, RcaReport, RunbookReport, OverviewSnapshot, AlertItem, WorkflowRun, WorkflowSpan, WorkflowRuntime, ApprovalItem, EvalSummaryData, ConfigVersionItem, ConfigCompareData, WorkflowDefinition, WorkflowRunDetail, WorkflowVersionHistoryItem, FailedEventItem, ConnectorConfig } from './types'
+import type { Task, Log, HistoryItem, SessionDetailData, TraceRun, TraceSpan, RcaReport, RunbookReport, OverviewSnapshot, AlertItem, WorkflowRun, WorkflowSpan, WorkflowRuntime, ApprovalItem, EvalSummaryData, ConfigVersionItem, ConfigCompareData, WorkflowDefinition, WorkflowDefinitionPayload, WorkflowRunDetail, WorkflowVersionHistoryItem, FailedEventItem, ConnectorConfig } from './types'
 import { useToast } from './composables/useToast'
 import { NAV_TO_HASH, HASH_TO_NAV, LEGACY_NAV_IDS } from './composables/useNavigation'
 import { useNavigation } from './composables/useNavigation'
@@ -423,7 +447,20 @@ import { listRuns, getTrace, listRuntimes, listConnectors, replayFailedEvent } f
 import { listApprovals, approveApproval, rejectApproval, batchApprove, batchReject } from './composables/useApprovalApi'
 import { generateRca, getLatestRca, generateRunbook, getLatestRunbook, exportArtifact } from './composables/useRunAnalysisApi'
 import { getEvalSummary, listConfigVersions, compareConfigs } from './composables/useEvalApi'
-import { listWorkflowDefinitions, getWorkflowDefinition, listWorkflowRuns, startWorkflowRun, listWorkflowVersions, rollbackWorkflow } from './composables/useWorkflowOrchestrationApi'
+import {
+  cancelWorkflowRun,
+  createWorkflowDefinition,
+  getWorkflowDefinition,
+  listWorkflowDefinitions,
+  listWorkflowRuns,
+  listWorkflowVersions,
+  pauseWorkflowRun,
+  resumeWorkflowRun,
+  retryWorkflowRun,
+  rollbackWorkflow,
+  startWorkflowRun,
+  updateWorkflowDefinition,
+} from './composables/useWorkflowOrchestrationApi'
 import { listAuditLogs } from './composables/useAuditApi'
 import type { AuditLogEntry } from './composables/useAuditApi'
 
@@ -551,6 +588,13 @@ const loadingWorkflowDetail = ref(false)
 const workflowVersions = ref<WorkflowVersionHistoryItem[]>([])
 const loadingWorkflowVersions = ref(false)
 const rollingBackWorkflow = ref(false)
+const workflowEditorOpen = ref(false)
+const workflowEditorMode = ref<'create' | 'edit'>('create')
+const workflowEditorTarget = ref<WorkflowDefinition | null>(null)
+const workflowEditorInitialJson = ref('')
+const workflowEditorSampleJson = ref('')
+const workflowEditorError = ref<string | null>(null)
+const savingWorkflowDefinition = ref(false)
 
 // Failed Events state (OPT-54/58)
 const failedEvents = ref<FailedEventItem[]>([])
@@ -1242,6 +1286,129 @@ async function handleConfigCompare(beforeId: string, afterId: string) {
 // Workflow Orchestration (v2.0)
 // ---------------------------------------------------------------------------
 
+function formatWorkflowJson(payload: WorkflowDefinitionPayload): string {
+  return JSON.stringify(payload, null, 2)
+}
+
+function buildInternalTrialWorkflowPayload(runtimeId = ''): WorkflowDefinitionPayload {
+  return {
+    name: 'Internal Trial Workflow Smoke Test',
+    runtime_id: runtimeId,
+    description: 'Small DAG for validating workflow creation, worker state, retry, pause/resume, and cancel controls.',
+    nodes: [
+      {
+        node_id: 'prepare',
+        title: 'Prepare Input',
+        task_type: 'action',
+        retry_policy: { max_retries: 1, backoff_seconds: 0 },
+        timeout_seconds: 60,
+      },
+      {
+        node_id: 'execute',
+        title: 'Execute Work',
+        task_type: 'action',
+        retry_policy: { max_retries: 2, backoff_seconds: 1 },
+        timeout_seconds: 120,
+      },
+      {
+        node_id: 'summarize',
+        title: 'Summarize Result',
+        task_type: 'action',
+        retry_policy: { max_retries: 1, backoff_seconds: 0 },
+        timeout_seconds: 60,
+      },
+    ],
+    edges: [
+      { from_node: 'prepare', to_node: 'execute' },
+      { from_node: 'execute', to_node: 'summarize' },
+    ],
+  }
+}
+
+function workflowToEditorPayload(workflow: WorkflowDefinition): WorkflowDefinitionPayload {
+  return {
+    name: workflow.name,
+    description: workflow.description,
+    timeout_seconds: workflow.timeout_seconds,
+    max_concurrent_tasks: workflow.max_concurrent_tasks,
+    nodes: workflow.nodes.map((node) => ({
+      node_id: node.node_id,
+      title: node.title,
+      task_type: node.task_type,
+      config: node.config,
+      retry_policy: node.retry_policy,
+      timeout_seconds: node.timeout_seconds,
+      approval_timeout_seconds: node.approval_timeout_seconds,
+    })),
+    edges: workflow.edges.map((edge) => ({
+      from_node: edge.from_node,
+      to_node: edge.to_node,
+    })),
+  }
+}
+
+async function openCreateWorkflowEditor() {
+  if (workflowRuntimes.value.length === 0) {
+    await fetchWorkflowRuntimes()
+  }
+  const runtimeId = workflowRuntimes.value[0]?.id ?? ''
+  const sample = buildInternalTrialWorkflowPayload(runtimeId)
+  workflowEditorMode.value = 'create'
+  workflowEditorTarget.value = null
+  workflowEditorInitialJson.value = formatWorkflowJson(sample)
+  workflowEditorSampleJson.value = formatWorkflowJson(sample)
+  workflowEditorError.value = null
+  workflowEditorOpen.value = true
+}
+
+function openEditWorkflowEditor(workflow: WorkflowDefinition) {
+  const sample = buildInternalTrialWorkflowPayload(workflow.runtime_id)
+  workflowEditorMode.value = 'edit'
+  workflowEditorTarget.value = workflow
+  workflowEditorInitialJson.value = formatWorkflowJson(workflowToEditorPayload(workflow))
+  workflowEditorSampleJson.value = formatWorkflowJson(sample)
+  workflowEditorError.value = null
+  workflowEditorOpen.value = true
+}
+
+function closeWorkflowEditor() {
+  if (savingWorkflowDefinition.value) return
+  workflowEditorOpen.value = false
+  workflowEditorError.value = null
+}
+
+async function handleSaveWorkflowDefinition(rawPayload: Record<string, unknown>) {
+  workflowEditorError.value = null
+  savingWorkflowDefinition.value = true
+  try {
+    const payload = rawPayload as unknown as WorkflowDefinitionPayload
+    let saved: WorkflowDefinition
+    if (workflowEditorMode.value === 'create') {
+      saved = await createWorkflowDefinition(payload)
+      workflowDefinitions.value = [saved, ...workflowDefinitions.value]
+      workflowDefsTotal.value += 1
+      addToast('success', 'Workflow definition created')
+      workflowEditorOpen.value = false
+      await openWorkflowDetail(saved)
+    } else if (workflowEditorTarget.value) {
+      const { runtime_id: _runtimeId, ...updatePayload } = payload
+      saved = await updateWorkflowDefinition(workflowEditorTarget.value.id, updatePayload)
+      const idx = workflowDefinitions.value.findIndex((item) => item.id === saved.id)
+      if (idx >= 0) workflowDefinitions.value.splice(idx, 1, saved)
+      if (selectedWorkflowDef.value?.id === saved.id) selectedWorkflowDef.value = saved
+      addToast('success', 'Workflow definition updated')
+      workflowEditorOpen.value = false
+      if (selectedWorkflowDef.value?.id === saved.id) {
+        await handleLoadWorkflowVersions()
+      }
+    }
+  } catch (e) {
+    workflowEditorError.value = extractError(e)
+  } finally {
+    savingWorkflowDefinition.value = false
+  }
+}
+
 async function fetchWorkflowDefinitions() {
   loadingWorkflowDefs.value = true
   try {
@@ -1261,6 +1428,7 @@ async function fetchWorkflowDefinitions() {
 async function openWorkflowDetail(wf: WorkflowDefinition) {
   selectedWorkflowDef.value = wf
   selectedWorkflowRuns.value = []
+  selectedWorkflowRunDetail.value = null
   workflowVersions.value = []
   currentNav.value = 'workflow-detail'
   window.location.hash = `#/workflows/${encodeURIComponent(wf.id)}`
@@ -1272,6 +1440,7 @@ async function openWorkflowDetail(wf: WorkflowDefinition) {
     ])
     selectedWorkflowDef.value = detail
     selectedWorkflowRuns.value = runsData.items
+    selectedWorkflowRunDetail.value = runsData.items[0] ?? null
     void handleLoadWorkflowVersions()
   } catch {
     addToast('error', 'Failed to load workflow detail')
@@ -1292,6 +1461,7 @@ async function handleStartWorkflowRun() {
       input_summary: 'Manual run from dashboard',
     })
     selectedWorkflowRuns.value = [run, ...selectedWorkflowRuns.value]
+    selectedWorkflowRunDetail.value = run
     addToast('success', 'Workflow run started')
   } catch (e) {
     addToast('error', `Failed to start workflow run: ${extractError(e)}`)
@@ -1300,6 +1470,64 @@ async function handleStartWorkflowRun() {
 
 async function handleSelectWorkflowRun(run: WorkflowRunDetail) {
   selectedWorkflowRunDetail.value = run
+}
+
+function replaceSelectedWorkflowRun(run: WorkflowRunDetail) {
+  const idx = selectedWorkflowRuns.value.findIndex((item) => item.id === run.id)
+  if (idx >= 0) {
+    selectedWorkflowRuns.value.splice(idx, 1, run)
+  } else {
+    selectedWorkflowRuns.value = [run, ...selectedWorkflowRuns.value]
+  }
+  if (selectedWorkflowRunDetail.value?.id === run.id) {
+    selectedWorkflowRunDetail.value = run
+  }
+}
+
+async function handlePauseWorkflowRun(run: WorkflowRunDetail) {
+  if (!selectedWorkflowDef.value) return
+  try {
+    const updated = await pauseWorkflowRun(selectedWorkflowDef.value.id, run.id)
+    replaceSelectedWorkflowRun(updated)
+    addToast('success', 'Workflow run paused')
+  } catch (e) {
+    addToast('error', `Failed to pause workflow run: ${extractError(e)}`)
+  }
+}
+
+async function handleResumeWorkflowRun(run: WorkflowRunDetail) {
+  if (!selectedWorkflowDef.value) return
+  try {
+    const updated = await resumeWorkflowRun(selectedWorkflowDef.value.id, run.id)
+    replaceSelectedWorkflowRun(updated)
+    addToast('success', 'Workflow run resumed')
+  } catch (e) {
+    addToast('error', `Failed to resume workflow run: ${extractError(e)}`)
+  }
+}
+
+async function handleRetryWorkflowRun(run: WorkflowRunDetail) {
+  if (!selectedWorkflowDef.value) return
+  try {
+    const updated = await retryWorkflowRun(selectedWorkflowDef.value.id, run.id)
+    replaceSelectedWorkflowRun(updated)
+    addToast('success', 'Workflow run retried')
+  } catch (e) {
+    addToast('error', `Failed to retry workflow run: ${extractError(e)}`)
+  }
+}
+
+async function handleCancelWorkflowRun(run: WorkflowRunDetail) {
+  if (!selectedWorkflowDef.value) return
+  try {
+    const updated = await cancelWorkflowRun(selectedWorkflowDef.value.id, run.id, {
+      reason: 'Cancelled from workflow dashboard',
+    })
+    replaceSelectedWorkflowRun(updated)
+    addToast('success', 'Workflow run cancelled')
+  } catch (e) {
+    addToast('error', `Failed to cancel workflow run: ${extractError(e)}`)
+  }
 }
 
 async function handleLoadWorkflowVersions() {
@@ -1755,15 +1983,16 @@ onUnmounted(() => {
 }
 
 .quick-action {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 6px;
-  padding: 20px 24px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
+  gap: 8px;
+  min-height: 128px;
+  padding: 22px 24px;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1772,27 +2001,62 @@ onUnmounted(() => {
 }
 
 .quick-action:hover {
-  border-color: var(--accent-color);
-  box-shadow: var(--shadow-glow), var(--glass-shadow);
+  border-color: #bfdbfe;
+  box-shadow: 0 18px 40px rgba(37, 99, 235, 0.1);
   transform: translateY(-2px);
 }
 
 .action-icon {
-  font-size: 22px;
-  line-height: 1;
-  margin-bottom: 4px;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+
+.action-icon.primary {
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.action-icon.success {
+  color: #059669;
+  background: #ecfdf5;
+}
+
+.action-icon.warning {
+  color: #d97706;
+  background: #fffbeb;
+}
+
+.action-icon.purple {
+  color: #7c3aed;
+  background: #f5f3ff;
 }
 
 .action-label {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 900;
   color: var(--text-primary);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .action-desc {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.action-arrow {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  color: #cbd5e1;
+  transition: color 0.2s ease;
+}
+
+.quick-action:hover .action-arrow {
+  color: var(--accent-color);
 }
 
 /* 功能面板网格 */
@@ -1950,11 +2214,27 @@ onUnmounted(() => {
   .main-wrapper {
     margin-left: 0;
   }
+  .main-content {
+    padding: 16px;
+  }
+  .topbar-search,
+  .live-status {
+    display: none;
+  }
   .quick-actions {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
   }
   .panels-grid {
     grid-template-columns: 1fr;
+  }
+  .toast-container {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+  }
+  .toast {
+    min-width: 0;
+    width: 100%;
   }
 }
 </style>

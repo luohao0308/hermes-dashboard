@@ -4,6 +4,7 @@ import { fetchJSON, fetchPost, fetchPut, fetchDelete } from './useApi'
 import { API_BASE } from '../config'
 import type {
   WorkflowDefinition,
+  WorkflowDefinitionPayload,
   WorkflowDefinitionListResponse,
   WorkflowRunDetail,
   WorkflowRunDetailListResponse,
@@ -35,38 +36,13 @@ export function getWorkflowDefinition(workflowId: string): Promise<WorkflowDefin
   )
 }
 
-export function createWorkflowDefinition(body: {
-  name: string
-  runtime_id: string
-  description?: string
-  nodes: {
-    node_id: string
-    title: string
-    task_type?: string
-    config?: Record<string, unknown>
-    retry_policy?: { max_retries: number; backoff_seconds: number }
-    timeout_seconds?: number
-  }[]
-  edges?: { from_node: string; to_node: string }[]
-}): Promise<WorkflowDefinition> {
+export function createWorkflowDefinition(body: WorkflowDefinitionPayload): Promise<WorkflowDefinition> {
   return fetchPost<WorkflowDefinition>(`${API_BASE}/api/workflows`, body)
 }
 
 export function updateWorkflowDefinition(
   workflowId: string,
-  body: {
-    name?: string
-    description?: string
-    nodes?: {
-      node_id: string
-      title: string
-      task_type?: string
-      config?: Record<string, unknown>
-      retry_policy?: { max_retries: number; backoff_seconds: number }
-      timeout_seconds?: number
-    }[]
-    edges?: { from_node: string; to_node: string }[]
-  },
+  body: Partial<WorkflowDefinitionPayload>,
 ): Promise<WorkflowDefinition> {
   return fetchPut<WorkflowDefinition>(
     `${API_BASE}/api/workflows/${encodeURIComponent(workflowId)}`,
@@ -120,6 +96,47 @@ export function advanceWorkflowRun(
 ): Promise<WorkflowRunDetail> {
   return fetchPost<WorkflowRunDetail>(
     `${API_BASE}/api/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}/advance`,
+    {},
+  )
+}
+
+export function pauseWorkflowRun(
+  workflowId: string,
+  runId: string,
+): Promise<WorkflowRunDetail> {
+  return fetchPost<WorkflowRunDetail>(
+    `${API_BASE}/api/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}/pause`,
+    {},
+  )
+}
+
+export function resumeWorkflowRun(
+  workflowId: string,
+  runId: string,
+): Promise<WorkflowRunDetail> {
+  return fetchPost<WorkflowRunDetail>(
+    `${API_BASE}/api/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}/resume`,
+    {},
+  )
+}
+
+export function cancelWorkflowRun(
+  workflowId: string,
+  runId: string,
+  body?: { reason?: string },
+): Promise<WorkflowRunDetail> {
+  return fetchPost<WorkflowRunDetail>(
+    `${API_BASE}/api/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}/cancel`,
+    body ?? {},
+  )
+}
+
+export function retryWorkflowRun(
+  workflowId: string,
+  runId: string,
+): Promise<WorkflowRunDetail> {
+  return fetchPost<WorkflowRunDetail>(
+    `${API_BASE}/api/workflows/${encodeURIComponent(workflowId)}/runs/${encodeURIComponent(runId)}/retry`,
     {},
   )
 }

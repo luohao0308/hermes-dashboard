@@ -422,11 +422,36 @@ export interface WorkflowNodeDef {
   created_at: string
 }
 
+export interface WorkflowNodeInput {
+  node_id: string
+  title: string
+  task_type?: string
+  config?: Record<string, unknown> | null
+  retry_policy?: RetryPolicy | null
+  timeout_seconds?: number | null
+  approval_timeout_seconds?: number | null
+}
+
 export interface WorkflowEdgeDef {
   id: string
   workflow_id: string
   from_node: string
   to_node: string
+}
+
+export interface WorkflowEdgeInput {
+  from_node: string
+  to_node: string
+}
+
+export interface WorkflowDefinitionPayload {
+  name: string
+  runtime_id?: string
+  description?: string | null
+  timeout_seconds?: number | null
+  max_concurrent_tasks?: number | null
+  nodes: WorkflowNodeInput[]
+  edges?: WorkflowEdgeInput[]
 }
 
 export interface WorkflowDefinition {

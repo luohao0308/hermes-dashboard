@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import WorkflowList from '@/components/WorkflowList.vue'
 import WorkflowDetail from '@/components/WorkflowDetail.vue'
+import WorkflowDefinitionEditor from '@/components/WorkflowDefinitionEditor.vue'
+import HealthMatrix from '@/components/HealthMatrix.vue'
 import type { WorkflowDefinition, WorkflowRunDetail } from '@/types'
 
 const mockNodes = [
@@ -158,6 +160,21 @@ const mockRunCompleted: WorkflowRunDetail = {
   })),
 }
 
+const mockRunPaused: WorkflowRunDetail = {
+  ...mockRun,
+  id: 'run-3',
+  title: 'Data Pipeline Run #3',
+  status: 'paused',
+}
+
+const mockRunFailed: WorkflowRunDetail = {
+  ...mockRun,
+  id: 'run-4',
+  title: 'Data Pipeline Run #4',
+  status: 'failed',
+  error_summary: 'failed for retry test',
+}
+
 describe('WorkflowList', () => {
   it('renders loading state', () => {
     const wrapper = mount(WorkflowList, {
@@ -210,8 +227,26 @@ describe('WorkflowList', () => {
     const wrapper = mount(WorkflowList, {
       props: { workflows: [], total: 0, limit: 20, offset: 0, loading: false },
     })
-    await wrapper.find('.btn-primary').trigger('click')
+    await wrapper.find('[data-test="refresh-workflows"]').trigger('click')
     expect(wrapper.emitted('refresh')).toBeTruthy()
+  })
+
+  it('emits create when create button clicked', async () => {
+    const wrapper = mount(WorkflowList, {
+      props: { workflows: [], total: 0, limit: 20, offset: 0, loading: false },
+    })
+    await wrapper.find('[data-test="create-workflow"]').trigger('click')
+    expect(wrapper.emitted('create')).toBeTruthy()
+  })
+
+  it('emits edit without selecting workflow card', async () => {
+    const wrapper = mount(WorkflowList, {
+      props: { workflows: [mockWorkflow], total: 1, limit: 20, offset: 0, loading: false },
+    })
+    await wrapper.find('.card-action').trigger('click')
+    expect(wrapper.emitted('edit')).toBeTruthy()
+    expect(wrapper.emitted('edit')![0]).toEqual([mockWorkflow])
+    expect(wrapper.emitted('select')).toBeFalsy()
   })
 
   it('shows pagination when total exceeds limit', () => {
@@ -315,11 +350,68 @@ describe('WorkflowDetail', () => {
     expect(wrapper.text()).toContain('completed')
   })
 
+  it('renders run control actions by status', () => {
+    const wrapper = mount(WorkflowDetail, {
+      props: {
+        workflow: mockWorkflow,
+        runs: [mockRun, mockRunPaused, mockRunFailed, mockRunCompleted],
+        taskStatuses: {},
+      },
+    })
+    expect(wrapper.text()).toContain('Pause')
+    expect(wrapper.text()).toContain('Resume')
+    expect(wrapper.text()).toContain('Retry')
+    expect(wrapper.text()).toContain('Cancel')
+  })
+
+  it('does not show retry for paused runs', () => {
+    const wrapper = mount(WorkflowDetail, {
+      props: { workflow: mockWorkflow, runs: [mockRunPaused], taskStatuses: {} },
+    })
+    const actionText = wrapper.find('.run-actions').text()
+
+    expect(actionText).toContain('Resume')
+    expect(actionText).toContain('Cancel')
+    expect(actionText).not.toContain('Retry')
+  })
+
+  it('emits run control events without selecting the row', async () => {
+    const wrapper = mount(WorkflowDetail, {
+      props: { workflow: mockWorkflow, runs: [mockRun], taskStatuses: {} },
+    })
+
+    await wrapper.find('.run-actions button').trigger('click')
+
+    expect(wrapper.emitted('pauseRun')).toBeTruthy()
+    expect(wrapper.emitted('pauseRun')![0]).toEqual([mockRun])
+    expect(wrapper.emitted('selectRun')).toBeFalsy()
+  })
+
   it('shows duration for completed runs', () => {
     const wrapper = mount(WorkflowDetail, {
       props: { workflow: mockWorkflow, runs: [mockRunCompleted], taskStatuses: {} },
     })
     expect(wrapper.text()).toContain('60.0m')
+  })
+
+  it('renders selected run task observability', () => {
+    const observableRun: WorkflowRunDetail = {
+      ...mockRun,
+      tasks: mockRun.tasks.map((task, idx) => ({
+        ...task,
+        locked_by: idx === 1 ? 'worker-alpha' : null,
+        locked_at: idx === 1 ? '2026-04-30T10:02:00Z' : null,
+        next_retry_at: idx === 2 ? '2026-04-30T10:03:00Z' : null,
+        error_summary: idx === 2 ? 'waiting on upstream' : null,
+      })),
+    }
+    const wrapper = mount(WorkflowDetail, {
+      props: { workflow: mockWorkflow, runs: [observableRun], selectedRun: observableRun, taskStatuses: {} },
+    })
+
+    expect(wrapper.text()).toContain('Run Tasks')
+    expect(wrapper.text()).toContain('worker-alpha')
+    expect(wrapper.text()).toContain('waiting on upstream')
   })
 
   it('emits back when back button clicked', async () => {
@@ -410,5 +502,99 @@ describe('WorkflowDetail', () => {
     })
     expect(wrapper.findAll('.dag-node')).toHaveLength(1)
     expect(wrapper.findAll('.dag-edge')).toHaveLength(0)
+  })
+})
+
+describe('WorkflowDefinitionEditor', () => {
+  const validJson = JSON.stringify({
+    name: 'Editor Test',
+    runtime_id: 'rt-1',
+    nodes: [{ node_id: 'a', title: 'A' }],
+    edges: [],
+  }, null, 2)
+
+  it('emits parsed workflow JSON on save', async () => {
+    const wrapper = mount(WorkflowDefinitionEditor, {
+      props: {
+        open: true,
+        mode: 'create',
+        initialJson: validJson,
+        sampleJson: validJson,
+      },
+    })
+
+    await wrapper.find('.btn-primary').trigger('click')
+
+    expect(wrapper.emitted('save')).toBeTruthy()
+    expect(wrapper.emitted('save')![0][0]).toMatchObject({ name: 'Editor Test', runtime_id: 'rt-1' })
+  })
+
+  it('shows validation error for invalid JSON', async () => {
+    const wrapper = mount(WorkflowDefinitionEditor, {
+      props: {
+        open: true,
+        mode: 'create',
+        initialJson: '{',
+        sampleJson: validJson,
+      },
+    })
+
+    await wrapper.find('.btn-primary').trigger('click')
+
+    expect(wrapper.text()).toContain('Invalid JSON')
+    expect(wrapper.emitted('save')).toBeFalsy()
+  })
+
+  it('loads sample JSON', async () => {
+    const wrapper = mount(WorkflowDefinitionEditor, {
+      props: {
+        open: true,
+        mode: 'create',
+        initialJson: '{"name":"empty"}',
+        sampleJson: validJson,
+      },
+    })
+
+    await wrapper.find('.editor-actions .btn').trigger('click')
+
+    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toContain('Editor Test')
+  })
+})
+
+describe('HealthMatrix', () => {
+  it('renders worker heartbeat metadata', () => {
+    const wrapper = mount(HealthMatrix, {
+      props: {
+        loading: false,
+        health: {
+          status: 'healthy',
+          version: '3.0.0',
+          active_connections: 1,
+          database: { status: 'connected', migration_version: 'abcdef123456' },
+          workers: {
+            'scheduler-worker': {
+              status: 'alive',
+              last_seen_seconds_ago: 5,
+              worker_id: 'worker-alpha',
+              pid: 123,
+              version: '3.0.0',
+            },
+          },
+        },
+        metrics: {
+          workers: {
+            scheduler_worker: {
+              status: 'alive',
+              age_seconds: 5,
+              worker_id: 'worker-alpha',
+              pid: 123,
+            },
+          },
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('worker-alpha')
+    expect(wrapper.text()).toContain('pid 123')
   })
 })

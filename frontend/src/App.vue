@@ -1900,8 +1900,6 @@ onUnmounted(() => {
 </script>
 
 <style>
-@import './styles/minimal.css';
-
 .app-layout {
   display: flex;
   min-height: 100vh;
@@ -2217,7 +2215,6 @@ onUnmounted(() => {
   .main-content {
     padding: 16px;
   }
-  .topbar-search,
   .live-status {
     display: none;
   }

@@ -109,10 +109,8 @@ function onConnectorChange() {
 
 <style scoped>
 .panel {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
+  background: #ffffff;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--glass-shadow);
   overflow: hidden;
@@ -121,14 +119,15 @@ function onConnectorChange() {
 .panel-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 16px;
   padding: 20px 24px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .panel-header h2 {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 800;
   color: var(--text-primary);
   margin: 0;
 }
@@ -147,27 +146,29 @@ function onConnectorChange() {
 
 .event-count {
   font-size: 12px;
-  color: var(--color-error, #ef4444);
-  font-weight: 600;
+  color: #b91c1c;
+  font-weight: 900;
 }
 
 .filter-row {
   display: flex;
   gap: 12px;
   padding: 16px 24px;
-  background: var(--bg-secondary);
+  background: #f8fafc;
   border-bottom: 1px solid var(--border-subtle);
 }
 
 .filter-select {
-  background: var(--bg-primary);
+  min-height: 38px;
+  background: #ffffff;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 10px 16px;
+  border-radius: 10px;
+  padding: 0 12px;
   font-size: 13px;
   color: var(--text-secondary);
   outline: none;
   min-width: 200px;
+  box-shadow: var(--shadow-sm);
 }
 
 .filter-select:focus {
@@ -191,7 +192,7 @@ function onConnectorChange() {
 }
 
 .event-item:hover {
-  background: var(--bg-secondary);
+  background: #f8fafc;
 }
 
 .event-item:last-child {
@@ -214,7 +215,7 @@ function onConnectorChange() {
 
 .event-type {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 900;
   color: var(--text-primary);
   font-family: 'SF Mono', 'Fira Code', monospace;
 }
@@ -227,7 +228,7 @@ function onConnectorChange() {
 
 .event-error {
   font-size: 12px;
-  color: var(--color-error, #ef4444);
+  color: #b91c1c;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -242,9 +243,10 @@ function onConnectorChange() {
 
 .meta-tag {
   font-size: 11px;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: #f8fafc;
+  border: 1px solid var(--border-subtle);
   color: var(--text-muted);
   font-family: 'SF Mono', 'Fira Code', monospace;
 }
@@ -260,13 +262,14 @@ function onConnectorChange() {
 }
 
 .action-btn {
+  min-height: 34px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
+  padding: 0 14px;
+  border-radius: 10px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 800;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid var(--border-color);
@@ -297,15 +300,17 @@ function onConnectorChange() {
 }
 
 .page-btn {
-  padding: 8px 16px;
-  background: var(--bg-tertiary);
+  min-height: 34px;
+  padding: 0 14px;
+  background: #ffffff;
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
+  border-radius: 10px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 800;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
 }
 
 .page-btn:hover:not(:disabled) {
@@ -326,18 +331,20 @@ function onConnectorChange() {
 }
 
 .refresh-btn {
+  min-height: 34px;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
-  background: var(--bg-tertiary);
+  padding: 0 14px;
+  background: #ffffff;
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
+  border-radius: 10px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 800;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
 }
 
 .refresh-btn:hover:not(:disabled) {
@@ -362,5 +369,30 @@ function onConnectorChange() {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 720px) {
+  .panel-header,
+  .header-right,
+  .event-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .filter-select,
+  .refresh-btn,
+  .action-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .event-actions {
+    margin-left: 0;
+  }
+
+  .event-error {
+    max-width: none;
+    white-space: normal;
+  }
 }
 </style>

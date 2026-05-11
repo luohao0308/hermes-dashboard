@@ -150,7 +150,7 @@ const emptyMessage = computed(() => {
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .header-actions {

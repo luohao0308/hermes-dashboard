@@ -95,10 +95,8 @@ function shortId(value: string): string {
 .knowledge-header,
 .result-item,
 .error-box {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
+  background: #ffffff;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--glass-shadow);
 }
@@ -115,6 +113,7 @@ function shortId(value: string): string {
   margin: 0;
   color: var(--text-primary);
   font-size: 18px;
+  font-weight: 800;
 }
 
 .knowledge-header p {
@@ -134,10 +133,11 @@ function shortId(value: string): string {
   min-height: 36px;
   padding: 0 12px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-primary);
+  border-radius: 10px;
+  background: #ffffff;
   color: var(--text-primary);
   font-size: 13px;
+  box-shadow: var(--shadow-sm);
 }
 
 .search-form button {
@@ -148,13 +148,14 @@ function shortId(value: string): string {
   min-height: 36px;
   padding: 0 14px;
   border: 1px solid var(--accent-color);
-  border-radius: var(--radius-md);
-  background: var(--accent-soft);
-  color: var(--accent-color);
+  border-radius: 10px;
+  background: var(--accent-color);
+  color: #ffffff;
   cursor: pointer;
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
 }
 
 .search-form button:disabled {
@@ -196,7 +197,7 @@ function shortId(value: string): string {
 .result-title span {
   padding: 2px 7px;
   border-radius: var(--radius-pill);
-  background: var(--bg-tertiary);
+  background: #f8fafc;
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 800;

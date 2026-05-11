@@ -160,13 +160,14 @@ function formatValue(v: unknown): string {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 16px;
 }
 
 .panel-header h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
   margin: 0;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 800;
 }
 
 .subtitle {
@@ -179,6 +180,11 @@ function formatValue(v: unknown): string {
   display: flex;
   gap: 16px;
   align-items: flex-end;
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
 }
 
 .selector-group {
@@ -190,32 +196,36 @@ function formatValue(v: unknown): string {
 
 .selector-group label {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 800;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
 }
 
 .filter-select {
-  background: var(--bg-primary);
+  min-height: 38px;
+  background: #ffffff;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 10px 14px;
+  border-radius: 10px;
+  padding: 0 12px;
   font-size: 13px;
   color: var(--text-secondary);
   outline: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .compare-btn {
-  padding: 10px 24px;
+  min-height: 38px;
+  padding: 0 24px;
   background: var(--accent-color);
   color: #fff;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: 10px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 800;
   cursor: pointer;
   transition: opacity 0.2s;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
 }
 
 .compare-btn:disabled {
@@ -231,15 +241,17 @@ function formatValue(v: unknown): string {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
-  background: var(--bg-tertiary);
+  min-height: 36px;
+  padding: 0 14px;
+  background: #ffffff;
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
+  border-radius: 10px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 800;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
 }
 
 .refresh-btn:hover:not(:disabled) {
@@ -269,14 +281,14 @@ function formatValue(v: unknown): string {
 }
 
 .delta-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
+  background: #ffffff;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 24px;
   display: flex;
   align-items: center;
   gap: 16px;
+  box-shadow: var(--glass-shadow);
 }
 
 .delta-label {
@@ -287,7 +299,7 @@ function formatValue(v: unknown): string {
 
 .delta-value {
   font-size: 28px;
-  font-weight: 700;
+  font-weight: 900;
   font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
@@ -306,7 +318,7 @@ function formatValue(v: unknown): string {
   color: var(--color-warning, #d97706);
   border-radius: var(--radius-pill);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 800;
 }
 
 .recommend-badge {
@@ -315,7 +327,7 @@ function formatValue(v: unknown): string {
   color: #16a34a;
   border-radius: var(--radius-pill);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 800;
 }
 
 .recommend-notice {
@@ -323,7 +335,7 @@ function formatValue(v: unknown): string {
   gap: 14px;
   align-items: flex-start;
   padding: 16px 20px;
-  background: var(--glass-bg);
+  background: #f0fdf4;
   border: 1px solid rgba(34, 197, 94, 0.3);
   border-radius: var(--radius-lg);
 }
@@ -347,16 +359,16 @@ function formatValue(v: unknown): string {
 }
 
 .changes-section {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
+  background: #ffffff;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 24px;
+  box-shadow: var(--glass-shadow);
 }
 
 .changes-section h3 {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 900;
   color: var(--text-primary);
   margin: 0 0 16px;
 }
@@ -371,9 +383,11 @@ function formatValue(v: unknown): string {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
   padding: 10px 14px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
+  background: #f8fafc;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
 }
 
 .change-field {
@@ -389,6 +403,8 @@ function formatValue(v: unknown): string {
   gap: 8px;
   font-size: 12px;
   font-family: 'SF Mono', 'Fira Code', monospace;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .change-before {
@@ -418,16 +434,16 @@ function formatValue(v: unknown): string {
 }
 
 .version-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
+  background: #ffffff;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 20px;
+  box-shadow: var(--glass-shadow);
 }
 
 .version-card h4 {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 900;
   color: var(--text-primary);
   margin: 0 0 12px;
 }
@@ -450,9 +466,36 @@ function formatValue(v: unknown): string {
   color: var(--text-muted);
   gap: 12px;
   font-size: 13px;
+  background: #ffffff;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-lg);
 }
 
 .empty-icon {
   font-size: 32px;
+}
+
+@media (max-width: 760px) {
+  .panel-header,
+  .selector-row,
+  .delta-card,
+  .change-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .refresh-btn,
+  .compare-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .version-details {
+    grid-template-columns: 1fr;
+  }
+
+  .approval-badge {
+    margin-left: 0;
+  }
 }
 </style>

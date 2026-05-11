@@ -1,23 +1,28 @@
-/* AI Control Plane - Lightcore Prism Design System */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* AI Control Plane - Figma Make inspired operations console */
 
 :root {
   /* === 基础色彩 === */
   --bg-primary: #ffffff;
   --bg-secondary: #fafbfc;
-  --bg-tertiary: #f2f4f8;
-  --bg-elevated: rgba(255, 255, 255, 0.8);
+  --bg-tertiary: #f1f5f9;
+  --bg-elevated: rgba(255, 255, 255, 0.92);
   
   --text-primary: #0a0a0c;
   --text-secondary: #6b7280;
   --text-muted: #9ca3af;
   
-  --border-color: rgba(0, 0, 0, 0.06);
-  --border-subtle: rgba(0, 0, 0, 0.03);
+  --border-color: #e2e8f0;
+  --border-subtle: #eef2f7;
   
   /* === Prism 强调色系 === */
-  --accent-color: #7c5cbf;
-  --accent-hover: #6b4fa8;
-  --accent-soft: #f3f0fc;
+  --accent-color: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #eff6ff;
   
   --success-color: #10b981;
   --success-soft: #ecfdf5;
@@ -42,21 +47,21 @@
   --gradient-prism-glow: linear-gradient(135deg, rgba(255,200,200,0.6), rgba(168,216,255,0.6), rgba(212,200,255,0.6));
   
   /* === 毛玻璃效果 === */
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.3);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+  --glass-bg: rgba(255, 255, 255, 0.86);
+  --glass-border: rgba(226, 232, 240, 0.92);
+  --glass-shadow: 0 10px 30px rgba(15, 23, 42, 0.045);
   
   /* === 弥散阴影 (Diffuse Shadows) === */
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 8px 48px rgba(0, 0, 0, 0.08);
-  --shadow-glow: 0 0 40px rgba(124, 92, 191, 0.12);
+  --shadow-glow: 0 18px 40px rgba(37, 99, 235, 0.12);
 
   /* === 圆角 (全圆角/胶囊) === */
   --radius-sm: 8px;
   --radius-md: 12px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
   --radius-pill: 9999px;
 
   /* === 间距 === */
@@ -78,9 +83,237 @@ body {
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-primary);
-  background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+  background:
+    radial-gradient(circle at top left, rgba(219, 234, 254, 0.55), transparent 34rem),
+    linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button {
+  border: 0;
+}
+
+/* === Shared operations-console surfaces === */
+.panel,
+.workflow-list,
+.run-detail,
+.workflow-detail,
+.eval-dashboard,
+.config-compare,
+.audit-panel,
+.health-matrix,
+.system-config,
+.provider-panel,
+.cost-dashboard,
+.guardrails-panel,
+.knowledge-search,
+.agent-panel,
+.alerts-panel,
+.ops-overview,
+.task-panel,
+.log-stream,
+.history-list {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+}
+
+.panel-header,
+.section-header,
+.detail-header,
+.matrix-header,
+.system-header,
+.agent-header,
+.alerts-header,
+.overview-header {
+  min-height: 64px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.panel-header h2,
+.section-title,
+.detail-header h2,
+.matrix-header h3,
+.system-header h2,
+.agent-title,
+.alerts-header h2,
+.overview-header h2 {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.subtitle,
+.section-hint,
+.empty,
+.empty-hint,
+.empty-state,
+.empty-block {
+  color: var(--text-muted);
+}
+
+.summary-grid,
+.stats-grid,
+.metric-grid,
+.metrics-grid {
+  gap: 14px;
+}
+
+.summary-card,
+.stat-card,
+.metric-card,
+.config-section,
+.analysis-panel,
+.rca-panel,
+.runbook-panel,
+.timeline-panel,
+.dag-section,
+.nodes-section,
+.versions-section,
+.runs-section,
+.version-card,
+.workflow-card,
+.approval-item,
+.event-item,
+.health-row,
+.resource-card {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.summary-card:hover,
+.stat-card:hover,
+.metric-card:hover,
+.workflow-card:hover,
+.approval-item:hover,
+.event-item:hover,
+.run-item:hover {
+  border-color: #bfdbfe;
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.08);
+}
+
+.data-table,
+.breakdown-table,
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.data-table th,
+.breakdown-table th,
+.audit-table th {
+  color: #94a3b8;
+  background: #f8fafc;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.data-table td,
+.breakdown-table td,
+.audit-table td {
+  color: #475569;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.filter-row,
+.selector-row,
+.quick-filters {
+  background: #f8fafc;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.filter-select,
+.filter-input,
+.input,
+.select-main,
+.form-input,
+.form-textarea,
+select,
+input,
+textarea {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: #334155;
+  outline: none;
+}
+
+.filter-select:focus,
+.filter-input:focus,
+.input:focus,
+.select-main:focus,
+.form-input:focus,
+.form-textarea:focus,
+select:focus,
+input:focus,
+textarea:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.status-chip,
+.action-badge,
+.actor-badge,
+.resource-type,
+.card-badge,
+.approval-badge,
+.recommend-badge,
+.resolution-status,
+.item-status,
+.task-status-badge,
+.run-status {
+  border-radius: var(--radius-pill);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.status-running,
+.running {
+  color: #2563eb;
+}
+
+.status-completed,
+.status-success,
+.completed,
+.success {
+  color: var(--success-color);
+}
+
+.status-error,
+.status-failed,
+.failed,
+.error {
+  color: var(--error-color);
+}
+
+.status-queued,
+.status-pending,
+.queued,
+.pending {
+  color: #64748b;
+}
+
+.waiting,
+.status-waiting,
+.waiting_approval {
+  color: var(--warning-color);
 }
 
 /* === 极简卡片 (Glass Card) === */

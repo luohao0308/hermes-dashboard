@@ -1,10 +1,19 @@
 <template>
   <div class="provider-panel">
     <div class="section-header">
-      <h3>模型管理</h3>
+      <div>
+        <h3>模型管理</h3>
+        <p>管理模型供应商、默认模型和连接状态。</p>
+      </div>
       <div class="header-actions">
-        <button class="btn-add" @click="showAddForm = true">+ 添加自定义模型</button>
-        <button class="btn-refresh" @click="fetchProviders">刷新</button>
+        <button class="btn-add" @click="showAddForm = true">
+          <Plus :size="15" />
+          添加自定义模型
+        </button>
+        <button class="btn-refresh" @click="fetchProviders">
+          <RefreshCcw :size="15" :class="{ spinning: loading }" />
+          刷新
+        </button>
       </div>
     </div>
 
@@ -70,7 +79,12 @@
     <div v-else class="provider-grid">
       <div v-for="p in providers" :key="p.name" class="provider-card">
         <div class="provider-header">
-          <span class="provider-name">{{ p.name }}</span>
+          <div class="provider-title">
+            <span class="provider-icon">
+              <Cpu :size="18" />
+            </span>
+            <span class="provider-name">{{ p.name }}</span>
+          </div>
           <span :class="['provider-status', p.enabled ? 'enabled' : 'disabled']">
             {{ p.enabled ? '已启用' : '已禁用' }}
           </span>
@@ -100,8 +114,14 @@
           </div>
         </div>
         <div class="provider-actions">
-          <button class="btn-test" @click="testProvider(p.name)">测试连接</button>
-          <button class="btn-edit" @click="startEdit(p)">编辑配置</button>
+          <button class="btn-test" @click="testProvider(p.name)">
+            <Wifi :size="14" />
+            测试连接
+          </button>
+          <button class="btn-edit" @click="startEdit(p)">
+            <Settings2 :size="14" />
+            编辑配置
+          </button>
         </div>
       </div>
     </div>
@@ -110,6 +130,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { Cpu, Plus, RefreshCcw, Settings2, Wifi } from 'lucide-vue-next'
 import { API_BASE } from '../config'
 
 interface ProviderInfo {
@@ -245,42 +266,139 @@ onMounted(fetchProviders)
 
 <style scoped>
 .provider-panel { display: flex; flex-direction: column; gap: 24px; }
-.section-header { display: flex; justify-content: space-between; align-items: center; }
-.section-header h3 { font-size: 16px; font-weight: 600; color: var(--text-primary); }
-.header-actions { display: flex; gap: 8px; }
-.btn-refresh { padding: 6px 14px; background: var(--accent-soft); color: var(--accent-color); border: none; border-radius: var(--radius-md); font-size: 12px; cursor: pointer; }
-.btn-add { padding: 6px 14px; background: var(--accent-color); color: white; border: none; border-radius: var(--radius-md); font-size: 12px; cursor: pointer; }
-.add-form { background: var(--glass-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 20px; }
-.add-form h4 { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px; }
+.section-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.section-header h3 { margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); }
+.section-header p { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; }
+.header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.btn-refresh,
+.btn-add,
+.btn-cancel,
+.btn-submit,
+.btn-test,
+.btn-edit {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-sm);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-refresh:hover,
+.btn-test:hover,
+.btn-edit:hover,
+.btn-cancel:hover {
+  border-color: #bfdbfe;
+  background: var(--accent-soft);
+  color: var(--accent-color);
+}
+.btn-add,
+.btn-submit {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
+}
+.add-form {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--glass-shadow);
+}
+.add-form h4 { font-size: 14px; font-weight: 900; color: var(--text-primary); margin: 0 0 16px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-.form-item { display: flex; flex-direction: column; gap: 4px; }
+.form-item { display: flex; flex-direction: column; gap: 6px; }
 .form-item.full-width { grid-column: 1 / -1; }
-.form-item label { font-size: 12px; color: var(--text-muted); }
-.form-item input { padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-primary); font-size: 13px; }
-.form-item input:focus { outline: none; border-color: var(--accent-color); }
+.form-item label { font-size: 12px; font-weight: 800; color: var(--text-muted); }
+.form-item input,
+.model-select,
+.inline-select {
+  min-height: 36px;
+  padding: 0 12px;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+  box-shadow: var(--shadow-sm);
+}
+.form-item input:focus,
+.model-select:focus,
+.inline-select:focus { outline: none; border-color: var(--accent-color); }
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.btn-cancel { padding: 6px 14px; background: var(--bg-tertiary); color: var(--text-secondary); border: none; border-radius: var(--radius-md); font-size: 12px; cursor: pointer; }
-.btn-submit { padding: 6px 14px; background: var(--accent-color); color: white; border: none; border-radius: var(--radius-md); font-size: 12px; cursor: pointer; }
 .provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
-.provider-card { background: var(--glass-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 20px; }
-.provider-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.provider-name { font-size: 16px; font-weight: 600; color: var(--text-primary); text-transform: capitalize; }
-.provider-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
-.enabled { background: rgba(80, 250, 123, 0.15); color: #50fa7b; }
-.disabled { background: rgba(255, 85, 85, 0.15); color: #ff5555; }
-.provider-model { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
-.inline-select { padding: 2px 6px; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-primary); font-size: 12px; }
-.provider-features { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-.feature-tag { font-size: 10px; padding: 2px 6px; background: var(--bg-tertiary); border-radius: 4px; color: var(--text-secondary); }
-.provider-models { margin-bottom: 12px; }
-.model-item { display: flex; align-items: center; font-size: 12px; padding: 4px 0; color: var(--text-secondary); }
-.model-name { flex: 1; }
-.model-name.is-default { color: var(--accent-color); font-weight: 600; }
-.default-badge { font-size: 10px; padding: 1px 6px; background: var(--accent-soft); color: var(--accent-color); border-radius: 4px; margin-left: 6px; }
-.model-cost { color: var(--text-muted); }
+.provider-card {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--glass-shadow);
+}
+.provider-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.provider-title { display: flex; align-items: center; min-width: 0; gap: 10px; }
+.provider-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: #2563eb; background: #eff6ff; }
+.provider-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 16px; font-weight: 900; color: var(--text-primary); text-transform: capitalize; }
+.provider-status { white-space: nowrap; font-size: 11px; padding: 4px 9px; border-radius: var(--radius-pill); font-weight: 900; }
+.enabled { background: #ecfdf5; color: #047857; }
+.disabled { background: #fef2f2; color: #b91c1c; }
+.provider-model { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.inline-select { min-height: 32px; flex: 1; min-width: 0; font-size: 12px; }
+.provider-features { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.feature-tag { font-size: 10px; padding: 4px 7px; background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: var(--radius-pill); color: var(--text-secondary); font-weight: 800; }
+.provider-models { margin-bottom: 14px; border-top: 1px solid var(--border-subtle); }
+.model-item { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 9px 0; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); }
+.model-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-name.is-default { color: var(--accent-color); font-weight: 900; }
+.default-badge { font-size: 10px; padding: 2px 7px; background: var(--accent-soft); color: var(--accent-color); border-radius: var(--radius-pill); font-weight: 900; }
+.model-cost { color: var(--text-muted); white-space: nowrap; }
 .provider-actions { display: flex; gap: 8px; }
-.btn-test { flex: 1; padding: 8px; background: var(--accent-soft); color: var(--accent-color); border: none; border-radius: var(--radius-md); font-size: 12px; cursor: pointer; }
-.btn-edit { flex: 1; padding: 8px; background: var(--bg-tertiary); color: var(--text-secondary); border: none; border-radius: var(--radius-md); font-size: 12px; cursor: pointer; }
-.model-select { padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-primary); font-size: 13px; width: 100%; }
-.loading { text-align: center; padding: 40px; color: var(--text-muted); }
+.btn-test,
+.btn-edit { flex: 1; }
+.model-select { width: 100%; }
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-muted);
+  background: #ffffff;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-lg);
+}
+.spinning { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 720px) {
+  .section-header,
+  .provider-header,
+  .provider-model,
+  .provider-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .header-actions,
+  .btn-refresh,
+  .btn-add,
+  .btn-test,
+  .btn-edit {
+    width: 100%;
+  }
+
+  .form-grid,
+  .provider-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-item.full-width {
+    grid-column: auto;
+  }
+}
 </style>

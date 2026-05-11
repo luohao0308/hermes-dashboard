@@ -1,7 +1,10 @@
 <template>
   <div class="panel">
     <div class="panel-header">
-      <h2>{{ t('runs.title') }}</h2>
+      <div>
+        <h2>{{ t('runs.title') }}</h2>
+        <p class="panel-subtitle">Realtime execution traces, costs, tokens and failure context.</p>
+      </div>
       <div class="header-right">
         <span class="run-count">{{ total }} {{ t('runs.title').toLowerCase() }}</span>
         <button class="refresh-btn" @click="$emit('refresh')" :disabled="loading">
@@ -12,6 +15,10 @@
     </div>
 
     <div class="filter-row">
+      <div class="search-shell">
+        <Search :size="16" />
+        <input v-model="searchText" type="search" placeholder="Filter current page by run title or ID..." />
+      </div>
       <select v-model="statusFilter" class="filter-select" @change="onFilterChange">
         <option value="">{{ t('common.all') }} {{ t('common.status') }}</option>
         <option value="queued">{{ t('status.pending') }}</option>
@@ -33,57 +40,60 @@
       </select>
     </div>
 
-    <div class="run-list">
-      <div
-        v-for="run in runs"
-        :key="run.id"
-        class="run-item"
-        @click="$emit('selectRun', run.id)"
-      >
-        <div class="item-main">
-          <div class="item-info">
-            <span class="item-status" :class="'status-' + run.status">
-              {{ statusIcon(run.status) }}
-            </span>
-            <div class="item-details">
-              <span class="item-title">{{ run.title }}</span>
-              <span class="item-id">{{ run.id }}</span>
-            </div>
-          </div>
-          <div class="item-meta">
-            <span v-if="run.duration_ms != null" class="item-duration">
-              {{ formatDuration(run.duration_ms) }}
-            </span>
-            <span v-if="run.total_tokens != null" class="item-tokens">
-              {{ formatNumber(run.total_tokens) }} tokens
-            </span>
-            <span class="item-date">{{ formatDate(run.created_at) }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Skeleton Loading -->
-      <LoadingState v-if="loading" :message="t('runs.loadingRuns')" />
-
-      <EmptyState v-if="runs.length === 0 && !loading" :message="t('runs.noRuns')" />
+    <div v-if="filteredRuns.length > 0" class="table-wrap">
+      <table class="runs-table">
+        <thead>
+          <tr>
+            <th>{{ t('runs.runId') }}</th>
+            <th>{{ t('common.name') }}</th>
+            <th>{{ t('common.status') }}</th>
+            <th class="numeric">{{ t('runs.cost') }}</th>
+            <th>{{ t('runs.tokens') }}</th>
+            <th>{{ t('runs.duration') }}</th>
+            <th>{{ t('runs.startTime') }}</th>
+            <th class="center">{{ t('common.actions') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="run in filteredRuns" :key="run.id" class="run-item" @click="$emit('selectRun', run.id)">
+            <td class="mono">{{ shortId(run.id) }}</td>
+            <td>
+              <div class="run-title-cell">
+                <span>{{ run.title }}</span>
+                <small>{{ run.runtime_id }}</small>
+              </div>
+            </td>
+            <td>
+              <span :class="['status-badge', statusTone(run.status)]">
+                <component :is="statusIcon(run.status)" :size="12" />
+                {{ run.status }}
+              </span>
+            </td>
+            <td class="numeric">{{ formatCost(run.total_cost) }}</td>
+            <td>{{ run.total_tokens != null ? `${formatNumber(run.total_tokens)} tokens` : '-' }}</td>
+            <td>{{ run.duration_ms != null ? formatDuration(run.duration_ms) : '-' }}</td>
+            <td>{{ formatDate(run.created_at) }}</td>
+            <td class="center">
+              <button class="icon-action" type="button" @click.stop="$emit('selectRun', run.id)">
+                <ExternalLink :size="15" />
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
+    <LoadingState v-if="loading" :message="t('runs.loadingRuns')" />
+    <EmptyState v-if="filteredRuns.length === 0 && !loading" :message="emptyMessage" />
+
     <div v-if="total > limit" class="pagination">
-      <button
-        class="page-btn"
-        :disabled="offset === 0"
-        @click="goToPage(offset - limit)"
-      >
+      <button class="page-btn" :disabled="offset === 0" @click="goToPage(offset - limit)">
         {{ t('common.prev') }}
       </button>
       <span class="page-info">
         {{ offset + 1 }}–{{ Math.min(offset + limit, total) }} of {{ total }}
       </span>
-      <button
-        class="page-btn"
-        :disabled="offset + limit >= total"
-        @click="goToPage(offset + limit)"
-      >
+      <button class="page-btn" :disabled="offset + limit >= total" @click="goToPage(offset + limit)">
         {{ t('common.next') }}
       </button>
     </div>
@@ -91,8 +101,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { CheckCircle2, Clock3, ExternalLink, Loader2, Search, XCircle } from 'lucide-vue-next'
+import type { Component } from 'vue'
 import type { WorkflowRun, WorkflowRuntime } from '../types'
 import { formatDate, formatDuration, formatNumber } from '../composables/useFormatters'
 import LoadingState from './LoadingState.vue'
@@ -100,7 +112,7 @@ import EmptyState from './EmptyState.vue'
 
 const { t } = useI18n()
 
-defineProps<{
+const props = defineProps<{
   runs: WorkflowRun[]
   runtimes: WorkflowRuntime[]
   connectorTypes?: string[]
@@ -117,18 +129,46 @@ const emit = defineEmits<{
   pageChange: [offset: number]
 }>()
 
+const searchText = ref('')
 const statusFilter = ref('')
 const runtimeFilter = ref('')
 const connectorTypeFilter = ref('')
 
-function statusIcon(status: string): string {
-  switch (status) {
-    case 'completed': return '✅'
-    case 'running': return '⏳'
-    case 'queued': return '📋'
-    case 'error': return '❌'
-    default: return '❓'
-  }
+const filteredRuns = computed(() => {
+  const q = searchText.value.trim().toLowerCase()
+  if (!q) return props.runs
+  return props.runs.filter((run) =>
+    run.id.toLowerCase().includes(q) || run.title.toLowerCase().includes(q)
+  )
+})
+
+const emptyMessage = computed(() => (
+  searchText.value.trim()
+    ? 'No runs match this current page filter.'
+    : t('runs.noRuns')
+))
+
+function statusIcon(status: string): Component {
+  if (status === 'completed') return CheckCircle2
+  if (status === 'running') return Loader2
+  if (status === 'queued') return Clock3
+  if (status === 'error' || status === 'failed') return XCircle
+  return Clock3
+}
+
+function statusTone(status: string): string {
+  if (status === 'completed') return 'success'
+  if (status === 'running') return 'running'
+  if (status === 'error' || status === 'failed') return 'failed'
+  return 'queued'
+}
+
+function formatCost(value: number | null | undefined): string {
+  return value == null ? '-' : `$${value.toFixed(4)}`
+}
+
+function shortId(id: string): string {
+  return id.length > 12 ? id.slice(0, 8) : id
 }
 
 function onFilterChange() {
@@ -146,218 +186,232 @@ function goToPage(newOffset: number) {
 
 <style scoped>
 .panel {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--glass-shadow);
   overflow: hidden;
 }
 
 .panel-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border-subtle);
+  justify-content: space-between;
 }
 
 .panel-header h2 {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
   margin: 0;
-  letter-spacing: -0.01em;
+}
+
+.panel-subtitle {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.header-right,
+.filter-row,
+.search-shell,
+.status-badge,
+.pagination {
+  display: flex;
+  align-items: center;
 }
 
 .header-right {
-  display: flex;
-  align-items: center;
   gap: 12px;
 }
 
 .run-count {
+  color: #94a3b8;
   font-size: 12px;
-  color: var(--text-muted);
+  font-weight: 700;
 }
 
-.filter-row {
-  display: flex;
-  gap: 12px;
-  padding: 16px 24px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.filter-select {
-  background: var(--bg-primary);
+.refresh-btn,
+.page-btn,
+.icon-action {
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 10px 16px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  outline: none;
-  transition: all 0.2s ease;
-  min-width: 140px;
-}
-
-.filter-select:focus {
-  border-color: var(--accent-color);
-}
-
-.run-list {
-  display: flex;
-  flex-direction: column;
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-.run-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #64748b;
   cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.run-item:hover {
-  background: var(--bg-secondary);
-}
-
-.run-item:last-child {
-  border-bottom: none;
-}
-
-.item-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex: 1;
-}
-
-.item-info {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.item-status {
-  font-size: 20px;
-}
-
-.item-details {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.item-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.item-id {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-family: 'SF Mono', 'Fira Code', monospace;
-}
-
-.item-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-}
-
-.item-duration {
-  font-size: 13px;
-  color: var(--text-secondary);
-  font-family: 'SF Mono', 'Fira Code', monospace;
-}
-
-.item-tokens {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.item-date {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-
-.pagination {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 16px;
-  padding: 16px 24px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.page-btn {
-  padding: 8px 16px;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.page-btn:hover:not(:disabled) {
-  background: var(--accent-soft);
-  border-color: var(--accent-color);
-  color: var(--accent-color);
-}
-
-.page-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.page-info {
-  font-size: 12px;
-  color: var(--text-muted);
-  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-weight: 700;
 }
 
 .refresh-btn {
-  display: flex;
+  min-height: 34px;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
+  gap: 7px;
+  padding: 0 13px;
   font-size: 12px;
-  font-weight: 500;
+}
+
+.filter-row {
+  gap: 10px;
+  padding: 14px 18px;
+}
+
+.search-shell {
+  flex: 1;
+  min-width: 220px;
+  height: 38px;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #94a3b8;
+}
+
+.search-shell input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.filter-select {
+  height: 38px;
+  min-width: 150px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.runs-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.runs-table th {
+  padding: 12px 18px;
+  color: #94a3b8;
+  background: #f8fafc;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.runs-table td {
+  padding: 14px 18px;
+  border-top: 1px solid var(--border-subtle);
+  color: #475569;
+  font-size: 12px;
+}
+
+.runs-table tbody tr {
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.16s ease;
 }
 
-.refresh-btn:hover:not(:disabled) {
-  background: var(--accent-soft);
-  border-color: var(--accent-color);
-  color: var(--accent-color);
+.runs-table tbody tr:hover {
+  background: #f8fafc;
 }
 
-.refresh-btn:disabled {
-  opacity: 0.6;
+.mono {
+  color: #334155;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 800;
+}
+
+.run-title-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.run-title-cell span {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.run-title-cell small {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.status-badge {
+  width: fit-content;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.status-badge.success {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.status-badge.running {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.status-badge.failed {
+  color: #be123c;
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+
+.status-badge.queued {
+  color: #64748b;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.numeric {
+  text-align: right;
+}
+
+.center {
+  text-align: center;
+}
+
+.icon-action {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+}
+
+.pagination {
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border-subtle);
+  background: #f8fafc;
+}
+
+.page-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.page-btn:disabled {
   cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.page-info {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .spinner {
-  width: 10px;
-  height: 10px;
-  border: 2px solid var(--border-color);
+  width: 12px;
+  height: 12px;
+  border: 2px solid #dbeafe;
   border-top-color: var(--accent-color);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -367,4 +421,11 @@ function goToPage(newOffset: number) {
   to { transform: rotate(360deg); }
 }
 
+@media (max-width: 900px) {
+  .panel-header,
+  .filter-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
 </style>

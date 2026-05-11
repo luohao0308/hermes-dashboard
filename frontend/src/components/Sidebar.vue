@@ -1,29 +1,35 @@
 <template>
   <aside class="sidebar">
-    <!-- Logo -->
     <div class="sidebar-logo">
       <div class="logo-icon">AI</div>
       <span class="logo-text">{{ t('sidebar.logoText') }}</span>
     </div>
 
-    <!-- 导航菜单 -->
     <nav class="sidebar-nav">
       <div v-for="group in navGroups" :key="group.label" class="nav-group">
         <div class="nav-group-label">{{ group.label }}</div>
-        <a
+        <button
           v-for="item in group.items"
           :key="item.id"
           :class="['nav-item', { active: activeNav === item.id }]"
+          type="button"
           @click="handleNavClick(item.id)"
         >
-          <span class="nav-icon">{{ item.icon }}</span>
+          <component :is="item.icon" class="nav-icon" :size="18" />
           <span class="nav-label">{{ item.label }}</span>
-        </a>
+          <ChevronRight v-if="activeNav === item.id" class="nav-chevron" :size="14" />
+        </button>
       </div>
     </nav>
 
-    <!-- 底部信息 -->
     <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar">OP</div>
+        <div class="user-meta">
+          <span>Platform Ops</span>
+          <small>Control Plane</small>
+        </div>
+      </div>
       <div class="connection-status">
         <span class="status-dot" :class="isConnected ? 'success' : 'error'"></span>
         <span class="status-text">{{ isConnected ? t('sidebar.connected') : t('sidebar.disconnected') }}</span>
@@ -33,15 +39,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import {
+  Activity,
+  BarChart3,
+  BookOpen,
+  Bot,
+  ChevronRight,
+  CreditCard,
+  Diff,
+  FileText,
+  GitBranch,
+  Globe,
+  LayoutDashboard,
+  Link2,
+  MessageSquare,
+  Server,
+  Settings,
+  ShieldCheck,
+  Terminal,
+  Wrench,
+} from 'lucide-vue-next'
+import type { Component } from 'vue'
 
 const { t } = useI18n()
 
 interface NavItem {
   id: string
   label: string
-  icon: string
+  icon: Component
 }
 
 interface NavGroup {
@@ -49,7 +76,8 @@ interface NavGroup {
   items: NavItem[]
 }
 
-defineProps<{
+const props = defineProps<{
+  activeView?: string
   isConnected?: boolean
 }>()
 
@@ -61,51 +89,55 @@ const navGroups = computed<NavGroup[]>(() => [
   {
     label: t('navGroup.observe'),
     items: [
-      { id: 'dashboard', label: t('nav.dashboard'), icon: '◈' },
-      { id: 'runs', label: t('nav.runs'), icon: '▶' },
-      { id: 'workflows', label: t('nav.workflows'), icon: '◇' },
+      { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard },
+      { id: 'runs', label: t('nav.runs'), icon: Activity },
+      { id: 'workflows', label: t('nav.workflows'), icon: GitBranch },
     ],
   },
   {
     label: t('navGroup.govern'),
     items: [
-      { id: 'approvals', label: t('nav.approvals'), icon: '☑' },
-      { id: 'guardrails', label: t('nav.guardrails'), icon: '🛡' },
+      { id: 'approvals', label: t('nav.approvals'), icon: ShieldCheck },
+      { id: 'guardrails', label: t('nav.guardrails'), icon: Wrench },
     ],
   },
   {
     label: t('navGroup.improve'),
     items: [
-      { id: 'eval', label: t('nav.eval'), icon: '📊' },
-      { id: 'config-compare', label: t('nav.configCompare'), icon: '⚖' },
-      { id: 'knowledge', label: t('nav.knowledge'), icon: '◇' },
-      { id: 'costs', label: t('nav.costs'), icon: '💰' },
+      { id: 'eval', label: t('nav.eval'), icon: BarChart3 },
+      { id: 'config-compare', label: t('nav.configCompare'), icon: Diff },
+      { id: 'knowledge', label: t('nav.knowledge'), icon: BookOpen },
+      { id: 'costs', label: t('nav.costs'), icon: CreditCard },
     ],
   },
   {
     label: t('navGroup.integrate'),
     items: [
-      { id: 'providers', label: t('nav.providers'), icon: '🧠' },
-      { id: 'connectors', label: t('nav.connectors'), icon: '🔌' },
-      { id: 'environments', label: t('nav.environments'), icon: '🌐' },
+      { id: 'providers', label: t('nav.providers'), icon: Server },
+      { id: 'connectors', label: t('nav.connectors'), icon: Link2 },
+      { id: 'environments', label: t('nav.environments'), icon: Globe },
     ],
   },
   {
     label: t('navGroup.admin'),
     items: [
-      { id: 'audit', label: t('nav.audit'), icon: '📋' },
-      { id: 'system', label: t('nav.system'), icon: '⚙' },
-      { id: 'agents', label: t('nav.agents'), icon: '◎' },
-      { id: 'chat', label: t('nav.chat'), icon: '💬' },
-      { id: 'terminal', label: t('nav.terminal'), icon: '▸' },
+      { id: 'audit', label: t('nav.audit'), icon: FileText },
+      { id: 'system', label: t('nav.system'), icon: Settings },
+      { id: 'agents', label: t('nav.agents'), icon: Bot },
+      { id: 'chat', label: t('nav.chat'), icon: MessageSquare },
+      { id: 'terminal', label: t('nav.terminal'), icon: Terminal },
     ],
   },
 ])
 
-const activeNav = ref('dashboard')
+const activeNav = computed(() => {
+  if (props.activeView === 'run-detail') return 'runs'
+  if (props.activeView === 'workflow-detail') return 'workflows'
+  if (props.activeView === 'session-detail') return 'history'
+  return props.activeView || 'dashboard'
+})
 
 function handleNavClick(navId: string) {
-  activeNav.value = navId
   emit('nav-change', navId)
 }
 </script>
@@ -117,13 +149,12 @@ function handleNavClick(navId: string) {
   position: fixed;
   left: 0;
   top: 0;
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-right: 1px solid var(--border-subtle);
+  z-index: 100;
   display: flex;
   flex-direction: column;
-  z-index: 100;
+  background: rgba(255, 255, 255, 0.92);
+  border-right: 1px solid var(--border-color);
+  box-shadow: 8px 0 30px rgba(15, 23, 42, 0.03);
 }
 
 .sidebar-logo {
@@ -136,104 +167,149 @@ function handleNavClick(navId: string) {
 }
 
 .logo-icon {
-  width: 36px;
-  height: 36px;
-  background: var(--gradient-prism);
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
   color: white;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 16px;
-  box-shadow: var(--shadow-glow);
+  background: linear-gradient(135deg, #2563eb, #06b6d4);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
 }
 
 .logo-text {
-  font-weight: 600;
-  font-size: 16px;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
+  color: #1e293b;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0;
 }
 
 .sidebar-nav {
   flex: 1;
-  padding: 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  padding: 18px 12px;
   overflow-y: auto;
 }
 
 .nav-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  margin-bottom: 20px;
 }
 
 .nav-group-label {
-  padding: 0 16px 4px;
-  color: var(--text-muted);
+  padding: 0 12px 8px;
+  color: #94a3b8;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: 900;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .nav-item {
+  width: 100%;
+  min-height: 38px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  text-decoration: none;
+  gap: 11px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: transparent;
+  color: #64748b;
   cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 13px;
-  font-weight: 500;
+  transition: all 0.18s ease;
+  text-align: left;
 }
 
 .nav-item:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+  color: #0f172a;
+  background: #f8fafc;
 }
 
 .nav-item.active {
-  background: var(--accent-soft);
-  color: var(--accent-color);
-  font-weight: 600;
+  color: #1d4ed8;
+  background: #eff6ff;
+  font-weight: 700;
 }
 
 .nav-icon {
-  font-size: 18px;
-  opacity: 0.8;
-  width: 20px;
-  text-align: center;
+  flex: 0 0 18px;
+  color: currentColor;
 }
 
-.nav-item.active .nav-icon {
-  opacity: 1;
+.nav-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.nav-chevron {
+  color: #60a5fa;
 }
 
 .sidebar-footer {
-  padding: 20px 24px;
+  padding: 14px 18px 18px;
   border-top: 1px solid var(--border-subtle);
 }
 
+.user-card,
 .connection-status {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 12px;
-  color: var(--text-muted);
-  padding: 10px 14px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: #f8fafc;
 }
 
-.status-text {
-  color: var(--text-secondary);
-  font-weight: 500;
+.user-card {
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.user-avatar {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.user-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.user-meta span {
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.user-meta small {
+  color: #64748b;
+  font-size: 10px;
+}
+
+.connection-status {
+  min-height: 36px;
+  padding: 0 12px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    display: none;
+  }
 }
 </style>

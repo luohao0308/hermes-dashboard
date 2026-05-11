@@ -184,7 +184,7 @@ function reRunTask(item: HistoryItem) {
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .header-right {
@@ -220,7 +220,7 @@ function reRunTask(item: HistoryItem) {
   font-weight: 700;
   color: var(--text-primary);
   font-family: 'SF Mono', 'Fira Code', monospace;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .stat-label {

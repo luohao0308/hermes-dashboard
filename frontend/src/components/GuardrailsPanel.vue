@@ -1,8 +1,10 @@
 <template>
   <div class="guardrails-panel">
     <div class="section-header">
-      <h3>审查规则</h3>
-      <p class="subtitle">配置严重程度过滤器和审查规则</p>
+      <div>
+        <h3>审查规则</h3>
+        <p class="subtitle">配置严重程度过滤器和审查规则</p>
+      </div>
     </div>
 
     <div class="rules-grid">
@@ -86,19 +88,19 @@ function updateThreshold(key: string, value: string) {
 
 <style scoped>
 .guardrails-panel { display: flex; flex-direction: column; gap: 16px; }
-.section-header h3 { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.section-header h3 { margin: 0; font-size: 18px; font-weight: 800; color: var(--text-primary); }
 .subtitle { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
 .rules-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
-.rule-card { background: var(--glass-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 16px; }
+.rule-card { background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--glass-shadow); }
 .rule-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.rule-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.rule-name { font-size: 14px; font-weight: 900; color: var(--text-primary); }
 .rule-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
 .rule-meta { display: flex; gap: 8px; align-items: center; }
 .severity-tag { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; text-transform: uppercase; }
-.sev-critical { background: rgba(255, 85, 85, 0.15); color: #ff5555; }
-.sev-high { background: rgba(255, 183, 77, 0.15); color: #ffb74d; }
-.sev-medium { background: rgba(139, 233, 253, 0.15); color: #8be9fd; }
-.sev-low { background: rgba(80, 250, 123, 0.15); color: #50fa7b; }
+.sev-critical { background: #fef2f2; color: #b91c1c; }
+.sev-high { background: #fffbeb; color: #d97706; }
+.sev-medium { background: #eff6ff; color: #2563eb; }
+.sev-low { background: #ecfdf5; color: #047857; }
 .sev-style { background: var(--bg-tertiary); color: var(--text-muted); }
 .rule-action { font-size: 11px; color: var(--text-muted); }
 .toggle { position: relative; width: 36px; height: 20px; }
@@ -107,8 +109,12 @@ function updateThreshold(key: string, value: string) {
 .toggle-slider:before { content: ''; position: absolute; height: 16px; width: 16px; left: 2px; bottom: 2px; background: white; border-radius: 50%; transition: 0.2s; }
 .toggle input:checked + .toggle-slider { background: var(--accent-color); }
 .toggle input:checked + .toggle-slider:before { transform: translateX(16px); }
-.thresholds { background: var(--glass-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 16px; }
+.thresholds { background: #ffffff; border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--glass-shadow); }
 .threshold-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
 .threshold-row:last-child { border-bottom: none; }
-.threshold-row select { padding: 4px 8px; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-primary); font-size: 12px; }
+.threshold-row select { min-height: 32px; padding: 0 10px; background: #ffffff; border: 1px solid var(--border-color); border-radius: 10px; color: var(--text-primary); font-size: 12px; box-shadow: var(--shadow-sm); }
+@media (max-width: 640px) {
+  .rules-grid { grid-template-columns: 1fr; }
+  .threshold-row { align-items: stretch; flex-direction: column; gap: 8px; }
+}
 </style>

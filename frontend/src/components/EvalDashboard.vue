@@ -225,13 +225,14 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 16px;
 }
 
 .panel-header h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
   margin: 0;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 800;
 }
 
 .subtitle {
@@ -244,32 +245,38 @@ onMounted(() => {
   display: flex;
   gap: 12px;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .filter-select {
-  background: var(--bg-primary);
+  min-height: 36px;
+  background: #ffffff;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 8px 12px;
+  border-radius: 10px;
+  padding: 0 12px;
   font-size: 13px;
   color: var(--text-secondary);
   outline: none;
   min-width: 160px;
+  box-shadow: var(--shadow-sm);
 }
 
 .refresh-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
-  background: var(--bg-tertiary);
+  min-height: 36px;
+  padding: 0 14px;
+  background: #ffffff;
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
+  border-radius: 10px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 800;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
 }
 
 .refresh-btn:hover:not(:disabled) {
@@ -304,42 +311,44 @@ onMounted(() => {
 }
 
 .summary-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
+  background: #ffffff;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  box-shadow: var(--glass-shadow);
 }
 
 .card-label {
   font-size: 12px;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
+  font-weight: 800;
 }
 
 .card-value {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 900;
   color: var(--text-primary);
   font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
 /* Trend */
 .trend-section {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
+  background: #ffffff;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 24px;
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
 }
 
 .trend-section h3 {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 900;
   color: var(--text-primary);
   margin: 0 0 16px;
 }
@@ -394,32 +403,34 @@ onMounted(() => {
 
 /* Breakdown Tables */
 .breakdown-section {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--border-subtle);
+  background: #ffffff;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 24px;
+  box-shadow: var(--glass-shadow);
+  overflow-x: auto;
 }
 
 .breakdown-section h3 {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 900;
   color: var(--text-primary);
   margin: 0 0 16px;
 }
 
 .breakdown-table {
   width: 100%;
+  min-width: 620px;
   border-collapse: collapse;
 }
 
 .breakdown-table th {
   text-align: left;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 900;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -446,8 +457,28 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
+  .panel-header {
+    flex-direction: column;
+  }
+
+  .header-actions,
+  .filter-select,
+  .refresh-btn {
+    width: 100%;
+  }
+
   .summary-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .trend-chart {
+    min-width: 520px;
+  }
+}
+
+@media (max-width: 480px) {
+  .summary-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

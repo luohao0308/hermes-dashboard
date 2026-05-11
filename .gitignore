@@ -2,6 +2,7 @@ __pycache__/
 .DS_Store
 .obsidian/workspace.json
 .omx/
+.omc/
 
 # Local environment files
 .env
@@ -22,6 +23,7 @@ backend/data/*.sqlite
 backend/data/*.sqlite3
 backend/data/*.db
 backend/test.db
+/test.db
 .backend.pid
 .frontend.pid
 

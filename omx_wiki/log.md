@@ -12,3 +12,6 @@
 ## [2026-05-10T20:33:27.398Z] ingest
 - **Pages:** internal-trial-closure-phase-2.md
 - **Summary:** Created new page "Internal Trial Closure Phase 2"
+# 2026-05-11T15:35:00Z
+
+- Added `workflow-approval-retry-semantics.md` documenting the approval rejection/retry state-machine decision, test anchors, and remaining watch items.

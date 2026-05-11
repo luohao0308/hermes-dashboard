@@ -413,6 +413,48 @@ class TestRetryPolicy:
         assert run_data["status"] == "failed"
         assert run_data["tasks"][0]["status"] == "failed"
 
+    def test_retry_exhausted_cancels_blocked_downstream_tasks(self, client):
+        c = client
+        session = client._test_session
+        rt = _seed_runtime(session)
+        resp = c.post("/api/workflows", json={
+            "name": "retry-exhaust-downstream",
+            "runtime_id": str(rt.id),
+            "nodes": [
+                {"node_id": "a", "title": "A", "retry_policy": {"max_retries": 0, "backoff_seconds": 0}},
+                {"node_id": "b", "title": "B"},
+                {"node_id": "c", "title": "C"},
+            ],
+            "edges": [
+                {"from_node": "a", "to_node": "b"},
+                {"from_node": "b", "to_node": "c"},
+            ],
+        })
+        wf_id = resp.json()["id"]
+        run_resp = c.post(f"/api/workflows/{wf_id}/runs", json={})
+        run = run_resp.json()
+        task_a = next(t for t in run["tasks"] if t["node_id"] == "a")
+
+        failed = c.post(
+            f"/api/workflows/{wf_id}/runs/{run['id']}/tasks/{task_a['id']}/fail",
+            json={"error_summary": "permanent fail"},
+        )
+        assert failed.status_code == 200
+        data = failed.json()
+        assert data["status"] == "failed"
+        tasks_by_node = {t["node_id"]: t for t in data["tasks"]}
+        assert tasks_by_node["a"]["status"] == "failed"
+        assert tasks_by_node["b"]["status"] == "cancelled"
+        assert tasks_by_node["c"]["status"] == "cancelled"
+
+        retry = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/retry", json={})
+        assert retry.status_code == 200
+        retried = {t["node_id"]: t for t in retry.json()["tasks"]}
+        assert retry.json()["status"] == "running"
+        assert retried["a"]["status"] == "running"
+        assert retried["b"]["status"] == "pending"
+        assert retried["c"]["status"] == "pending"
+
 
 # ---------------------------------------------------------------------------
 # Run Control Tests
@@ -631,8 +673,11 @@ class TestApprovalNode:
         approval = session.query(Approval).filter(Approval.task_id == uuid.UUID(approve_task["id"])).first()
         assert approval is not None
         assert approval.status == "pending"
-        approval.status = "approved"
-        session.commit()
+        approved = c.post(
+            f"/api/approvals/{approval.id}/approve",
+            json={"resolved_by": "test-operator", "note": "approve in test"},
+        )
+        assert approved.status_code == 200
 
         resp1 = c.post(f"/api/workflows/{wf_id}/runs/{run_id}/advance", json={})
         data = resp1.json()
@@ -640,6 +685,114 @@ class TestApprovalNode:
         assert updated_approve["status"] == "completed"
         after_task = next(t for t in data["tasks"] if t["node_id"] == "after")
         assert after_task["status"] == "running"
+
+    def test_rejected_approval_cancels_blocked_downstream_tasks(self, client):
+        c = client
+        session = client._test_session
+        rt = _seed_runtime(session)
+        resp = c.post("/api/workflows", json={
+            "name": "approval-rejected-downstream",
+            "runtime_id": str(rt.id),
+            "nodes": [
+                {"node_id": "approve", "title": "Approve", "task_type": "approval"},
+                {"node_id": "after", "title": "After approval"},
+            ],
+            "edges": [{"from_node": "approve", "to_node": "after"}],
+        })
+        wf_id = resp.json()["id"]
+        run = c.post(f"/api/workflows/{wf_id}/runs", json={}).json()
+        approve_task = next(t for t in run["tasks"] if t["node_id"] == "approve")
+
+        approval = session.query(Approval).filter(Approval.task_id == uuid.UUID(approve_task["id"])).first()
+        assert approval is not None
+        rejected = c.post(
+            f"/api/approvals/{approval.id}/reject",
+            json={"resolved_by": "test-operator", "note": "reject in test"},
+        )
+        assert rejected.status_code == 200
+
+        advanced = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/advance", json={})
+        assert advanced.status_code == 200
+        data = advanced.json()
+        assert data["status"] == "failed"
+        tasks_by_node = {t["node_id"]: t for t in data["tasks"]}
+        assert tasks_by_node["approve"]["status"] == "failed"
+        assert tasks_by_node["after"]["status"] == "cancelled"
+
+        retry = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/retry", json={})
+        assert retry.status_code == 200
+        retried = {t["node_id"]: t for t in retry.json()["tasks"]}
+        assert retry.json()["status"] == "running"
+        assert retried["approve"]["status"] == "waiting_approval"
+        assert retried["after"]["status"] == "pending"
+
+    def test_rejected_approval_requires_explicit_retry_and_ignores_stale_decision(self, client):
+        c = client
+        session = client._test_session
+        rt = _seed_runtime(session)
+        resp = c.post("/api/workflows", json={
+            "name": "approval-rejected-with-side-branch",
+            "runtime_id": str(rt.id),
+            "nodes": [
+                {"node_id": "approve", "title": "Approve", "task_type": "approval"},
+                {"node_id": "after", "title": "After approval"},
+                {"node_id": "side", "title": "Side branch"},
+            ],
+            "edges": [{"from_node": "approve", "to_node": "after"}],
+        })
+        wf_id = resp.json()["id"]
+        run = c.post(f"/api/workflows/{wf_id}/runs", json={}).json()
+        approve_task = next(t for t in run["tasks"] if t["node_id"] == "approve")
+        side_task = next(t for t in run["tasks"] if t["node_id"] == "side")
+
+        approval = session.query(Approval).filter(Approval.task_id == uuid.UUID(approve_task["id"])).first()
+        assert approval is not None
+        rejected = c.post(
+            f"/api/approvals/{approval.id}/reject",
+            json={"resolved_by": "test-operator", "note": "reject in test"},
+        )
+        assert rejected.status_code == 200
+
+        advanced = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/advance", json={})
+        assert advanced.status_code == 200
+        data = advanced.json()
+        assert data["status"] == "running"
+        tasks_by_node = {t["node_id"]: t for t in data["tasks"]}
+        assert tasks_by_node["approve"]["status"] == "failed"
+        assert tasks_by_node["after"]["status"] == "cancelled"
+        assert tasks_by_node["side"]["status"] == "running"
+
+        advanced_again = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/advance", json={})
+        assert advanced_again.status_code == 200
+        tasks_by_node = {t["node_id"]: t for t in advanced_again.json()["tasks"]}
+        assert tasks_by_node["approve"]["status"] == "failed"
+        assert tasks_by_node["after"]["status"] == "cancelled"
+
+        completed_side = c.post(
+            f"/api/workflows/{wf_id}/runs/{run['id']}/tasks/{side_task['id']}/complete",
+            json={},
+        )
+        assert completed_side.status_code == 200
+        assert completed_side.json()["status"] == "failed"
+
+        retry = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/retry", json={})
+        assert retry.status_code == 200
+        retried = {t["node_id"]: t for t in retry.json()["tasks"]}
+        assert retry.json()["status"] == "running"
+        assert retried["approve"]["status"] == "waiting_approval"
+        assert retried["after"]["status"] == "pending"
+
+        stale_check = c.post(f"/api/workflows/{wf_id}/runs/{run['id']}/advance", json={})
+        assert stale_check.status_code == 200
+        checked = {t["node_id"]: t for t in stale_check.json()["tasks"]}
+        assert checked["approve"]["status"] == "waiting_approval"
+        assert checked["after"]["status"] == "pending"
+
+        approval_statuses = {
+            a.status
+            for a in session.query(Approval).filter(Approval.task_id == uuid.UUID(approve_task["id"])).all()
+        }
+        assert approval_statuses == {"rejected", "pending"}
 
 
 # ---------------------------------------------------------------------------

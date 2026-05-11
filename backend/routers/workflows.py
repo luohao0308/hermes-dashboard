@@ -20,6 +20,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -47,6 +48,8 @@ from schemas.workflow import (
 )
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
+APPROVAL_REJECTED_ERROR = "Approval rejected"
+APPROVAL_SUPERSEDED_STATUS = "superseded"
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +120,16 @@ def _build_reverse_adjacency(
     return rev
 
 
+def _build_forward_adjacency(
+    edges: list[tuple[str, str]],
+) -> dict[str, list[str]]:
+    """Build forward adjacency (who is unblocked by whom)."""
+    adj: dict[str, list[str]] = defaultdict(list)
+    for src, dst in edges:
+        adj[src].append(dst)
+    return adj
+
+
 def _get_retry_policy(node: WorkflowNode) -> dict:
     """Extract retry policy from node, with defaults."""
     policy = node.retry_policy or {}
@@ -151,6 +164,76 @@ def _compute_duration_ms(
     return None
 
 
+def _latest_approval_decision_for_attempt(
+    db: Session,
+    task: Task,
+) -> Approval | None:
+    query = db.query(Approval).filter(
+        Approval.task_id == task.id,
+        Approval.status.in_(["approved", "rejected"]),
+    )
+    # Bind decision consumption to the current task attempt.
+    if task.started_at is not None:
+        query = query.filter(
+            or_(
+                Approval.resolved_at >= task.started_at,
+                and_(Approval.resolved_at.is_(None), Approval.created_at >= task.started_at),
+            )
+        )
+    return query.order_by(Approval.resolved_at.desc().nullslast(), Approval.created_at.desc()).first()
+
+
+def _is_rejected_approval_failure(
+    db: Session,
+    task: Task,
+    node: WorkflowNode | None,
+) -> bool:
+    if node is None or node.task_type != "approval":
+        return False
+    decision = _latest_approval_decision_for_attempt(db, task)
+    return decision is not None and decision.status == "rejected"
+
+
+def _supersede_pending_task_approvals(db: Session, task: Task, now: datetime) -> None:
+    approvals = db.query(Approval).filter(
+        Approval.task_id == task.id,
+        Approval.status == "pending",
+    ).all()
+    for approval in approvals:
+        approval.status = APPROVAL_SUPERSEDED_STATUS
+        approval.resolved_at = approval.resolved_at or now
+        approval.resolved_by = approval.resolved_by or "system"
+        approval.resolved_note = approval.resolved_note or "Superseded by workflow retry"
+
+
+def _cancel_blocked_descendants(
+    tasks_by_node: dict[str, Task],
+    adj: dict[str, list[str]],
+    failed_node_id: str,
+    now: datetime,
+) -> None:
+    """Cancel pending descendants that can no longer be reached after a failure."""
+    queue: deque[str] = deque(adj.get(failed_node_id, []))
+    visited: set[str] = set()
+
+    while queue:
+        node_id = queue.popleft()
+        if node_id in visited:
+            continue
+        visited.add(node_id)
+
+        task = tasks_by_node.get(node_id)
+        if task and task.status == "pending":
+            task.status = "cancelled"
+            task.error_summary = f"Skipped because dependency {failed_node_id} failed"
+            task.ended_at = now
+            task.duration_ms = _compute_duration_ms(task.started_at, task.ended_at)
+            task.locked_by = None
+            task.locked_at = None
+
+        queue.extend(adj.get(node_id, []))
+
+
 def _advance_workflow(db: Session, run: Run) -> None:
     """Advance workflow state: start ready tasks, handle completions.
 
@@ -163,6 +246,7 @@ def _advance_workflow(db: Session, run: Run) -> None:
     edge_tuples = [(e.from_node, e.to_node) for e in workflow.edges]
     node_map = {n.node_id: n for n in workflow.nodes}
     rev_adj = _build_reverse_adjacency(edge_tuples)
+    adj = _build_forward_adjacency(edge_tuples)
 
     tasks = db.query(Task).filter(Task.run_id == run.id).all()
     tasks_by_node: dict[str, Task] = {}
@@ -182,7 +266,10 @@ def _advance_workflow(db: Session, run: Run) -> None:
             node = node_map.get(task.node_id) if task.node_id else None
             if node:
                 policy = _get_retry_policy(node)
-                if task.retry_count < policy["max_retries"]:
+                if (
+                    not _is_rejected_approval_failure(db, task, node)
+                    and task.retry_count < policy["max_retries"]
+                ):
                     task.retry_count += 1
                     task.status = "pending"
                     task.error_summary = None
@@ -193,6 +280,8 @@ def _advance_workflow(db: Session, run: Run) -> None:
                         seconds=backoff * (2 ** (task.retry_count - 1))
                     )
                     continue
+            if task.node_id:
+                _cancel_blocked_descendants(tasks_by_node, adj, task.node_id, now)
             any_failed = True
             continue
 
@@ -225,11 +314,7 @@ def _advance_workflow(db: Session, run: Run) -> None:
             pass  # waiting for external completion
 
         elif task.status == "waiting_approval":
-            approval = (
-                db.query(Approval)
-                .filter(Approval.task_id == task.id, Approval.status != "pending")
-                .first()
-            )
+            approval = _latest_approval_decision_for_attempt(db, task)
             if approval:
                 if approval.status == "approved":
                     task.status = "completed"
@@ -237,9 +322,11 @@ def _advance_workflow(db: Session, run: Run) -> None:
                     task.duration_ms = _compute_duration_ms(task.started_at, task.ended_at)
                 elif approval.status == "rejected":
                     task.status = "failed"
-                    task.error_summary = "Approval rejected"
+                    task.error_summary = APPROVAL_REJECTED_ERROR
                     task.ended_at = datetime.now(timezone.utc)
                     task.duration_ms = _compute_duration_ms(task.started_at, task.ended_at)
+                    if task.node_id:
+                        _cancel_blocked_descendants(tasks_by_node, adj, task.node_id, now)
                     any_failed = True
 
     db.flush()
@@ -1042,8 +1129,11 @@ def retry_workflow_run(
 
     tasks = db.query(Task).filter(Task.run_id == run.id).all()
     retried = 0
+    now = datetime.now(timezone.utc)
     for task in tasks:
         if task.status in ("failed", "cancelled", "dead_letter"):
+            if task.task_type == "approval":
+                _supersede_pending_task_approvals(db, task, now)
             task.status = "pending"
             task.error_summary = None
             task.started_at = None

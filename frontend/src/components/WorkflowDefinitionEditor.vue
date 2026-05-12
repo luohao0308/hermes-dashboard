@@ -18,6 +18,22 @@
         </button>
       </div>
 
+      <div class="editor-toggles">
+        <label class="toggle-row">
+          <input type="checkbox" v-model="isReusable" />
+          <span>Reusable workflow (can be nested as subworkflow)</span>
+        </label>
+        <div v-if="selectedNodeType === 'subworkflow'" class="toggle-row">
+          <label>Child Workflow:</label>
+          <select v-model="childWorkflowId" class="workflow-select">
+            <option value="">Select workflow...</option>
+            <option v-for="wf in reusableWorkflows" :key="wf.id" :value="wf.id">
+              {{ wf.name }} (v{{ wf.version }})
+            </option>
+          </select>
+        </div>
+      </div>
+
       <label class="field-label" for="workflow-json">JSON</label>
       <textarea
         id="workflow-json"
@@ -42,6 +58,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { Save, WandSparkles, X } from 'lucide-vue-next'
+import type { WorkflowDefinition } from '../types'
 
 const props = defineProps<{
   open: boolean
@@ -50,6 +67,7 @@ const props = defineProps<{
   sampleJson: string
   saving?: boolean
   error?: string | null
+  reusableWorkflows?: WorkflowDefinition[]
 }>()
 
 const emit = defineEmits<{
@@ -59,12 +77,32 @@ const emit = defineEmits<{
 
 const jsonText = ref(props.initialJson)
 const localError = ref<string | null>(null)
+const isReusable = ref(false)
+const childWorkflowId = ref<string>('')
+const selectedNodeType = computed(() => {
+  try {
+    const parsed = JSON.parse(jsonText.value)
+    if (Array.isArray(parsed?.nodes)) {
+      const subworkflowNode = parsed.nodes.find((n: { task_type?: string }) => n.task_type === 'subworkflow')
+      return subworkflowNode?.task_type ?? null
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return null
+})
 
 watch(
   () => [props.open, props.initialJson],
   () => {
     jsonText.value = props.initialJson
     localError.value = null
+    try {
+      const parsed = JSON.parse(props.initialJson)
+      isReusable.value = !!parsed?.is_reusable
+    } catch {
+      isReusable.value = false
+    }
   },
 )
 
@@ -100,6 +138,15 @@ function save() {
   if (!Array.isArray(payload.nodes) || payload.nodes.length === 0) {
     localError.value = 'At least one node is required'
     return
+  }
+  payload.is_reusable = isReusable.value
+  if (Array.isArray(payload.nodes)) {
+    payload.nodes = payload.nodes.map((node: Record<string, unknown>) => {
+      if (node.task_type === 'subworkflow' && childWorkflowId.value) {
+        return { ...node, child_workflow_id: childWorkflowId.value }
+      }
+      return node
+    })
   }
   emit('save', payload)
 }
@@ -224,6 +271,42 @@ function save() {
   padding: 10px 12px;
   font-size: 12px;
   font-weight: 800;
+}
+
+.editor-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.workflow-select {
+  flex: 1;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.workflow-select:focus {
+  border-color: #93c5fd;
+  outline: none;
 }
 
 @media (max-width: 720px) {

@@ -26,6 +26,7 @@ class WorkflowVersionHistory(UUIDPrimaryKeyMixin, Base):
     edges_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     max_concurrent_tasks: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    is_reusable: Mapped[bool] = mapped_column(default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )

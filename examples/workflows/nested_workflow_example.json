@@ -1,0 +1,92 @@
+{
+  "name": "Nested Workflow Example",
+  "description": "Parent workflow that calls a reusable child workflow. Demonstrates subworkflow nodes, parent_run_id tracking, and cascade controls.",
+  "is_reusable": false,
+  "nodes": [
+    {
+      "node_id": "prepare_data",
+      "title": "Prepare Input Data",
+      "task_type": "action",
+      "retry_policy": {
+        "max_retries": 2,
+        "backoff_seconds": 1
+      },
+      "timeout_seconds": 60
+    },
+    {
+      "node_id": "call_child_workflow",
+      "title": "Execute Child Workflow",
+      "task_type": "subworkflow",
+      "child_workflow_id": "PLACEHOLDER_REPLACE_WITH_CHILD_WORKFLOW_ID",
+      "timeout_seconds": 300
+    },
+    {
+      "node_id": "validate_results",
+      "title": "Validate Results",
+      "task_type": "action",
+      "retry_policy": {
+        "max_retries": 1,
+        "backoff_seconds": 0
+      },
+      "timeout_seconds": 60
+    },
+    {
+      "node_id": "final_approval",
+      "title": "Final Approval",
+      "task_type": "approval",
+      "approval_timeout_seconds": 3600
+    },
+    {
+      "node_id": "finalize",
+      "title": "Finalize Output",
+      "task_type": "action",
+      "timeout_seconds": 30
+    }
+  ],
+  "edges": [
+    {
+      "from_node": "prepare_data",
+      "to_node": "call_child_workflow"
+    },
+    {
+      "from_node": "call_child_workflow",
+      "to_node": "validate_results"
+    },
+    {
+      "from_node": "validate_results",
+      "to_node": "final_approval"
+    },
+    {
+      "from_node": "final_approval",
+      "to_node": "finalize"
+    }
+  ],
+  "metadata_json": {
+    "purpose": "Demonstrates workflow nesting with subworkflow task type",
+    "nested_workflow_features": [
+      "child_workflow_id FK on WorkflowNode",
+      "parent_run_id FK on Run for tracking child runs",
+      "is_reusable flag on WorkflowDefinition",
+      "Cascade controls: pause/resume/cancel propagate to child runs",
+      "DAG drill-down UI for navigating between parent and child runs"
+    ],
+    "setup_instructions": [
+      "1. First create a child workflow with is_reusable=true",
+      "2. Copy the child workflow ID",
+      "3. Replace PLACEHOLDER_REPLACE_WITH_CHILD_WORKFLOW_ID in this file with the actual ID",
+      "4. Create the parent workflow using this definition",
+      "5. Start a run to see child workflow execution"
+    ],
+    "suggested_checks": [
+      "Create a reusable child workflow first",
+      "Update child_workflow_id reference in this file",
+      "Create parent workflow and start a run",
+      "Complete the 'prepare_data' task to trigger child workflow launch",
+      "Verify child run is created with parent_run_id set",
+      "Pause parent run - verify child run also pauses",
+      "Resume parent run - verify child run also resumes",
+      "Click on subworkflow node in DAG to drill down to child run",
+      "Cancel parent run - verify child run also cancels"
+    ]
+  }
+}

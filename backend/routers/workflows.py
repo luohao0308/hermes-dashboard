@@ -34,6 +34,12 @@ from models import (
     Approval,
     WorkflowVersionHistory,
 )
+from workflow_nesting import (
+    _launch_child_run,
+    _poll_child_run,
+    _cascade_to_child_runs,
+    _retry_child_run,
+)
 from security.audit import write_audit_log
 from security.rbac import require_role
 from schemas.workflow import (
@@ -95,6 +101,54 @@ def _validate_dag(
             status_code=400,
             detail="Workflow graph contains a cycle",
         )
+
+
+def _validate_nesting(
+    db: Session,
+    workflow_id: uuid.UUID,
+    child_workflow_ids: set[uuid.UUID],
+    max_depth: int = 2,
+) -> None:
+    """Validate nested workflow references: no cycles, max depth 2.
+
+    With max_depth=2, we allow:
+    - Parent -> Child (depth 1)
+    But reject:
+    - Parent -> Child -> Grandchild (depth 2+)
+    - Any circular reference
+    """
+    if not child_workflow_ids:
+        return
+
+    for child_id in child_workflow_ids:
+        if child_id == workflow_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Circular reference detected: workflow references itself",
+            )
+
+        child_workflow = db.get(WorkflowDefinition, child_id)
+        if not child_workflow:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Referenced child workflow {child_id} not found",
+            )
+
+        # Check for circular reference: does child reference the workflow being created?
+        for node in child_workflow.nodes:
+            if node.child_workflow_id == workflow_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Circular reference detected in workflow nesting",
+                )
+
+        # Check depth: child cannot have subworkflow nodes (no grandchildren)
+        for node in child_workflow.nodes:
+            if node.child_workflow_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Workflow nesting exceeds maximum depth of 2 levels",
+                )
 
 
 def _validate_edge_references(
@@ -159,6 +213,11 @@ def _compute_duration_ms(
 ) -> Optional[int]:
     """Compute duration in milliseconds."""
     if started and ended:
+        # Ensure both datetimes are timezone-aware or both are naive
+        if started.tzinfo is not None and ended.tzinfo is None:
+            ended = ended.replace(tzinfo=started.tzinfo)
+        elif started.tzinfo is None and ended.tzinfo is not None:
+            started = started.replace(tzinfo=ended.tzinfo)
         delta = ended - started
         return int(delta.total_seconds() * 1000)
     return None
@@ -293,25 +352,50 @@ def _advance_workflow(db: Session, run: Run) -> None:
                 if workflow.max_concurrent_tasks and active_count >= workflow.max_concurrent_tasks:
                     continue
                 node = node_map.get(task.node_id)
-                if node and node.task_type == "approval":
-                    approval = Approval(
-                        id=uuid.uuid4(),
-                        run_id=run.id,
-                        task_id=task.id,
-                        status="pending",
-                        context_json={"node_id": task.node_id, "workflow_id": str(run.workflow_id)},
-                    )
-                    db.add(approval)
-                    task.status = "waiting_approval"
-                    task.started_at = datetime.now(timezone.utc)
-                    active_count += 1
-                else:
-                    task.status = "running"
-                    task.started_at = datetime.now(timezone.utc)
-                    active_count += 1
+                if node:
+                    if node.task_type == "approval":
+                        approval = Approval(
+                            id=uuid.uuid4(),
+                            run_id=run.id,
+                            task_id=task.id,
+                            status="pending",
+                            context_json={"node_id": task.node_id, "workflow_id": str(run.workflow_id)},
+                        )
+                        db.add(approval)
+                        task.status = "waiting_approval"
+                        task.started_at = datetime.now(timezone.utc)
+                        active_count += 1
+                    elif node.task_type == "subworkflow":
+                        # Launch child workflow run
+                        child_run = _launch_child_run(db, run, task, node)
+                        task.status = "running"
+                        task.started_at = datetime.now(timezone.utc)
+                        task.metadata_json = {"child_run_id": str(child_run.id)}
+                        active_count += 1
+                        db.flush()
+                    else:
+                        task.status = "running"
+                        task.started_at = datetime.now(timezone.utc)
+                        active_count += 1
 
         elif task.status == "running":
-            pass  # waiting for external completion
+            node = node_map.get(task.node_id) if task.node_id else None
+            if node and node.task_type == "subworkflow":
+                # Poll child run status
+                new_status, error = _poll_child_run(db, task)
+                if new_status == "completed":
+                    task.status = "completed"
+                    task.ended_at = datetime.now(timezone.utc)
+                    task.duration_ms = _compute_duration_ms(task.started_at, task.ended_at)
+                elif new_status in ("failed", "cancelled"):
+                    task.status = new_status
+                    task.error_summary = error
+                    task.ended_at = datetime.now(timezone.utc)
+                    task.duration_ms = _compute_duration_ms(task.started_at, task.ended_at)
+                    if task.node_id:
+                        _cancel_blocked_descendants(tasks_by_node, adj, task.node_id, now)
+                    any_failed = True
+            # else: waiting for external completion
 
         elif task.status == "waiting_approval":
             approval = _latest_approval_decision_for_attempt(db, task)
@@ -461,6 +545,9 @@ def create_workflow(
     edge_tuples = _validate_edge_references(node_id_set, body.edges)
     _validate_dag(node_id_set, edge_tuples)
 
+    child_workflow_ids = {n.child_workflow_id for n in body.nodes if n.child_workflow_id}
+    _validate_nesting(db, uuid.uuid4(), child_workflow_ids)
+
     workflow = WorkflowDefinition(
         id=uuid.uuid4(),
         runtime_id=body.runtime_id,
@@ -469,6 +556,7 @@ def create_workflow(
         version=1,
         timeout_seconds=body.timeout_seconds,
         max_concurrent_tasks=body.max_concurrent_tasks,
+        is_reusable=body.is_reusable,
     )
     db.add(workflow)
     db.flush()
@@ -484,6 +572,7 @@ def create_workflow(
             retry_policy=n.retry_policy.model_dump() if n.retry_policy else None,
             timeout_seconds=n.timeout_seconds,
             approval_timeout_seconds=n.approval_timeout_seconds,
+            child_workflow_id=n.child_workflow_id,
         )
         db.add(node)
 
@@ -518,6 +607,7 @@ def create_workflow(
 @router.get("", response_model=WorkflowDefinitionListResponse)
 def list_workflows(
     runtime_id: Optional[uuid.UUID] = Query(None),
+    is_reusable: Optional[bool] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -525,6 +615,8 @@ def list_workflows(
     query = db.query(WorkflowDefinition)
     if runtime_id:
         query = query.filter(WorkflowDefinition.runtime_id == runtime_id)
+    if is_reusable is not None:
+        query = query.filter(WorkflowDefinition.is_reusable == is_reusable)
     total = query.count()
     items = query.order_by(WorkflowDefinition.created_at.desc()).offset(offset).limit(limit).all()
     return WorkflowDefinitionListResponse(
@@ -573,6 +665,8 @@ def update_workflow(
         workflow.timeout_seconds = body.timeout_seconds
     if body.max_concurrent_tasks is not None:
         workflow.max_concurrent_tasks = body.max_concurrent_tasks
+    if body.is_reusable is not None:
+        workflow.is_reusable = body.is_reusable
 
     if body.nodes is not None:
         node_ids = [n.node_id for n in body.nodes]
@@ -593,6 +687,9 @@ def update_workflow(
         edge_tuples = _validate_edge_references(node_id_set, edge_defs)
         _validate_dag(node_id_set, edge_tuples)
 
+        child_workflow_ids = {n.child_workflow_id for n in body.nodes if n.child_workflow_id}
+        _validate_nesting(db, workflow.id, child_workflow_ids)
+
         # Replace nodes
         for old_node in workflow.nodes:
             db.delete(old_node)
@@ -609,6 +706,7 @@ def update_workflow(
                 retry_policy=n.retry_policy.model_dump() if n.retry_policy else None,
                 timeout_seconds=n.timeout_seconds,
                 approval_timeout_seconds=n.approval_timeout_seconds,
+                child_workflow_id=n.child_workflow_id,
             )
             db.add(node)
 
@@ -653,6 +751,7 @@ def _snapshot_workflow_version(db: Session, workflow: WorkflowDefinition) -> Non
             "retry_policy": n.retry_policy,
             "timeout_seconds": n.timeout_seconds,
             "approval_timeout_seconds": n.approval_timeout_seconds,
+            "child_workflow_id": str(n.child_workflow_id) if n.child_workflow_id else None,
         }
         for n in workflow.nodes
     ]
@@ -669,6 +768,7 @@ def _snapshot_workflow_version(db: Session, workflow: WorkflowDefinition) -> Non
         edges_json=edges_data,
         timeout_seconds=workflow.timeout_seconds,
         max_concurrent_tasks=workflow.max_concurrent_tasks,
+        is_reusable=workflow.is_reusable,
     )
     db.add(snapshot)
     db.flush()
@@ -688,6 +788,7 @@ class WorkflowVersionHistoryItem(BaseModel):
     edges_json: Optional[list[dict]] = None
     timeout_seconds: Optional[int] = None
     max_concurrent_tasks: Optional[int] = None
+    is_reusable: bool = False
     created_at: datetime
     created_by: Optional[str] = None
 
@@ -725,6 +826,7 @@ def list_workflow_versions(
                 edges_json=i.edges_json,
                 timeout_seconds=i.timeout_seconds,
                 max_concurrent_tasks=i.max_concurrent_tasks,
+                is_reusable=i.is_reusable,
                 created_at=i.created_at,
                 created_by=i.created_by,
             )
@@ -792,6 +894,7 @@ def rollback_workflow(
                 retry_policy=n.get("retry_policy"),
                 timeout_seconds=n.get("timeout_seconds"),
                 approval_timeout_seconds=n.get("approval_timeout_seconds"),
+                child_workflow_id=uuid.UUID(n["child_workflow_id"]) if n.get("child_workflow_id") else None,
             )
             db.add(node)
 
@@ -1013,6 +1116,7 @@ def pause_workflow_run(
     run.status = "paused"
     run.updated_at = datetime.now(timezone.utc)
     _pause_active_run_tasks(db, run.id)
+    _cascade_to_child_runs(db, run.id, "pause")
     _add_run_event_span(db, run, "workflow_paused", "Workflow paused", "completed")
     write_audit_log(
         db,
@@ -1046,6 +1150,7 @@ def resume_workflow_run(
 
     run.status = "running"
     run.updated_at = datetime.now(timezone.utc)
+    _cascade_to_child_runs(db, run.id, "resume")
     _add_run_event_span(db, run, "workflow_resumed", "Workflow resumed", "completed")
     write_audit_log(
         db,
@@ -1095,6 +1200,7 @@ def cancel_workflow_run(
     run.error_summary = reason
     run.ended_at = now
     run.duration_ms = _compute_duration_ms(run.started_at, run.ended_at)
+    _cascade_to_child_runs(db, run.id, "cancel")
     _add_run_event_span(db, run, "workflow_cancelled", "Workflow cancelled", "cancelled", reason)
     write_audit_log(
         db,
@@ -1134,6 +1240,19 @@ def retry_workflow_run(
         if task.status in ("failed", "cancelled", "dead_letter"):
             if task.task_type == "approval":
                 _supersede_pending_task_approvals(db, task, now)
+            elif task.task_type == "subworkflow":
+                child_run = _retry_child_run(db, task)
+                if child_run:
+                    task.status = "pending"
+                    task.error_summary = None
+                    task.started_at = None
+                    task.ended_at = None
+                    task.duration_ms = None
+                    task.locked_by = None
+                    task.locked_at = None
+                    task.next_retry_at = None
+                    retried += 1
+                continue
             task.status = "pending"
             task.error_summary = None
             task.started_at = None
@@ -1296,6 +1415,9 @@ def _get_workflow_run_or_404(db: Session, workflow_id: uuid.UUID, run_id: uuid.U
 def _pause_active_run_tasks(db: Session, run_id: uuid.UUID) -> None:
     for task in db.query(Task).filter(Task.run_id == run_id).all():
         if task.status == "running":
+            # Skip subworkflow tasks - they have their own run to manage
+            if task.task_type == "subworkflow":
+                continue
             task.status = "pending"
             task.started_at = None
             task.ended_at = None

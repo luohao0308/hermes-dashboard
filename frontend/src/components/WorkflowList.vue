@@ -6,6 +6,10 @@
         <p class="section-subtitle">Compose, inspect and launch governed workflow definitions.</p>
       </div>
       <div class="header-actions">
+        <label class="filter-toggle">
+          <input type="checkbox" v-model="reusableOnly" @change="emitFilterChange" />
+          <span>Reusable only</span>
+        </label>
         <button class="btn btn-primary" data-test="create-workflow" @click="$emit('create')">
           <Plus :size="15" />
           {{ t('workflows.createWorkflow') }}
@@ -29,6 +33,7 @@
         v-for="wf in workflows"
         :key="wf.id"
         class="workflow-card"
+        :class="{ 'reusable-card': wf.is_reusable }"
         @click="$emit('select', wf)"
       >
         <div class="card-header">
@@ -40,6 +45,7 @@
               <Pencil :size="14" />
             </button>
             <span class="card-badge">v{{ wf.version }}</span>
+            <span v-if="wf.is_reusable" class="card-badge reusable-badge">Reusable</span>
           </div>
         </div>
         <span class="card-title">{{ wf.name }}</span>
@@ -71,6 +77,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowUpRight, Clock3, GitBranch, Network, Pencil, Plus, RefreshCcw } from 'lucide-vue-next'
 import type { WorkflowDefinition } from '../types'
@@ -87,13 +94,20 @@ defineProps<{
   loading: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   create: []
   edit: [wf: WorkflowDefinition]
   refresh: []
   select: [wf: WorkflowDefinition]
   pageChange: [offset: number]
+  filterChange: [reusable: boolean]
 }>()
+
+const reusableOnly = ref(false)
+
+function emitFilterChange() {
+  emit('filterChange', reusableOnly.value)
+}
 
 function formatTime(iso: string): string {
   try {
@@ -249,6 +263,41 @@ function formatTime(iso: string): string {
   background: var(--accent-soft);
   color: var(--accent-color);
   font-weight: 900;
+}
+
+.reusable-badge {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  min-height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.filter-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.reusable-card {
+  border-color: #10b981;
+}
+
+.reusable-card:hover {
+  border-color: #059669;
+  box-shadow: 0 18px 40px rgba(16, 185, 129, 0.1);
 }
 
 .card-desc {

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -34,11 +34,18 @@ class RetryPolicyResponse(BaseModel):
 class WorkflowNodeCreate(BaseModel):
     node_id: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9_-]+$")
     title: str = Field(..., min_length=1, max_length=500)
-    task_type: str = Field(default="action", max_length=50)
+    task_type: Literal["action", "approval", "subworkflow"] = Field(default="action", max_length=50)
     config: Optional[dict] = None
     retry_policy: Optional[RetryPolicyCreate] = None
     timeout_seconds: Optional[int] = Field(default=None, ge=0)
     approval_timeout_seconds: Optional[int] = Field(default=None, ge=0)
+    child_workflow_id: Optional[uuid.UUID] = None
+
+    @model_validator(mode="after")
+    def validate_subworkflow(self):
+        if self.task_type == "subworkflow" and self.child_workflow_id is None:
+            raise ValueError("child_workflow_id is required when task_type is 'subworkflow'")
+        return self
 
 
 class WorkflowEdgeCreate(BaseModel):
@@ -56,6 +63,7 @@ class WorkflowNodeResponse(BaseModel):
     retry_policy: Optional[dict] = None
     timeout_seconds: Optional[int] = None
     approval_timeout_seconds: Optional[int] = None
+    child_workflow_id: Optional[uuid.UUID] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -83,6 +91,7 @@ class WorkflowDefinitionCreate(BaseModel):
     max_concurrent_tasks: Optional[int] = Field(default=None, ge=1)
     nodes: list[WorkflowNodeCreate] = Field(..., min_length=1)
     edges: list[WorkflowEdgeCreate] = Field(default_factory=list)
+    is_reusable: bool = False
 
 
 class WorkflowDefinitionUpdate(BaseModel):
@@ -92,6 +101,7 @@ class WorkflowDefinitionUpdate(BaseModel):
     max_concurrent_tasks: Optional[int] = Field(default=None, ge=1)
     nodes: Optional[list[WorkflowNodeCreate]] = None
     edges: Optional[list[WorkflowEdgeCreate]] = None
+    is_reusable: Optional[bool] = None
 
 
 class WorkflowDefinitionResponse(BaseModel):
@@ -102,6 +112,7 @@ class WorkflowDefinitionResponse(BaseModel):
     version: int
     timeout_seconds: Optional[int] = None
     max_concurrent_tasks: Optional[int] = None
+    is_reusable: bool = False
     created_at: datetime
     updated_at: datetime
     nodes: list[WorkflowNodeResponse] = []

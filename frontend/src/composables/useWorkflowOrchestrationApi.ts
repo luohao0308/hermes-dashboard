@@ -19,11 +19,13 @@ export function listWorkflowDefinitions(params?: {
   runtime_id?: string
   limit?: number
   offset?: number
+  reusable?: boolean
 }): Promise<WorkflowDefinitionListResponse> {
   const searchParams = new URLSearchParams()
   if (params?.runtime_id) searchParams.set('runtime_id', params.runtime_id)
   if (params?.limit != null) searchParams.set('limit', String(params.limit))
   if (params?.offset != null) searchParams.set('offset', String(params.offset))
+  if (params?.reusable === true) searchParams.set('reusable', 'true')
   const qs = searchParams.toString()
   return fetchJSON<WorkflowDefinitionListResponse>(
     `${API_BASE}/api/workflows${qs ? `?${qs}` : ''}`,

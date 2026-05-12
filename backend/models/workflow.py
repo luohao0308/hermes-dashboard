@@ -1,7 +1,7 @@
 """Workflow definition, node, and edge models for DAG orchestration (v2.0)."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, UniqueConstraint
@@ -26,9 +26,11 @@ class WorkflowDefinition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     environment_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("environments.id"), nullable=True, index=True
     )
+    is_reusable: Mapped[bool] = mapped_column(default=False, nullable=False)
 
     nodes: Mapped[list["WorkflowNode"]] = relationship(
-        back_populates="workflow", cascade="all, delete-orphan", lazy="selectin"
+        back_populates="workflow", cascade="all, delete-orphan", lazy="selectin",
+        foreign_keys="WorkflowNode.workflow_id"
     )
     edges: Mapped[list["WorkflowEdge"]] = relationship(
         back_populates="workflow", cascade="all, delete-orphan", lazy="selectin"
@@ -52,11 +54,19 @@ class WorkflowNode(UUIDPrimaryKeyMixin, Base):
     retry_policy: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     approval_timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    child_workflow_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workflow_definitions.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default="now()"
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
 
-    workflow: Mapped["WorkflowDefinition"] = relationship(back_populates="nodes")
+    workflow: Mapped["WorkflowDefinition"] = relationship(
+        back_populates="nodes", foreign_keys=[workflow_id]
+    )
+    child_workflow: Mapped[Optional["WorkflowDefinition"]] = relationship(
+        foreign_keys=[child_workflow_id]
+    )
 
 
 class WorkflowEdge(UUIDPrimaryKeyMixin, Base):
@@ -72,7 +82,7 @@ class WorkflowEdge(UUIDPrimaryKeyMixin, Base):
     from_node: Mapped[str] = mapped_column(String(100), nullable=False)
     to_node: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default="now()"
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
 
     workflow: Mapped["WorkflowDefinition"] = relationship(back_populates="edges")

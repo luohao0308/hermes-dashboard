@@ -419,6 +419,7 @@ export interface WorkflowNodeDef {
   retry_policy?: RetryPolicy | null
   timeout_seconds?: number | null
   approval_timeout_seconds?: number | null
+  child_workflow_id?: string | null
   created_at: string
 }
 
@@ -430,6 +431,7 @@ export interface WorkflowNodeInput {
   retry_policy?: RetryPolicy | null
   timeout_seconds?: number | null
   approval_timeout_seconds?: number | null
+  child_workflow_id?: string | null
 }
 
 export interface WorkflowEdgeDef {
@@ -450,6 +452,7 @@ export interface WorkflowDefinitionPayload {
   description?: string | null
   timeout_seconds?: number | null
   max_concurrent_tasks?: number | null
+  is_reusable?: boolean
   nodes: WorkflowNodeInput[]
   edges?: WorkflowEdgeInput[]
 }
@@ -462,6 +465,7 @@ export interface WorkflowDefinition {
   version: number
   timeout_seconds?: number | null
   max_concurrent_tasks?: number | null
+  is_reusable: boolean
   created_at: string
   updated_at: string
   nodes: WorkflowNodeDef[]
@@ -498,6 +502,7 @@ export interface WorkflowRunDetail {
   id: string
   runtime_id: string
   workflow_id?: string | null
+  parent_run_id?: string | null
   title: string
   status: string
   input_summary?: string | null

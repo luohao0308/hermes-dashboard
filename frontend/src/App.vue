@@ -342,6 +342,7 @@
             @refresh="fetchWorkflowDefinitions"
             @select="openWorkflowDetail"
             @pageChange="(o) => { workflowDefsOffset = o; fetchWorkflowDefinitions() }"
+            @filterChange="handleWorkflowReusableFilterChange"
           />
         </template>
 
@@ -364,6 +365,7 @@
             @cancelRun="handleCancelWorkflowRun"
             @loadVersions="handleLoadWorkflowVersions"
             @rollback="handleWorkflowRollback"
+            @drillDown="handleDrillDownWorkflowRun"
           />
         </template>
 
@@ -398,6 +400,7 @@
       :sampleJson="workflowEditorSampleJson"
       :saving="savingWorkflowDefinition"
       :error="workflowEditorError"
+      :reusableWorkflows="reusableWorkflowDefinitions"
       @close="closeWorkflowEditor"
       @save="handleSaveWorkflowDefinition"
     />
@@ -595,6 +598,7 @@ const workflowEditorInitialJson = ref('')
 const workflowEditorSampleJson = ref('')
 const workflowEditorError = ref<string | null>(null)
 const savingWorkflowDefinition = ref(false)
+const reusableWorkflowDefinitions = ref<WorkflowDefinition[]>([])
 
 // Failed Events state (OPT-54/58)
 const failedEvents = ref<FailedEventItem[]>([])
@@ -1351,6 +1355,12 @@ async function openCreateWorkflowEditor() {
   if (workflowRuntimes.value.length === 0) {
     await fetchWorkflowRuntimes()
   }
+  try {
+    const reusableData = await listWorkflowDefinitions({ reusable: true })
+    reusableWorkflowDefinitions.value = reusableData.items
+  } catch {
+    reusableWorkflowDefinitions.value = []
+  }
   const runtimeId = workflowRuntimes.value[0]?.id ?? ''
   const sample = buildInternalTrialWorkflowPayload(runtimeId)
   workflowEditorMode.value = 'create'
@@ -1361,7 +1371,13 @@ async function openCreateWorkflowEditor() {
   workflowEditorOpen.value = true
 }
 
-function openEditWorkflowEditor(workflow: WorkflowDefinition) {
+async function openEditWorkflowEditor(workflow: WorkflowDefinition) {
+  try {
+    const reusableData = await listWorkflowDefinitions({ reusable: true })
+    reusableWorkflowDefinitions.value = reusableData.items
+  } catch {
+    reusableWorkflowDefinitions.value = []
+  }
   const sample = buildInternalTrialWorkflowPayload(workflow.runtime_id)
   workflowEditorMode.value = 'edit'
   workflowEditorTarget.value = workflow
@@ -1415,6 +1431,7 @@ async function fetchWorkflowDefinitions() {
     const data = await listWorkflowDefinitions({
       limit: workflowDefsLimit.value,
       offset: workflowDefsOffset.value,
+      reusable: workflowFilterReusable.value || undefined,
     })
     workflowDefinitions.value = data.items
     workflowDefsTotal.value = data.total
@@ -1555,6 +1572,30 @@ async function handleWorkflowRollback(version: number) {
     addToast('error', 'Failed to rollback workflow')
   } finally {
     rollingBackWorkflow.value = false
+  }
+}
+
+const workflowFilterReusable = ref(false)
+
+function handleWorkflowReusableFilterChange(reusable: boolean) {
+  workflowFilterReusable.value = reusable
+  workflowDefsOffset.value = 0
+  fetchWorkflowDefinitions()
+}
+
+async function handleDrillDownWorkflowRun(childRunId: string) {
+  if (!childRunId || !selectedWorkflowDef.value) return
+  try {
+    const runsData = await listWorkflowRuns(selectedWorkflowDef.value.id)
+    const run = runsData.items.find(r => r.id === childRunId)
+    if (run) {
+      selectedWorkflowRunDetail.value = run
+      addToast('info', `Navigated to child run ${childRunId.slice(0, 8)}`)
+    } else {
+      addToast('error', `Child run not found`)
+    }
+  } catch (e) {
+    addToast('error', `Failed to load child run: ${extractError(e)}`)
   }
 }
 

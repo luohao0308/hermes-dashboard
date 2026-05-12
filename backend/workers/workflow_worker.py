@@ -56,6 +56,11 @@ from models import (
     Approval,
     TraceSpan,
 )
+from workflow_nesting import (
+    _launch_child_run,
+    _poll_child_run,
+    _retry_child_run,
+)
 
 try:
     from security.structured_logging import setup_logging
@@ -154,6 +159,7 @@ class WorkflowWorker:
         self._recover_stale_locks(db)
         self._check_workflow_timeouts(db)
         self._check_approval_timeouts(db)
+        self._poll_subworkflow_tasks(db)
         self._process_pending_tasks(db)
         self._handle_failed_tasks(db)
         self._write_heartbeat()
@@ -298,6 +304,34 @@ class WorkflowWorker:
         db.commit()
 
     # ------------------------------------------------------------------
+    # Poll subworkflow tasks
+    # ------------------------------------------------------------------
+
+    def _poll_subworkflow_tasks(self, db: Session) -> None:
+        """Poll running subworkflow tasks and update based on child run status."""
+        now = _now_utc()
+        running_subwf_tasks = (
+            db.query(Task)
+            .filter(Task.status == "running", Task.task_type == "subworkflow")
+            .all()
+        )
+        for task in running_subwf_tasks:
+            new_status, error = _poll_child_run(db, task)
+            if new_status == "completed":
+                task.status = "completed"
+                task.ended_at = now
+                task.duration_ms = _compute_duration_ms(task.started_at, now)
+                logger.info("Subworkflow task %s completed", task.id)
+            elif new_status in ("failed", "cancelled"):
+                task.status = new_status
+                task.error_summary = error
+                task.ended_at = now
+                task.duration_ms = _compute_duration_ms(task.started_at, now)
+                logger.warning("Subworkflow task %s failed: %s", task.id, error)
+        if running_subwf_tasks:
+            db.commit()
+
+    # ------------------------------------------------------------------
     # Process pending tasks
     # ------------------------------------------------------------------
 
@@ -345,8 +379,19 @@ class WorkflowWorker:
                 continue
 
             node = node_map.get(task.node_id) if task.node_id else None
-            if node and node.task_type == "approval":
-                self._start_approval_task(db, task, run, node)
+            if node:
+                if node.task_type == "approval":
+                    self._start_approval_task(db, task, run, node)
+                elif node.task_type == "subworkflow":
+                    child_run = _launch_child_run(db, run, task, node)
+                    task.status = "running"
+                    task.started_at = now
+                    task.metadata_json = {"child_run_id": str(child_run.id)}
+                    logger.info("Task %s launched child run %s", task.id, child_run.id)
+                else:
+                    task.status = "running"
+                    task.started_at = now
+                    logger.info("Task %s started by %s", task.id, self.worker_id)
             else:
                 task.status = "running"
                 task.started_at = now

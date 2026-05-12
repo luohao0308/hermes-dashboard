@@ -43,13 +43,28 @@
               :points="arrowPoints(edge)"
               class="dag-arrow"
             />
-            <g v-for="node in layoutNodes" :key="node.node_id" :transform="`translate(${node.x}, ${node.y})`">
+            <g
+              v-for="node in layoutNodes"
+              :key="node.node_id"
+              :transform="`translate(${node.x}, ${node.y})`"
+              :class="{ 'clickable-node': node.task_type === 'subworkflow' && hasChildRun(node.node_id) }"
+              @click="handleNodeClick(node)"
+            >
               <rect :width="NODE_W" :height="NODE_H" rx="12" class="dag-node" :class="nodeStatusClass(node.node_id)" />
               <text :x="NODE_W / 2" :y="NODE_H / 2 - 6" text-anchor="middle" class="dag-node-label">
                 {{ node.title }}
               </text>
               <text :x="NODE_W / 2" :y="NODE_H / 2 + 12" text-anchor="middle" class="dag-node-type">
                 {{ node.task_type }}
+              </text>
+              <text
+                v-if="node.task_type === 'subworkflow'"
+                :x="NODE_W - 8"
+                :y="14"
+                text-anchor="end"
+                class="subworkflow-indicator"
+              >
+                ↗
               </text>
             </g>
           </svg>
@@ -230,7 +245,7 @@ const props = defineProps<{
   rollingBack?: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   back: []
   startRun: []
   selectRun: [run: WorkflowRunDetail]
@@ -240,6 +255,7 @@ defineEmits<{
   cancelRun: [run: WorkflowRunDetail]
   loadVersions: []
   rollback: [version: number]
+  drillDown: [childRunId: string]
 }>()
 
 const NODE_W = 176
@@ -368,6 +384,27 @@ function nodeStatusClass(nodeId: string): string {
   const status = props.taskStatuses?.[nodeId] ?? activeRun.value?.tasks.find((task) => task.node_id === nodeId)?.status
   if (!status) return ''
   return `status-${status}`
+}
+
+function hasChildRun(nodeId: string): boolean {
+  const task = activeRun.value?.tasks.find((t) => t.node_id === nodeId)
+  if (!task?.metadata_json) return false
+  return !!(task.metadata_json as Record<string, unknown>).child_run_id
+}
+
+function getChildRunId(nodeId: string): string | null {
+  const task = activeRun.value?.tasks.find((t) => t.node_id === nodeId)
+  if (!task?.metadata_json) return null
+  const childRunId = (task.metadata_json as Record<string, unknown>).child_run_id
+  return typeof childRunId === 'string' ? childRunId : null
+}
+
+function handleNodeClick(node: LayoutNode): void {
+  if (node.task_type !== 'subworkflow') return
+  const childRunId = getChildRunId(node.node_id)
+  if (childRunId) {
+    emit('drillDown', childRunId)
+  }
 }
 
 function statusClass(status: string): string {
@@ -602,6 +639,21 @@ function formatDuration(ms: number): string {
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.clickable-node {
+  cursor: pointer;
+}
+
+.clickable-node:hover .dag-node {
+  stroke: #7c3aed;
+  filter: drop-shadow(0 8px 16px rgba(124, 58, 237, 0.2));
+}
+
+.subworkflow-indicator {
+  fill: #7c3aed;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .workflow-side {

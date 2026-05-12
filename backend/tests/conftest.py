@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-TEST_DB = os.environ.get("TEST_DATABASE_URL")
+TEST_DB = os.environ.get("TEST_DATABASE_URL", "postgresql://luohao@localhost:5432/hermes_test")
 
 
 def _make_client(engine_obj, role: str = "operator"):
@@ -51,9 +51,7 @@ def _cleanup_client(c):
 
 @pytest.fixture(scope="module")
 def engine():
-    """Create test database engine. Skips if TEST_DATABASE_URL not set."""
-    if not TEST_DB:
-        pytest.skip("TEST_DATABASE_URL not set")
+    """Create test database engine."""
     eng = create_engine(TEST_DB, pool_pre_ping=True)
     from database import Base
     Base.metadata.create_all(eng)

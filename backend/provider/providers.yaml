@@ -1,11 +1,37 @@
 default_provider: openai
 fallback_chain:
+- deepseek
 - openai
 - anthropic
 - xiaomi
 - minimax
 - ollama
 providers:
+  deepseek:
+    api_key_env: DEEPSEEK_API_KEY
+    base_url: https://api.deepseek.com/v1
+    default_model: deepseek-v4-pro
+    enabled: true
+    models:
+    - capabilities:
+      - chat
+      - streaming
+      - reasoning
+      - function_calling
+      context_window: 128000
+      cost_per_1k_input: 0.002
+      cost_per_1k_output: 0.008
+      display_name: DeepSeek V4 Pro
+      id: deepseek-v4-pro
+    - capabilities:
+      - chat
+      - streaming
+      - function_calling
+      context_window: 128000
+      cost_per_1k_input: 0.0005
+      cost_per_1k_output: 0.001
+      display_name: DeepSeek V4 Flash
+      id: deepseek-v4-flash
   anthropic:
     api_key_env: ANTHROPIC_API_KEY
     default_model: claude-sonnet-4-20250514
